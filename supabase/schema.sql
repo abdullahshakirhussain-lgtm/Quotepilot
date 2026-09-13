@@ -9,6 +9,7 @@
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
@@ -140,6 +141,12 @@ create trigger trg_follow_ups_updated before update on public.follow_ups
 
 -- ===========================================================================
 -- Row Level Security
+-- Every row must belong to the caller, AND every row it references (lead,
+-- quote) must also belong to the caller. Without the reference checks a user
+-- could attach rows to another tenant's lead/quote, and that tenant deleting
+-- their lead would cascade-delete the attacker-linked rows.
+-- `(select auth.uid())` is Supabase's recommended form (evaluated once per
+-- statement instead of per row).
 -- ===========================================================================
 alter table public.businesses enable row level security;
 alter table public.leads       enable row level security;
@@ -151,33 +158,62 @@ alter table public.messages    enable row level security;
 drop policy if exists "businesses_owner" on public.businesses;
 create policy "businesses_owner" on public.businesses
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 -- leads
 drop policy if exists "leads_owner" on public.leads;
 create policy "leads_owner" on public.leads
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
--- quotes
+-- quotes: may only reference one of the caller's own leads
 drop policy if exists "quotes_owner" on public.quotes;
 create policy "quotes_owner" on public.quotes
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.leads l
+      where l.id = quotes.lead_id and l.user_id = (select auth.uid())
+    )
+  );
 
--- follow_ups
+-- follow_ups: may only reference the caller's own quote and lead
 drop policy if exists "follow_ups_owner" on public.follow_ups;
 create policy "follow_ups_owner" on public.follow_ups
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.quotes q
+      where q.id = follow_ups.quote_id and q.user_id = (select auth.uid())
+    )
+    and exists (
+      select 1 from public.leads l
+      where l.id = follow_ups.lead_id and l.user_id = (select auth.uid())
+    )
+  );
 
--- messages
+-- messages: may only reference the caller's own quote (and lead, if set)
 drop policy if exists "messages_owner" on public.messages;
 create policy "messages_owner" on public.messages
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.quotes q
+      where q.id = messages.quote_id and q.user_id = (select auth.uid())
+    )
+    and (
+      messages.lead_id is null
+      or exists (
+        select 1 from public.leads l
+        where l.id = messages.lead_id and l.user_id = (select auth.uid())
+      )
+    )
+  );

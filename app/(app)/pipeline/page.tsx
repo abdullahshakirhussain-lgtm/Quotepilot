@@ -1,4 +1,4 @@
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   PipelineClient,
   type PipelineLead,
@@ -12,25 +12,28 @@ import type { Business } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function PipelinePage() {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const supabase = await createClient();
 
-  const [{ data: leads }, { data: business }] = await Promise.all([
+  const [leadsRes, businessRes] = await Promise.all([
     supabase
       .from("leads")
       .select("id, customer_name, company_name, status, quotes(amount)")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase
       .from("businesses")
       .select("currency")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .maybeSingle<Pick<Business, "currency">>(),
   ]);
 
-  const currency = business?.currency ?? "USD";
+  const failed = [leadsRes, businessRes].find((r) => r.error);
+  if (failed?.error) throw new Error(`Could not load pipeline: ${failed.error.message}`);
 
-  const rows: PipelineLead[] = (leads ?? []).map((l: Record<string, unknown>) => {
+  const currency = businessRes.data?.currency ?? "USD";
+
+  const rows: PipelineLead[] = (leadsRes.data ?? []).map((l: Record<string, unknown>) => {
     const quotes = (l.quotes as { amount: number }[] | null) ?? [];
     return {
       id: l.id as string,

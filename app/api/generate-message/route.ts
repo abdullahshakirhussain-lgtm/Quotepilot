@@ -7,7 +7,7 @@ import {
   type MessageType,
   type Tone,
 } from "@/lib/constants";
-import { daysSince } from "@/lib/utils";
+import { clip, daysSince } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,10 @@ export async function GET(request: Request) {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[ai] history load failed:", error);
+    return NextResponse.json({ error: "Could not load message history." }, { status: 500 });
+  }
   return NextResponse.json({ messages: data ?? [] });
 }
 
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
     ? (body.tone as Tone)
     : "friendly";
   const objection =
-    typeof body.objection === "string" ? body.objection.slice(0, 1000) : null;
+    typeof body.objection === "string" ? clip(body.objection.trim(), 500) || null : null;
 
   const supabase = await createClient();
 
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
     )
     .eq("id", quoteId)
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   if (quoteErr || !quote) {
     return NextResponse.json({ error: "Quote not found" }, { status: 404 });
@@ -84,17 +87,19 @@ export async function POST(request: Request) {
     .from("businesses")
     .select("business_name, industry, owner_name")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   const lead = Array.isArray(quote.lead) ? quote.lead[0] : quote.lead;
 
+  // Every field is clipped: stored text is unbounded, and each character here
+  // is billed by the AI provider.
   const result = await generateMessage({
-    businessName: business?.business_name ?? "Our business",
-    industry: business?.industry ?? "Services",
-    ownerName: business?.owner_name ?? null,
-    customerName: lead?.customer_name ?? "there",
-    quoteTitle: quote.title,
-    quoteDescription: quote.description,
+    businessName: clip(business?.business_name, 120) || "Our business",
+    industry: clip(business?.industry, 80) || "Services",
+    ownerName: clip(business?.owner_name, 80) || null,
+    customerName: clip(lead?.customer_name, 120) || "there",
+    quoteTitle: clip(quote.title, 200),
+    quoteDescription: clip(quote.description, 1500) || null,
     quoteAmount: Number(quote.amount),
     currency: quote.currency,
     quoteDate: quote.quote_date,
@@ -105,8 +110,8 @@ export async function POST(request: Request) {
     objection,
   });
 
-  // Store in history.
-  const { data: saved } = await supabase
+  // Store the generated draft in history.
+  const { data: saved, error: saveError } = await supabase
     .from("messages")
     .insert({
       user_id: user.id,
@@ -118,6 +123,7 @@ export async function POST(request: Request) {
     })
     .select("*")
     .single();
+  if (saveError) console.error("[ai] saving message history failed:", saveError);
 
   return NextResponse.json({
     message: saved,
@@ -125,5 +131,6 @@ export async function POST(request: Request) {
     provider: result.provider,
     fellBack: result.fellBack,
     error: result.error ?? null,
+    historySaved: !saveError,
   });
 }

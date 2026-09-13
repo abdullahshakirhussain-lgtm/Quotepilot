@@ -37,7 +37,7 @@ be **demo-ready and easy to hand over**.
   with a built-in **template fallback** so the app works with no AI key
 - **CSV export** (no external dependency)
 
-Only five runtime dependencies (`next`, `react`, `react-dom`, `@supabase/ssr`,
+Only six runtime dependencies (`next`, `react`, `react-dom`, `@supabase/ssr`,
 `@supabase/supabase-js`, `lucide-react`) — deliberately lean for easy handover.
 
 ## Core loop
@@ -95,8 +95,20 @@ npm run dev
 npm run build && npm start
 ```
 
-Deploys cleanly to **Vercel** (set the same environment variables in the Vercel
-project settings). Supabase is already hosted.
+Runs anywhere `next start` runs (a plain Node server — no edge runtime needed).
+
+**Railway (current deployment):** New Project → Deploy from GitHub repo. Nixpacks
+runs `npm run build` then `npm start`, and `next start` binds to Railway's `$PORT`
+automatically. Set the variables below in the service's **Variables** tab
+*before* the first build — the two `NEXT_PUBLIC_*` values are baked in at build
+time, so changing them later needs a redeploy. Then **Settings → Networking →
+Generate Domain**, and paste that URL into Supabase → Auth → URL Configuration →
+**Site URL**.
+
+Vercel works the same way (set the variables in the project settings).
+
+> Demo from the production build or the deployment, not `npm run dev` — the
+> Next.js dev overlay shows its own warnings that aren't app errors.
 
 ---
 
@@ -113,6 +125,7 @@ All configured in `.env.local` (see `.env.local.example`).
 | `OPENAI_API_KEY` | ⬜ | Any other OpenAI-compatible endpoint (OpenAI, Groq, Together, OpenRouter, local). |
 | `OPENAI_BASE_URL` | ⬜ | Override for the OpenAI-compatible base URL. Defaults to `https://api.openai.com/v1`. |
 | `AI_MODEL` | ⬜ | Model override. Defaults: `deepseek-chat` (DeepSeek), `claude-haiku-4-5-20251001` (Anthropic), `gpt-4o-mini` (OpenAI). |
+| `APP_TIMEZONE` | ⬜ (recommended) | Business time zone for "due today", overdue, reminder dates and the greeting, e.g. `Asia/Colombo`. Hosts run in UTC, so without it "today" flips at UTC midnight. |
 
 Provider priority when several keys are set: **Anthropic → DeepSeek → OpenAI → templates**.
 
@@ -144,9 +157,13 @@ if exists`) so it is safe to re-run.
 
 - Every table has a `user_id` column defaulting to `auth.uid()` and referencing
   `auth.users(id)` with `ON DELETE CASCADE`.
-- **Row Level Security is enabled on every table**, with a single policy per table:
-  `auth.uid() = user_id` for both `USING` and `WITH CHECK`, scoped to the
-  `authenticated` role.
+- **Row Level Security is enabled on every table**, with a single policy per table
+  scoped to the `authenticated` role: rows must satisfy `auth.uid() = user_id`,
+  and on insert/update every *referenced* lead or quote must also belong to the
+  caller. (Without that second check a user could attach rows to another
+  tenant's lead, and that tenant deleting the lead would cascade-delete them.)
+- **Already ran an older copy of the schema?** Re-run `supabase/schema.sql` — it's
+  idempotent and replaces the policies in place.
 - Result: a signed-in user can only ever read or write **their own** rows.
   Server queries also add an explicit `.eq("user_id", user.id)` as defence in depth.
 - `ON DELETE CASCADE` means deleting a lead cleans up its quotes, follow-ups and
@@ -162,13 +179,23 @@ Enforced by `CHECK` constraints and mirrored in `lib/constants.ts`:
 
 ### Follow-up scheduling logic
 
-When a quote is marked **sent** (`markQuoteSent`), QuotePilot reads the business's
-`default_follow_up_days` (e.g. `{1,3,7,14}`), deletes any existing *pending*
-reminders for that quote, and inserts one reminder per interval dated
-`today + N days`. `quotes.next_follow_up_at` is set to the earliest. Completing or
-skipping a reminder recomputes the quote's `follow_up_count`, `last_follow_up_at`
-and `next_follow_up_at` from the underlying rows, so the numbers always stay
-consistent.
+Every quote status change — Mark sent, Won/Lost, the status dropdown, or the edit
+form — goes through one function (`applyQuoteStatusChange` in
+`lib/quote-state.ts`), so all paths behave identically:
+
+- **→ Sent:** reads the business's `default_follow_up_days` (e.g. `{1,3,7,14}`),
+  replaces any *pending* reminders with one per interval dated `today + N days`
+  (numbering continues after existing history), and moves a `new`/`contacted`
+  lead to `quote_sent`. Marking an already-sent quote as sent is a no-op.
+- **→ Accepted / Rejected / Expired:** pending reminders are marked `skipped`, so a
+  decided quote is never shown as due. Accepted moves the lead to `won`; Rejected
+  moves it to `lost` only if the lead has no other open or won quote.
+- **Counters are derived, never incremented:** `follow_up_count`,
+  `last_follow_up_at` and `next_follow_up_at` are always recomputed from the
+  quote's reminder rows (`deriveQuoteFollowUpState` in `lib/follow-up-state.ts`),
+  whichever screen changed them. The demo seed uses the same function.
+- **"Due today" / "Overdue"** use one classifier shared by the dashboard and the
+  Follow-ups page, with "today" computed on the server in `APP_TIMEZONE`.
 
 ### Migrations
 

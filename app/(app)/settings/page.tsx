@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
 import { DataControls } from "@/components/DataControls";
 import { updateBusiness } from "./actions";
@@ -8,13 +8,15 @@ import type { Business } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const supabase = await createClient();
-  const { data: business } = await supabase
+  const { data: business, error } = await supabase
     .from("businesses")
     .select("*")
-    .eq("user_id", user!.id)
+    .eq("user_id", user.id)
     .maybeSingle<Business>();
+
+  if (error) throw new Error(`Could not load settings: ${error.message}`);
 
   return (
     <div className="space-y-8">
@@ -28,7 +30,8 @@ export default async function SettingsPage() {
       <section className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900">Business profile</h2>
         <p className="mb-5 text-sm text-slate-500">
-          Used across the app and in AI-generated follow-up messages.
+          Used across the app and in AI-generated follow-up messages. Changing
+          the follow-up schedule affects quotes you mark as sent from now on.
         </p>
         <BusinessForm
           action={updateBusiness}
@@ -58,8 +61,9 @@ export default async function SettingsPage() {
       <section className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900">Demo data</h2>
         <p className="mb-4 text-sm text-slate-500">
-          Load a set of realistic sample records to explore the app, or wipe
-          everything to start clean.
+          Load a set of realistic sample records into an empty workspace to
+          explore the app, or wipe your leads, quotes and follow-ups to start
+          clean. Your business profile is kept.
         </p>
         <DataControls />
       </section>

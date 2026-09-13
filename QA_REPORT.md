@@ -72,11 +72,12 @@ dashboard metric formulas; auth redirect gating.
 2. **Sign up** (email + password) → **Onboarding**: enter a business name, pick an
    industry + currency → **Create workspace**.
 3. **Settings → Load demo data.**
-4. **Dashboard** — point out the numbers (with the seed you should see exactly):
-   - Follow-ups due today **1**, Overdue **1**, Active leads **4**, Quotes sent **4**
-   - Total quoted **$8,650.00**, Accepted **$320.00**, Lost **$0.00**
-   - Win rate **100%** (1 won / 0 lost), Average quote **$2,162.50**
-   - Upcoming follow-ups list populated.
+4. **Dashboard** — point out the numbers (with the seed you should see exactly —
+   updated after the reliability audit, see `AUDIT_REPORT.md`):
+   - Follow-ups due today **1**, Overdue **1**, Active leads **5**, Quotes sent **5**
+   - Total quoted **$13,450.00**, Accepted **$320.00**, Lost **$4,800.00**
+   - Win rate **50%** (1 won / 1 lost), Average quote **$2,690.00**
+   - Next follow-ups list populated.
 5. **Quotes** — open the **AC units** quote → **AI message** → Generate → show the
    **"Review and edit before sending"** banner, edit a word, **Copy message** →
    **Mark follow-up sent** (watch the count/next-date update).

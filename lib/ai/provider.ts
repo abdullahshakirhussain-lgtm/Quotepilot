@@ -9,6 +9,7 @@ export interface GenerateResult {
   content: string;
   provider: "anthropic" | "deepseek" | "openai" | "template";
   fellBack: boolean;
+  /** Short, user-safe reason when the AI call failed (details go to server logs). */
   error?: string;
 }
 
@@ -19,10 +20,13 @@ const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 
+// Never let a slow provider hang the request; fall back to a template instead.
+const AI_TIMEOUT_MS = 25_000;
+
 /**
  * Generates a follow-up message. Picks a provider from whichever key is set
  * (Anthropic > DeepSeek > OpenAI-compatible) and always returns usable content,
- * falling back to a template on error or when no key is configured.
+ * falling back to a template on error, timeout, or when no key is configured.
  */
 export async function generateMessage(ctx: MessageContext): Promise<GenerateResult> {
   const system = buildSystemPrompt();
@@ -34,7 +38,7 @@ export async function generateMessage(ctx: MessageContext): Promise<GenerateResu
       const content = await callAnthropic(system, user);
       return { content, provider: "anthropic", fellBack: false };
     } catch (err) {
-      return fallback(ctx, err);
+      return fallback(ctx, "anthropic", err);
     }
   }
 
@@ -49,7 +53,7 @@ export async function generateMessage(ctx: MessageContext): Promise<GenerateResu
       });
       return { content, provider: "deepseek", fellBack: false };
     } catch (err) {
-      return fallback(ctx, err);
+      return fallback(ctx, "deepseek", err);
     }
   }
 
@@ -63,7 +67,7 @@ export async function generateMessage(ctx: MessageContext): Promise<GenerateResu
       });
       return { content, provider: "openai", fellBack: false };
     } catch (err) {
-      return fallback(ctx, err);
+      return fallback(ctx, "openai", err);
     }
   }
 
@@ -71,13 +75,29 @@ export async function generateMessage(ctx: MessageContext): Promise<GenerateResu
   return { content: templateFallback(ctx), provider: "template", fellBack: false };
 }
 
-function fallback(ctx: MessageContext, err: unknown): GenerateResult {
+function fallback(ctx: MessageContext, provider: string, err: unknown): GenerateResult {
+  // Full provider error (which can include response bodies) stays server-side.
+  console.error(`[ai] ${provider} generation failed:`, err);
   return {
     content: templateFallback(ctx),
     provider: "template",
     fellBack: true,
-    error: err instanceof Error ? err.message : "AI request failed",
+    error: describeError(err),
   };
+}
+
+/** Turns a provider failure into a short reason that is safe to show users. */
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.name === "TimeoutError" || err.name === "AbortError") return "request timed out";
+    const status = /API (\d{3})/.exec(err.message)?.[1];
+    if (status === "401" || status === "403") return "API key was rejected";
+    if (status === "402") return "account has insufficient balance";
+    if (status === "429") return "rate limit reached";
+    if (status) return `provider returned HTTP ${status}`;
+    if (/empty message/i.test(err.message)) return "provider returned an empty message";
+  }
+  return "request failed";
 }
 
 async function callAnthropic(system: string, user: string): Promise<string> {
@@ -95,6 +115,7 @@ async function callAnthropic(system: string, user: string): Promise<string> {
       system,
       messages: [{ role: "user", content: user }],
     }),
+    signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -140,6 +161,7 @@ async function callChatCompletions(
         { role: "user", content: user },
       ],
     }),
+    signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   });
 
   if (!res.ok) {

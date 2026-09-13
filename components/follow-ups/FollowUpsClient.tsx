@@ -15,7 +15,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import type { FollowUpWithContext } from "@/lib/types";
-import { formatCurrency, formatDate, relativeDay, todayISO } from "@/lib/utils";
+import { formatCurrency, formatDate, relativeDay } from "@/lib/utils";
+import { classifyFollowUp } from "@/lib/follow-up-state";
 import {
   completeFollowUp,
   reopenFollowUp,
@@ -24,30 +25,27 @@ import {
 
 export function FollowUpsClient({
   followUps,
+  today,
 }: {
   followUps: FollowUpWithContext[];
+  /** Server-computed date so grouping matches the dashboard and SSR. */
+  today: string;
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
-  const today = todayISO();
 
   const groups = useMemo(() => {
-    const overdue: FollowUpWithContext[] = [];
-    const dueToday: FollowUpWithContext[] = [];
-    const upcoming: FollowUpWithContext[] = [];
-    const done: FollowUpWithContext[] = [];
-
-    for (const f of followUps) {
-      const d = f.due_date.slice(0, 10);
-      if (f.status !== "pending") done.push(f);
-      else if (d < today) overdue.push(f);
-      else if (d === today) dueToday.push(f);
-      else upcoming.push(f);
-    }
-    return { overdue, dueToday, upcoming, done };
+    const buckets = {
+      overdue: [] as FollowUpWithContext[],
+      today: [] as FollowUpWithContext[],
+      upcoming: [] as FollowUpWithContext[],
+      done: [] as FollowUpWithContext[],
+    };
+    for (const f of followUps) buckets[classifyFollowUp(f, today)].push(f);
+    return buckets;
   }, [followUps, today]);
 
   const totalPending =
-    groups.overdue.length + groups.dueToday.length + groups.upcoming.length;
+    groups.overdue.length + groups.today.length + groups.upcoming.length;
 
   return (
     <div className="space-y-6">
@@ -75,7 +73,8 @@ export function FollowUpsClient({
             title="Due today"
             accent="text-amber-700"
             icon={<CalendarClock className="h-4 w-4" />}
-            items={groups.dueToday}
+            items={groups.today}
+            today={today}
             onAI={setAiFor}
           />
           <Section
@@ -83,6 +82,7 @@ export function FollowUpsClient({
             accent="text-red-700"
             icon={<Clock className="h-4 w-4" />}
             items={groups.overdue}
+            today={today}
             onAI={setAiFor}
           />
           <Section
@@ -90,6 +90,7 @@ export function FollowUpsClient({
             accent="text-slate-700"
             icon={<BellRing className="h-4 w-4" />}
             items={groups.upcoming}
+            today={today}
             onAI={setAiFor}
           />
           <Section
@@ -97,6 +98,7 @@ export function FollowUpsClient({
             accent="text-slate-500"
             icon={<Check className="h-4 w-4" />}
             items={groups.done}
+            today={today}
             onAI={setAiFor}
             muted
           />
@@ -122,6 +124,7 @@ function Section({
   accent,
   icon,
   items,
+  today,
   onAI,
   muted,
 }: {
@@ -129,6 +132,7 @@ function Section({
   accent: string;
   icon: React.ReactNode;
   items: FollowUpWithContext[];
+  today: string;
   onAI: (f: FollowUpWithContext) => void;
   muted?: boolean;
 }) {
@@ -144,7 +148,7 @@ function Section({
       </h2>
       <div className="card divide-y divide-slate-100">
         {items.map((f) => (
-          <FollowUpRow key={f.id} f={f} onAI={onAI} muted={muted} />
+          <FollowUpRow key={f.id} f={f} today={today} onAI={onAI} muted={muted} />
         ))}
       </div>
     </section>
@@ -153,10 +157,12 @@ function Section({
 
 function FollowUpRow({
   f,
+  today,
   onAI,
   muted,
 }: {
   f: FollowUpWithContext;
+  today: string;
   onAI: (f: FollowUpWithContext) => void;
   muted?: boolean;
 }) {
@@ -183,8 +189,9 @@ function FollowUpRow({
           {formatDate(f.due_date)}
         </div>
         <div className="text-xs text-slate-400">
-          {f.status === "pending" ? relativeDay(f.due_date) : null}
-          {f.status !== "pending" && (
+          {isPending ? (
+            relativeDay(f.due_date, today)
+          ) : (
             <StatusBadge kind="followup" value={f.status} />
           )}
         </div>

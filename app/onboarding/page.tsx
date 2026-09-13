@@ -1,22 +1,21 @@
 import { redirect } from "next/navigation";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
 import { createBusiness } from "@/app/(app)/settings/actions";
-import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
   const supabase = await createClient();
-  const { data: business } = await supabase
+  const { data: business, error } = await supabase
     .from("businesses")
     .select("id")
     .eq("user_id", user.id)
-    .maybeSingle<Business>();
+    .maybeSingle();
 
+  if (error) throw new Error(`Could not load workspace: ${error.message}`);
   if (business) redirect("/dashboard");
 
   return (

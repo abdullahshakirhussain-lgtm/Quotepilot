@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import type { Business } from "@/lib/types";
 
@@ -10,15 +10,18 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
   const supabase = await createClient();
-  const { data: business } = await supabase
+  const { data: business, error } = await supabase
     .from("businesses")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle<Business>();
+
+  // A failed query must not look like "no workspace" — that would send an
+  // existing user back through onboarding.
+  if (error) throw new Error(`Could not load workspace: ${error.message}`);
 
   // No workspace yet -> send them through onboarding first.
   if (!business) redirect("/onboarding");

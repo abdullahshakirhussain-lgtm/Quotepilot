@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { hasSupabaseEnv } from "./env";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -17,6 +18,16 @@ const PROTECTED_PREFIXES = [
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+
+  // Without Supabase settings every request would 500 with a cryptic SDK error
+  // (including the public landing page). Let requests through instead; any
+  // page that needs data fails with a clear configuration error.
+  if (!hasSupabaseEnv()) {
+    console.error(
+      "[quotepilot] NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set."
+    );
+    return supabaseResponse;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

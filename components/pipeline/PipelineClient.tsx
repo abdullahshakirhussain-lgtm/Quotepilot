@@ -21,6 +21,8 @@ export interface PipelineLead {
 }
 
 export function PipelineClient({ leads }: { leads: PipelineLead[] }) {
+  const coldCount = leads.filter((l) => l.status === "cold").length;
+
   return (
     <div className="space-y-5">
       <header>
@@ -28,6 +30,16 @@ export function PipelineClient({ leads }: { leads: PipelineLead[] }) {
         <p className="mt-1 text-sm text-slate-500">
           Your leads grouped by stage. Use the menu on a card to move it.
         </p>
+        {coldCount > 0 && (
+          <p className="mt-1 text-xs text-slate-400">
+            {coldCount} cold {coldCount === 1 ? "lead is" : "leads are"} not
+            shown on the board —{" "}
+            <a href="/leads" className="font-medium text-brand-600 hover:underline">
+              find them on the Leads page
+            </a>
+            .
+          </p>
+        )}
       </header>
 
       <div className="flex gap-4 overflow-x-auto pb-4">

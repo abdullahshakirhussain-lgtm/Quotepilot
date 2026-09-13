@@ -167,8 +167,8 @@ export function QuoteFormModal({
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-400">
-              Tip: setting a new quote to “Sent” automatically schedules its
-              follow-up reminders.
+              Changing a quote to “Sent” schedules its follow-up reminders.
+              Accepted, Rejected or Expired closes any pending ones.
             </p>
           </div>
 

@@ -11,89 +11,67 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatCurrency, formatDate, relativeDay, todayISO } from "@/lib/utils";
-import type { Business, FollowUpWithContext, Lead, Quote } from "@/lib/types";
+import {
+  currentHour,
+  formatCurrency,
+  formatDate,
+  relativeDay,
+  todayISO,
+} from "@/lib/utils";
+import { computeDashboardMetrics } from "@/lib/metrics";
+import { classifyFollowUp } from "@/lib/follow-up-state";
+import type { Business, FollowUpWithContext } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const ACTIVE_LEAD_STATUSES = [
-  "new",
-  "contacted",
-  "quote_sent",
-  "follow_up_due",
-  "negotiating",
-];
-
 export default async function DashboardPage() {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const supabase = await createClient();
   const today = todayISO();
 
-  const [{ data: business }, { data: leads }, { data: quotes }, { data: upcoming }] =
-    await Promise.all([
-      supabase
-        .from("businesses")
-        .select("*")
-        .eq("user_id", user!.id)
-        .maybeSingle<Business>(),
-      supabase.from("leads").select("status").eq("user_id", user!.id),
-      supabase
-        .from("quotes")
-        .select("status, amount")
-        .eq("user_id", user!.id),
-      supabase
-        .from("follow_ups")
-        .select(
-          "*, quote:quotes(id, title, amount, currency, status), lead:leads(id, customer_name, company_name)"
-        )
-        .eq("user_id", user!.id)
-        .eq("status", "pending")
-        .order("due_date", { ascending: true }),
-    ]);
+  const [businessRes, leadsRes, quotesRes, followUpsRes] = await Promise.all([
+    supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
+    supabase.from("leads").select("status").eq("user_id", user.id),
+    supabase.from("quotes").select("status, amount").eq("user_id", user.id),
+    supabase
+      .from("follow_ups")
+      .select(
+        "*, quote:quotes(id, title, amount, currency, status), lead:leads(id, customer_name, company_name)"
+      )
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .order("due_date", { ascending: true }),
+  ]);
 
+  // Never render a failed query as zeros — that reads as "you lost your data".
+  const failed = [businessRes, leadsRes, quotesRes, followUpsRes].find((r) => r.error);
+  if (failed?.error) throw new Error(`Could not load dashboard: ${failed.error.message}`);
+
+  const business = businessRes.data;
   const currency = business?.currency ?? "USD";
-  const leadRows = (leads as Pick<Lead, "status">[]) ?? [];
-  const quoteRows = (quotes as Pick<Quote, "status" | "amount">[]) ?? [];
-  const upcomingRows: FollowUpWithContext[] = (upcoming ?? []).map((f) => ({
+  const pending: FollowUpWithContext[] = (followUpsRes.data ?? []).map((f) => ({
     ...(f as FollowUpWithContext),
     quote: Array.isArray(f.quote) ? (f.quote[0] ?? null) : (f.quote ?? null),
     lead: Array.isArray(f.lead) ? (f.lead[0] ?? null) : (f.lead ?? null),
   }));
 
-  // --- Metrics --------------------------------------------------------------
-  const activeLeads = leadRows.filter((l) =>
-    ACTIVE_LEAD_STATUSES.includes(l.status)
-  ).length;
+  const m = computeDashboardMetrics({
+    leads: leadsRes.data ?? [],
+    quotes: quotesRes.data ?? [],
+    followUps: pending,
+    today,
+  });
 
-  const nonDraft = quoteRows.filter((q) => q.status !== "draft");
-  const quotesSent = nonDraft.length;
-  const accepted = quoteRows.filter((q) => q.status === "accepted");
-  const rejected = quoteRows.filter((q) => q.status === "rejected");
-
-  const totalQuoted = nonDraft.reduce((s, q) => s + Number(q.amount), 0);
-  const acceptedValue = accepted.reduce((s, q) => s + Number(q.amount), 0);
-  const lostValue = rejected.reduce((s, q) => s + Number(q.amount), 0);
-  const decided = accepted.length + rejected.length;
-  const winRate = decided > 0 ? Math.round((accepted.length / decided) * 100) : 0;
-  const avgQuote = nonDraft.length > 0 ? totalQuoted / nonDraft.length : 0;
-
-  const dueToday = upcomingRows.filter(
-    (f) => f.due_date.slice(0, 10) === today
-  ).length;
-  const overdue = upcomingRows.filter(
-    (f) => f.due_date.slice(0, 10) < today
-  ).length;
-
-  const hasData = leadRows.length > 0 || quoteRows.length > 0;
+  const hasData = (leadsRes.data ?? []).length > 0 || (quotesRes.data ?? []).length > 0;
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {greeting()}, {business?.owner_name || "there"}
+            {greeting(currentHour())}, {business?.owner_name || "there"}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Here&apos;s what&apos;s happening with your quotes.
@@ -123,28 +101,30 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Follow-ups due today"
-          value={dueToday}
+          value={m.dueToday}
           icon={<CalendarClock className="h-5 w-5" />}
           tone="amber"
           href="/follow-ups"
         />
         <Stat
           label="Overdue follow-ups"
-          value={overdue}
+          value={m.overdue}
           icon={<AlertCircle className="h-5 w-5" />}
           tone="red"
           href="/follow-ups"
         />
         <Stat
           label="Active leads"
-          value={activeLeads}
+          value={m.activeLeads}
+          hint="Excludes won, lost and cold"
           icon={<Users className="h-5 w-5" />}
           tone="brand"
           href="/leads"
         />
         <Stat
           label="Quotes sent"
-          value={quotesSent}
+          value={m.quotesSent}
+          hint="Every quote past draft"
           icon={<FileText className="h-5 w-5" />}
           tone="slate"
           href="/quotes"
@@ -155,32 +135,36 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Stat
           label="Total quoted value"
-          value={formatCurrency(totalQuoted, currency)}
+          value={formatCurrency(m.totalQuoted, currency)}
           icon={<DollarSign className="h-5 w-5" />}
           tone="slate"
         />
         <Stat
           label="Accepted value"
-          value={formatCurrency(acceptedValue, currency)}
+          value={formatCurrency(m.acceptedValue, currency)}
           icon={<CheckCircle2 className="h-5 w-5" />}
           tone="emerald"
         />
         <Stat
           label="Lost value"
-          value={formatCurrency(lostValue, currency)}
+          value={formatCurrency(m.lostValue, currency)}
           icon={<XCircle className="h-5 w-5" />}
           tone="red"
         />
         <Stat
           label="Win rate"
-          value={`${winRate}%`}
-          hint={`${accepted.length} won / ${rejected.length} lost`}
+          value={m.winRate === null ? "—" : `${m.winRate}%`}
+          hint={
+            m.winRate === null
+              ? "No quotes won or lost yet"
+              : `${m.wonCount} won / ${m.lostCount} lost`
+          }
           icon={<Percent className="h-5 w-5" />}
           tone="brand"
         />
         <Stat
           label="Average quote value"
-          value={formatCurrency(avgQuote, currency)}
+          value={formatCurrency(m.avgQuote, currency)}
           icon={<TrendingUp className="h-5 w-5" />}
           tone="slate"
         />
@@ -190,7 +174,7 @@ export default async function DashboardPage() {
       <section className="card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-            <BellRing className="h-4 w-4 text-brand-600" /> Upcoming follow-ups
+            <BellRing className="h-4 w-4 text-brand-600" /> Next follow-ups
           </h2>
           <Link
             href="/follow-ups"
@@ -200,16 +184,15 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {upcomingRows.length === 0 ? (
+        {pending.length === 0 ? (
           <EmptyState
             title="Nothing scheduled"
             description="Mark a quote as sent to start scheduling follow-up reminders."
           />
         ) : (
           <ul className="divide-y divide-slate-100">
-            {upcomingRows.slice(0, 6).map((f) => {
-              const d = f.due_date.slice(0, 10);
-              const late = d < today;
+            {pending.slice(0, 6).map((f) => {
+              const late = classifyFollowUp(f, today) === "overdue";
               return (
                 <li
                   key={f.id}
@@ -232,7 +215,7 @@ export default async function DashboardPage() {
                         late ? "text-red-600" : "text-slate-700"
                       }`}
                     >
-                      {relativeDay(f.due_date)}
+                      {relativeDay(f.due_date, today)}
                     </div>
                     <div className="text-xs text-slate-400">
                       {formatDate(f.due_date)}
@@ -248,10 +231,9 @@ export default async function DashboardPage() {
   );
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
+function greeting(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
   return "Good evening";
 }
 

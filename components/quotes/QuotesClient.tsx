@@ -37,11 +37,14 @@ export function QuotesClient({
   leads,
   defaultCurrency,
   initialNewLeadId,
+  today,
 }: {
   quotes: QuoteWithLead[];
   leads: Pick<Lead, "id" | "customer_name" | "company_name">[];
   defaultCurrency: string;
   initialNewLeadId?: string;
+  /** Server-computed date so relative labels match SSR and the dashboard. */
+  today: string;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | "all">("all");
@@ -145,6 +148,7 @@ export function QuotesClient({
             <QuoteCard
               key={quote.id}
               quote={quote}
+              today={today}
               onEdit={() => setEditing(quote)}
               onAI={() => setAiFor(quote)}
             />
@@ -184,10 +188,12 @@ export function QuotesClient({
 
 function QuoteCard({
   quote,
+  today,
   onEdit,
   onAI,
 }: {
   quote: QuoteWithLead;
+  today: string;
   onEdit: () => void;
   onAI: () => void;
 }) {
@@ -230,7 +236,7 @@ function QuoteCard({
           <dt className="inline text-slate-400">Next follow-up: </dt>
           <dd className="inline text-slate-600">
             {quote.next_follow_up_at
-              ? relativeDay(quote.next_follow_up_at)
+              ? relativeDay(quote.next_follow_up_at, today)
               : "—"}
           </dd>
         </div>

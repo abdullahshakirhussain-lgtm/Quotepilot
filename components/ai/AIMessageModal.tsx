@@ -39,6 +39,7 @@ export function AIMessageModal({
   const [history, setHistory] = useState<Message[]>([]);
   const [logging, startLog] = useTransition();
   const [logged, setLogged] = useState(false);
+  const [logNote, setLogNote] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -69,13 +70,15 @@ export function AIMessageModal({
       setContent(data.content);
       if (data.fellBack) {
         setNotice(
-          "AI provider unavailable — showing a template you can edit. " +
-            (data.error ? `(${data.error})` : "")
+          `The AI provider couldn't be reached${data.error ? ` (${data.error})` : ""}, so here's a template you can edit instead.`
         );
       } else if (data.provider === "template") {
         setNotice(
           "No AI key configured — showing a smart template. Add an API key to enable AI generation."
         );
+      }
+      if (data.historySaved === false) {
+        setError("The message was generated but couldn't be saved to history.");
       }
       loadHistory();
     } catch (e) {
@@ -86,9 +89,12 @@ export function AIMessageModal({
   }
 
   function markSent() {
+    setLogNote(null);
     startLog(async () => {
-      await logFollowUpSent(quote.id, content || null);
-      setLogged(true);
+      // Store the final (possibly edited) text on the completed reminder.
+      const result = await logFollowUpSent(quote.id, content || null);
+      if (result.logged) setLogged(true);
+      else setLogNote(result.message ?? "Nothing was logged.");
     });
   }
 
@@ -199,6 +205,11 @@ export function AIMessageModal({
                 Marking as sent completes the next reminder for this quote.
               </span>
             </div>
+            {logNote && (
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
+                {logNote}
+              </div>
+            )}
           </div>
         )}
 
