@@ -108,10 +108,13 @@ All configured in `.env.local` (see `.env.local.example`).
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL (Project Settings → API) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon/public key |
-| `ANTHROPIC_API_KEY` | ⬜ | Enables AI messages via Anthropic (Claude). |
-| `OPENAI_API_KEY` | ⬜ | Used only if `ANTHROPIC_API_KEY` is empty. Works with any OpenAI-compatible endpoint. |
-| `OPENAI_BASE_URL` | ⬜ | Override for OpenAI-compatible providers (Groq, Together, OpenRouter, local). Defaults to `https://api.openai.com/v1`. |
-| `AI_MODEL` | ⬜ | Model override. Defaults: `claude-haiku-4-5-20251001` (Anthropic) or `gpt-4o-mini` (OpenAI). |
+| `DEEPSEEK_API_KEY` | ⬜ | **Simplest way to turn on AI** — just set this one variable. Endpoint (`https://api.deepseek.com`) and model (`deepseek-chat`) are built in. |
+| `ANTHROPIC_API_KEY` | ⬜ | Enables AI messages via Anthropic (Claude) instead. |
+| `OPENAI_API_KEY` | ⬜ | Any other OpenAI-compatible endpoint (OpenAI, Groq, Together, OpenRouter, local). |
+| `OPENAI_BASE_URL` | ⬜ | Override for the OpenAI-compatible base URL. Defaults to `https://api.openai.com/v1`. |
+| `AI_MODEL` | ⬜ | Model override. Defaults: `deepseek-chat` (DeepSeek), `claude-haiku-4-5-20251001` (Anthropic), `gpt-4o-mini` (OpenAI). |
+
+Provider priority when several keys are set: **Anthropic → DeepSeek → OpenAI → templates**.
 
 **AI is optional.** With no key set, QuotePilot uses smart built-in templates,
 so it is fully demoable offline. Add a key to switch on real AI generation.
@@ -218,8 +221,10 @@ The user prompt supplies the structured context above plus the per-type guidance
 
 ### Provider selection
 
-`ANTHROPIC_API_KEY` → Anthropic Messages API. Else `OPENAI_API_KEY` →
-OpenAI-compatible `/chat/completions`. Else → template. All calls are plain
+`ANTHROPIC_API_KEY` → Anthropic Messages API. Else `DEEPSEEK_API_KEY` → DeepSeek
+(`https://api.deepseek.com`, `deepseek-chat`). Else `OPENAI_API_KEY` → any
+OpenAI-compatible `/chat/completions`. Else → template. DeepSeek and OpenAI share
+one code path; only the base URL, model and key differ. All calls are plain
 `fetch` (no SDK), keeping dependencies minimal.
 
 ---

@@ -7,52 +7,77 @@ import {
 
 export interface GenerateResult {
   content: string;
-  provider: "anthropic" | "openai" | "template";
+  provider: "anthropic" | "deepseek" | "openai" | "template";
   fellBack: boolean;
   error?: string;
 }
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 
+const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const OPENAI_BASE_URL = "https://api.openai.com/v1";
+
 /**
- * Generates a follow-up message. Chooses a provider based on which key is set,
- * and always returns usable content (falls back to a template on error / no key).
+ * Generates a follow-up message. Picks a provider from whichever key is set
+ * (Anthropic > DeepSeek > OpenAI-compatible) and always returns usable content,
+ * falling back to a template on error or when no key is configured.
  */
 export async function generateMessage(ctx: MessageContext): Promise<GenerateResult> {
   const system = buildSystemPrompt();
   const user = buildUserPrompt(ctx);
 
+  // 1) Anthropic (Claude)
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       const content = await callAnthropic(system, user);
       return { content, provider: "anthropic", fellBack: false };
     } catch (err) {
-      return {
-        content: templateFallback(ctx),
-        provider: "template",
-        fellBack: true,
-        error: err instanceof Error ? err.message : "AI request failed",
-      };
+      return fallback(ctx, err);
     }
   }
 
+  // 2) DeepSeek — OpenAI-compatible, but with sane built-in defaults so only the
+  //    DEEPSEEK_API_KEY variable is required.
+  if (process.env.DEEPSEEK_API_KEY) {
+    try {
+      const content = await callChatCompletions(system, user, {
+        apiKey: process.env.DEEPSEEK_API_KEY,
+        baseUrl: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
+        model: process.env.AI_MODEL || DEFAULT_DEEPSEEK_MODEL,
+      });
+      return { content, provider: "deepseek", fellBack: false };
+    } catch (err) {
+      return fallback(ctx, err);
+    }
+  }
+
+  // 3) Any other OpenAI-compatible endpoint (OpenAI, Groq, Together, OpenRouter…)
   if (process.env.OPENAI_API_KEY) {
     try {
-      const content = await callOpenAICompatible(system, user);
+      const content = await callChatCompletions(system, user, {
+        apiKey: process.env.OPENAI_API_KEY,
+        baseUrl: process.env.OPENAI_BASE_URL || OPENAI_BASE_URL,
+        model: process.env.AI_MODEL || DEFAULT_OPENAI_MODEL,
+      });
       return { content, provider: "openai", fellBack: false };
     } catch (err) {
-      return {
-        content: templateFallback(ctx),
-        provider: "template",
-        fellBack: true,
-        error: err instanceof Error ? err.message : "AI request failed",
-      };
+      return fallback(ctx, err);
     }
   }
 
-  // No key configured — deterministic template.
+  // 4) No key configured — deterministic template.
   return { content: templateFallback(ctx), provider: "template", fellBack: false };
+}
+
+function fallback(ctx: MessageContext, err: unknown): GenerateResult {
+  return {
+    content: templateFallback(ctx),
+    provider: "template",
+    fellBack: true,
+    error: err instanceof Error ? err.message : "AI request failed",
+  };
 }
 
 async function callAnthropic(system: string, user: string): Promise<string> {
@@ -89,21 +114,25 @@ async function callAnthropic(system: string, user: string): Promise<string> {
   return text;
 }
 
-async function callOpenAICompatible(system: string, user: string): Promise<string> {
-  const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(
-    /\/$/,
-    ""
-  );
-  const model = process.env.AI_MODEL || DEFAULT_OPENAI_MODEL;
+/**
+ * Calls any OpenAI-compatible /chat/completions endpoint. DeepSeek and OpenAI
+ * both go through here — only the base URL, model and key differ.
+ */
+async function callChatCompletions(
+  system: string,
+  user: string,
+  opts: { apiKey: string; baseUrl: string; model: string }
+): Promise<string> {
+  const base = opts.baseUrl.replace(/\/$/, "");
 
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${process.env.OPENAI_API_KEY!}`,
+      authorization: `Bearer ${opts.apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: opts.model,
       max_tokens: 600,
       temperature: 0.7,
       messages: [
