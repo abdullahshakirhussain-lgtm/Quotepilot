@@ -1,6 +1,6 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { QuotesClient } from "@/components/quotes/QuotesClient";
-import { todayISO } from "@/lib/utils";
+import { requestToday } from "@/lib/request-time";
 import type { Business, Lead, QuoteWithLead } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +47,7 @@ export default async function QuotesPage({
       leads={(leadsRes.data as Pick<Lead, "id" | "customer_name" | "company_name">[]) ?? []}
       defaultCurrency={businessRes.data?.currency ?? "USD"}
       initialNewLeadId={preselectLeadId}
-      today={todayISO()}
+      today={await requestToday()}
     />
   );
 }

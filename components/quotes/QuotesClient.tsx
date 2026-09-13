@@ -160,6 +160,7 @@ export function QuotesClient({
         <QuoteFormModal
           leads={leads}
           defaultCurrency={defaultCurrency}
+          today={today}
           preselectLeadId={initialNewLeadId}
           onClose={() => setShowNew(false)}
         />
@@ -169,6 +170,7 @@ export function QuotesClient({
           quote={editing}
           leads={leads}
           defaultCurrency={defaultCurrency}
+          today={today}
           onClose={() => setEditing(null)}
         />
       )}

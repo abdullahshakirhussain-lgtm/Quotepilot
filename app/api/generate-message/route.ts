@@ -8,6 +8,7 @@ import {
   type Tone,
 } from "@/lib/constants";
 import { clip, daysSince } from "@/lib/utils";
+import { requestToday } from "@/lib/request-time";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     quoteAmount: Number(quote.amount),
     currency: quote.currency,
     quoteDate: quote.quote_date,
-    daysSinceSent: daysSince(quote.quote_date),
+    daysSinceSent: daysSince(quote.quote_date, await requestToday()),
     previousFollowUpCount: quote.follow_up_count ?? 0,
     tone,
     messageType,

@@ -83,7 +83,7 @@ export function buildDemoSeed(today: string, currency: string, signOff: string):
       phone: "+1 555 0110",
       email: "hannah@cornerbakery.example",
       source: "Walk-in",
-      notes: "Owner of the bakery on Main St. Wants a new illuminated shopfront sign.",
+      notes: "Owns a local bakery. Wants a new illuminated shopfront sign.",
       status: "follow_up_due",
     },
     {

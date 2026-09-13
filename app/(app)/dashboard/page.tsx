@@ -4,7 +4,7 @@ import {
   BellRing,
   CalendarClock,
   CheckCircle2,
-  DollarSign,
+  Banknote,
   FileText,
   Percent,
   TrendingUp,
@@ -21,6 +21,7 @@ import {
   todayISO,
 } from "@/lib/utils";
 import { computeDashboardMetrics } from "@/lib/metrics";
+import { getRequestTimeZone } from "@/lib/request-time";
 import { classifyFollowUp } from "@/lib/follow-up-state";
 import type { Business, FollowUpWithContext } from "@/lib/types";
 
@@ -29,7 +30,9 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const user = await requireUser();
   const supabase = await createClient();
-  const today = todayISO();
+  // The viewer's own local day (browser zone → APP_TIMEZONE fallback → UTC).
+  const timeZone = await getRequestTimeZone();
+  const today = todayISO(timeZone);
 
   const [businessRes, leadsRes, quotesRes, followUpsRes] = await Promise.all([
     supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
@@ -71,7 +74,7 @@ export default async function DashboardPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {greeting(currentHour())}, {business?.owner_name || "there"}
+            {greeting(currentHour(timeZone))}, {business?.owner_name || "there"}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Here&apos;s what&apos;s happening with your quotes.
@@ -136,7 +139,7 @@ export default async function DashboardPage() {
         <Stat
           label="Total quoted value"
           value={formatCurrency(m.totalQuoted, currency)}
-          icon={<DollarSign className="h-5 w-5" />}
+          icon={<Banknote className="h-5 w-5" />}
           tone="slate"
         />
         <Stat

@@ -9,7 +9,6 @@ import {
   QUOTE_STATUS_LABELS,
 } from "@/lib/constants";
 import type { Lead, Quote } from "@/lib/types";
-import { todayISO } from "@/lib/utils";
 import {
   createQuote,
   updateQuote,
@@ -20,12 +19,15 @@ export function QuoteFormModal({
   quote,
   leads,
   defaultCurrency,
+  today,
   preselectLeadId,
   onClose,
 }: {
   quote?: Quote | null;
   leads: Pick<Lead, "id" | "customer_name" | "company_name">[];
   defaultCurrency: string;
+  /** Viewer's local date from the server, used as the default quote date. */
+  today: string;
   preselectLeadId?: string;
   onClose: () => void;
 }) {
@@ -133,7 +135,7 @@ export function QuoteFormModal({
               name="quote_date"
               type="date"
               className="input"
-              defaultValue={quote?.quote_date ?? todayISO()}
+              defaultValue={quote?.quote_date ?? today}
             />
           </div>
 

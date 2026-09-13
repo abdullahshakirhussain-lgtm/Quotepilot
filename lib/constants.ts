@@ -66,20 +66,31 @@ export const INDUSTRIES = [
   "Other",
 ] as const;
 
+// Selectable business/quote currencies. USD is only the pre-selected option in
+// forms; every workspace chooses its own at onboarding.
 export const CURRENCIES = [
   "USD",
   "EUR",
   "GBP",
-  "AUD",
   "CAD",
-  "AED",
-  "SAR",
+  "AUD",
+  "NZD",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
   "INR",
   "LKR",
   "SGD",
+  "AED",
+  "SAR",
   "ZAR",
   "NGN",
 ] as const;
+
+/** Cookie carrying the viewer's browser time zone to the server. */
+export const TIMEZONE_COOKIE = "qp_tz";
 
 // Follow-up interval presets (in days) offered in Business Settings.
 export const FOLLOW_UP_DAY_OPTIONS = [1, 3, 7, 14, 21, 30] as const;

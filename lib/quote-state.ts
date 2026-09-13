@@ -6,7 +6,8 @@
 // ---------------------------------------------------------------------------
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_FOLLOW_UP_DAYS, type QuoteStatus } from "./constants";
-import { addDays, todayISO } from "./utils";
+import { addDays } from "./utils";
+import { requestToday } from "./request-time";
 import { deriveQuoteFollowUpState, nextFollowUpNumber } from "./follow-up-state";
 
 export const CLOSED_QUOTE_STATUSES: QuoteStatus[] = ["accepted", "rejected", "expired"];
@@ -79,7 +80,8 @@ export async function scheduleFollowUps(
   check(historyError, "Could not read reminder history");
 
   const start = nextFollowUpNumber(history ?? []);
-  const base = todayISO();
+  // Reminder dates count from the user's own local day.
+  const base = await requestToday();
   const rows = days.map((d, i) => ({
     user_id: userId,
     quote_id: quoteId,

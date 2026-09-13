@@ -99,7 +99,7 @@ export function BusinessForm({
             name="phone"
             className="input"
             defaultValue={initial?.phone ?? ""}
-            placeholder="+1 555 0100"
+            placeholder="Include country code"
           />
         </div>
 

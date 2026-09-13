@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { CURRENCIES } from "@/lib/constants";
-import { optionalString, requireString, todayISO } from "@/lib/utils";
+import { optionalString, requireString } from "@/lib/utils";
+import { requestToday } from "@/lib/request-time";
 import { buildDemoSeed } from "@/lib/demo-seed";
 import { sanitizeFollowUpDays } from "@/lib/quote-state";
 
@@ -112,7 +113,7 @@ export async function seedDemoData(): Promise<ActionState> {
     .maybeSingle();
 
   const seed = buildDemoSeed(
-    todayISO(),
+    await requestToday(),
     business?.currency ?? "USD",
     business?.owner_name || business?.business_name || "The team"
   );

@@ -125,9 +125,25 @@ All configured in `.env.local` (see `.env.local.example`).
 | `OPENAI_API_KEY` | ⬜ | Any other OpenAI-compatible endpoint (OpenAI, Groq, Together, OpenRouter, local). |
 | `OPENAI_BASE_URL` | ⬜ | Override for the OpenAI-compatible base URL. Defaults to `https://api.openai.com/v1`. |
 | `AI_MODEL` | ⬜ | Model override. Defaults: `deepseek-chat` (DeepSeek), `claude-haiku-4-5-20251001` (Anthropic), `gpt-4o-mini` (OpenAI). |
-| `APP_TIMEZONE` | ⬜ (recommended) | Business time zone for "due today", overdue, reminder dates and the greeting, e.g. `Asia/Colombo`. Hosts run in UTC, so without it "today" flips at UTC midnight. |
+| `APP_TIMEZONE` | ⬜ | **Deployment fallback** time zone, used only until a viewer's browser time zone is known. Not a business setting. Defaults to `UTC`. |
 
 Provider priority when several keys are set: **Anthropic → DeepSeek → OpenAI → templates**.
+
+### Time zones
+
+QuotePilot is global: there is no built-in country, currency or time zone.
+"Today", due, overdue, reminder dates and the dashboard greeting follow each
+**viewer's own browser time zone**. The browser shares it with the server via a
+small cookie, and every date is computed server-side, so all pages agree.
+
+- **`APP_TIMEZONE` is a server fallback**, used to keep date classification
+  consistent in production before a viewer's zone is known (their very first
+  request, or browsers that block cookies). For a global deployment keep it at
+  `UTC`, or set it to your primary market. For a private demo, set it to the demo
+  operator's own zone.
+- It is **not** a per-business setting. A stored business time zone is
+  recommended before adding anything that runs without a browser (email/SMS
+  reminders, scheduled digests) or multi-user workspaces.
 
 **AI is optional.** With no key set, QuotePilot uses smart built-in templates,
 so it is fully demoable offline. Add a key to switch on real AI generation.
@@ -195,7 +211,8 @@ form — goes through one function (`applyQuoteStatusChange` in
   quote's reminder rows (`deriveQuoteFollowUpState` in `lib/follow-up-state.ts`),
   whichever screen changed them. The demo seed uses the same function.
 - **"Due today" / "Overdue"** use one classifier shared by the dashboard and the
-  Follow-ups page, with "today" computed on the server in `APP_TIMEZONE`.
+  Follow-ups page, with "today" computed on the server in the viewer's browser
+  time zone (falling back to `APP_TIMEZONE`, then UTC).
 
 ### Migrations
 
@@ -301,7 +318,7 @@ one code path; only the base URL, model and key differ. All calls are plain
 ## 6. Known limitations
 
 - **You send messages yourself.** QuotePilot generates and lets you copy — it does
-  not send email/SMS/WhatsApp (by design for this MVP).
+  not send email, SMS or chat messages (by design for this MVP).
 - **No automated reminders.** Follow-up due dates are shown in-app; there are no
   push/email notifications yet (would need a cron job / edge function).
 - **Single currency per business for totals.** Each quote stores its own currency,
@@ -319,9 +336,9 @@ one code path; only the base URL, model and key differ. All calls are plain
 
 ## 7. Suggested next features
 
-1. **Automated reminder notifications** — daily email/WhatsApp digest of what's due
+1. **Automated reminder notifications** — daily email/SMS digest of what's due
    (Supabase scheduled function).
-2. **One-click send** integrations — mailto/WhatsApp deep links pre-filled with the
+2. **One-click send** integrations — mailto/SMS deep links pre-filled with the
    copied message.
 3. **Quote PDF generation** — branded PDF a user can attach.
 4. **Templates library** — save and reuse favourite follow-up messages per type.

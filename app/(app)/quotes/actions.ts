@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { CURRENCIES, QUOTE_STATUSES, type QuoteStatus } from "@/lib/constants";
-import { clip, optionalString, requireString, todayISO } from "@/lib/utils";
+import { clip, optionalString, requireString } from "@/lib/utils";
+import { requestToday } from "@/lib/request-time";
 import {
   applyQuoteStatusChange,
   recomputeQuoteFollowUpState,
@@ -50,13 +51,13 @@ function parseDate(value: FormDataEntryValue | null, field: string): string | nu
   return s;
 }
 
-function readQuoteForm(formData: FormData) {
+function readQuoteForm(formData: FormData, today: string) {
   const currency = requireString(formData.get("currency"), "Currency").toUpperCase();
   if (!(CURRENCIES as readonly string[]).includes(currency)) {
     throw new Error("Unsupported currency.");
   }
   const status = formData.get("status");
-  const quoteDate = parseDate(formData.get("quote_date"), "Quote date") ?? todayISO();
+  const quoteDate = parseDate(formData.get("quote_date"), "Quote date") ?? today;
   const validUntil = parseDate(formData.get("valid_until"), "Valid-until date");
   if (validUntil && validUntil < quoteDate) {
     throw new Error("Valid-until date can't be before the quote date.");
@@ -94,7 +95,7 @@ export async function createQuote(
 
   let input;
   try {
-    input = readQuoteForm(formData);
+    input = readQuoteForm(formData, await requestToday());
   } catch (e) {
     return { error: errorMessage(e) };
   }
@@ -131,7 +132,7 @@ export async function updateQuote(
 
   let input;
   try {
-    input = readQuoteForm(formData);
+    input = readQuoteForm(formData, await requestToday());
   } catch (e) {
     return { error: errorMessage(e) };
   }
@@ -209,7 +210,9 @@ export async function markQuoteSent(id: string): Promise<void> {
 
   // The quote date is the first-send date; re-sending from a later stage keeps it.
   const patch =
-    quote.status === "draft" ? { status: "sent", quote_date: todayISO() } : { status: "sent" };
+    quote.status === "draft"
+      ? { status: "sent", quote_date: await requestToday() }
+      : { status: "sent" };
   const { error: updateError } = await supabase
     .from("quotes")
     .update(patch)

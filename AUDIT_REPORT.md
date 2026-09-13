@@ -9,7 +9,7 @@ features, integrations or redesigns. Audited as a skeptical technical buyer._
 
 | Question | Verdict |
 | --- | --- |
-| Demo-ready? | **Yes, after 3 setup steps** (re-run `schema.sql`, set `APP_TIMEZONE`, deploy this change) and one live run-through. |
+| Demo-ready? | **Yes, after 2 setup steps** (re-run `schema.sql`, deploy this change) and one live run-through. |
 | Safe for early beta? | **Not yet.** No password reset, no AI rate limit, no error monitoring, and the full flow has never been executed against the live Supabase project through the app. |
 | Ready for paid users? | **No.** Multi-step writes aren't transactional, lists/exports silently cap at 1,000 rows, no security headers, no backups/terms. |
 | Ready to pitch to a buyer? | **Yes, as an MVP asset** — with this report as the honest diligence pack. |
@@ -34,9 +34,9 @@ The audit found **4 high-severity issues**, all now fixed:
 | `npm run typecheck` / `npm test` | **DO NOT EXIST** | Not invented. `next build` performs the type-check. |
 | RLS harness, **before** fix (`schema.sql` in PGlite, 2 users) | **11 pass / 6 fail** | 4 cross-tenant FK inserts/updates succeeded; cascade wiped the attacker's 2 quotes. (1 fail was a harness artifact: the row had already been cascaded away.) |
 | RLS harness, **after** fix | **17 / 17 pass** | Cross-tenant refs blocked; reads/writes/spoofing blocked; cascades + CHECKs intact. |
-| Date/CSV harness, **before** (real `lib/utils.ts`, `TZ=America/Los_Angeles`) | **8 / 13** | `2026-09-13` → "Sep 12, 2026"; `2026-01-01` → "Dec 31, 2025"; TAB/CR cells not neutralised. New York 9/13, Sri Lanka 11/13 (dates fine east of UTC — why this never showed locally). |
+| Date/CSV harness, **before** (real `lib/utils.ts`, `TZ=America/Los_Angeles`) | **8 / 13** | `2026-09-13` → "Sep 12, 2026"; `2026-01-01` → "Dec 31, 2025"; TAB/CR cells not neutralised. New York 9/13, UTC+5:30 11/13 (dates render correctly east of UTC, which is why the bug was invisible on the developer's machine). |
 | Date/CSV harness, **after** (`TZ=America/New_York`) | **13 / 13** | |
-| Logic harness (real seed → real `deriveQuoteFollowUpState` → real `computeDashboardMetrics`) | **42 / 42** in LA **and** Colombo | Seed counters == app recompute; dashboard == expected; dashboard buckets == Follow-ups page buckets. |
+| Logic harness (real seed → real `deriveQuoteFollowUpState` → real `computeDashboardMetrics`) | **42 / 42** in UTC−7 **and** UTC+5:30 | Seed counters == app recompute; dashboard == expected; dashboard buckets == Follow-ups page buckets. |
 | Client bundle secret scan (`.next/static`) | **CLEAN** | Only hit: the Supabase SDK's own `sb_publishable_`/`sb_secret_` prefix check. No AI key names or AI endpoints in the browser. |
 | Production smoke (`curl`) | **PASS** | `/`, `/login`, `/signup` → 200 · `/dashboard`, `/follow-ups` (logged out) → 307 `/login?redirect=…` · `/api/export/*`, `POST /api/generate-message` (logged out) → 401 · `POST /auth/signout` → 303. |
 
@@ -54,7 +54,7 @@ The audit found **4 high-severity issues**, all now fixed:
 | 1 | **High** (security) | `supabase/schema.sql`, `quotes/actions.ts` | Policies only checked the row's own `user_id`, never who owns the referenced lead/quote. Server trusted client `lead_id`. | Tenant B can attach quotes/reminders/messages to tenant A's lead/quote, or re-point a quote. When A deletes the lead, B's rows cascade away. Exploit needs A's UUID (not enumerable), but it's a tenant-integrity failure any diligence review flags. | **Fixed** (RLS reference checks + server ownership check) |
 | 2 | **High** (core loop) | `updateQuote` | Status side effects existed only in the buttons, not the edit form. | Draft → Sent via the form: no reminders ever. Sent → Accepted via the form: pending reminders stayed "due" on a won deal (dashboard overdue counts wrong). | **Fixed** |
 | 3 | **High** (demo) | `lib/utils.ts formatDate` | `new Date("YYYY-MM-DD")` is UTC midnight. | Every quote date, validity date and reminder date displays a day early for any viewer west of UTC, including every US buyer. Jan 1 displays the previous year. | **Fixed** (proven by harness) |
-| 4 | **High** (consistency) | dashboard, `FollowUpsClient`, `QuotesClient`, `todayISO` | "Today" came from the server clock (UTC on Railway) on the dashboard but the browser clock on client components, which are also SSR'd with the server clock. | Dashboard vs Follow-ups page disagree on due/overdue for part of every day; "tomorrow/today" labels flip after hydration; hydration errors; "due today" flips at 05:30 in Sri Lanka. | **Fixed** (server-computed `today` + `APP_TIMEZONE`) |
+| 4 | **High** (consistency) | dashboard, `FollowUpsClient`, `QuotesClient`, `todayISO` | "Today" came from the server clock (UTC on Railway) on the dashboard but the browser clock on client components, which are also SSR'd with the server clock. | Dashboard vs Follow-ups page disagree on due/overdue for part of every day; "tomorrow/today" labels flip after hydration; hydration errors; "due today" flips at UTC midnight for everyone (5 pm in California, 10 am in Sydney). | **Fixed** (server-computed `today` in each viewer's own time zone) |
 | 5 | Medium (security) | `AuthForm` | `?redirect=` accepted absolute URLs. | Open redirect: `…/login?redirect=https://evil.example` is a phishing vector. | **Fixed** |
 | 6 | Medium (integrity) | `updateQuote` | Reminders/messages store `lead_id`; changing a quote's lead didn't move them. | Reminders show the wrong customer; deleting the old lead cascade-deletes the moved quote's reminders. | **Fixed** |
 | 7 | Medium (reliability) | all pages, `(app)/layout`, onboarding | Query `error` ignored; `data ?? []`. | A DB hiccup shows "No leads yet" / all-zero dashboard (reads as data loss); a failed workspace query sent existing users back to onboarding. | **Fixed** (throw → error boundary; added root `app/error.tsx` because `(app)/error.tsx` can't catch its own layout) |
@@ -62,7 +62,7 @@ The audit found **4 high-severity issues**, all now fixed:
 | 9 | Medium (demo) | `lib/ai/provider.ts` | `fetch` had no timeout. | A slow provider (DeepSeek at peak) leaves the AI modal spinning indefinitely. | **Fixed** (25 s → template fallback) |
 | 10 | Medium (demo/security) | provider + modal | Raw provider error body shown to users. | JSON error dumps (can include masked key fragments) on screen mid-demo. | **Fixed** (short, safe reason in the UI; details in server logs) |
 | 11 | Medium (demo) | `logFollowUpSent` + modal | Result ignored; UI always showed success. | "Follow-up logged ✓" on a draft/no-reminder quote while nothing changed. | **Fixed** (honest message) |
-| 12 | Medium (demo) | demo seed | Quotes hard-coded `USD`; message signed "QuotePilot Demo". | Non-USD workspace: "$780" on cards vs "LKR 13,450" totals. | **Fixed** (uses business currency + owner name) |
+| 12 | Medium (demo) | demo seed | Quotes hard-coded `USD`; message signed "QuotePilot Demo". | Non-USD workspace: "$780" on cards vs "€13,450" totals. | **Fixed** (uses business currency + owner name) |
 | 13 | Medium (demo) | demo seed | `customer_name: "The Corner Bakery"`. | Template fallback greets **"Hi The,"**. | **Fixed** (customer is a person) |
 | 14 | Medium (demo) | seed + `DataControls` | No guard, no feedback. | Repeat "Load demo data" silently doubles every record. | **Fixed** (loads only into an empty workspace; result shown) |
 | 15 | Medium (cost) | `generate-message` route | Stored title/description passed to the AI unbounded. | One huge description = expensive calls on every generation. | **Fixed** (all AI inputs clipped) |
@@ -75,7 +75,7 @@ The audit found **4 high-severity issues**, all now fixed:
 | 22 | Low | `markQuoteSent` | Not idempotent. | Double-click could double-schedule. | **Fixed** |
 | 23 | Low (demo) | seed | Counter timestamps ≠ reminder rows; 100% win rate, $0 lost, empty New/Lost columns. | Numbers shift after the first click; demo looks fabricated. | **Fixed** (counters derived; realistic lost deal + new lead) |
 | 24 | Low | dashboard | 0 decided quotes → "0%". | New account shows a 0% win rate. | **Fixed** (shows "—") |
-| 25 | Low | dashboard | Greeting used server UTC hour. | "Good morning" at 4 pm in Colombo. | **Fixed** |
+| 25 | Low | dashboard | Greeting used server UTC hour. | "Good morning" in the afternoon for anyone east of UTC. | **Fixed** |
 | 26 | Low | Supabase clients/middleware | Missing env → SDK throws on every request. | Landing page 500s with a cryptic error on a misconfigured deploy. | **Fixed** |
 | 27 | Low (UX) | pipeline | `cold` has no column. | Moving a card to Cold makes it vanish silently. | **Fixed** (note + link; no new column) |
 | 28 | Low | `createBusiness` | Unique violation surfaced raw. | Double-submit shows a Postgres error. | **Fixed** (treated as success) |
@@ -105,7 +105,7 @@ The audit found **4 high-severity issues**, all now fixed:
 - `app/(app)/leads/actions.ts` — status validation, errors surfaced.
 - `app/api/generate-message/route.ts` — input clipping, safe errors, `historySaved` flag.
 - `app/api/export/[type]/route.ts` — BOM, error handling, `message_sent` column (the final edited text, previously stored but never visible).
-- `lib/utils.ts` — `formatDate` date-only fix, `todayISO`/`currentHour` honour `APP_TIMEZONE`, `relativeDay(date, today)`, CSV TAB/CR, `clip`.
+- `lib/utils.ts` — `formatDate` date-only fix, `todayISO`/`currentHour` take an explicit time zone (resolved per request in `lib/request-time.ts`), `relativeDay(date, today)`, CSV TAB/CR, `clip`.
 - `lib/ai/provider.ts` — timeout, sanitized reasons, server-side error logging.
 - `lib/supabase/server.ts` / `client.ts` / `middleware.ts` — env guard, memoised `getCurrentUser`, `requireUser`.
 - All `(app)` pages + layout + onboarding — throw on query errors, `requireUser`, pass server `today`.
@@ -121,7 +121,7 @@ The audit found **4 high-severity issues**, all now fixed:
 | Demo: 5 leads, 5 quotes, 100% win rate | 7 leads, 6 quotes (added a lost cleaning contract + a new electrical lead) | $0 "Lost value" and 100% win rate read as fake; every pipeline column now has a card. |
 | Win rate "0%" with nothing decided | "—" with "No quotes won or lost yet" | 0% is a claim the data doesn't support. |
 
-**Verification:** RLS harness 17/17, date/CSV harness 13/13 (US tz), logic harness 42/42 (US + Sri Lanka tz), clean `npm run build`, production smoke test, bundle scan.
+**Verification:** RLS harness 17/17, date/CSV harness 13/13 (US tz), logic harness 42/42 (UTC−7 and UTC+5:30), clean `npm run build`, production smoke test, bundle scan.
 
 ---
 
@@ -129,7 +129,7 @@ The audit found **4 high-severity issues**, all now fixed:
 
 ### Must fix before a user demo (setup — no code)
 1. **Re-run `supabase/schema.sql`** in the live Supabase SQL editor. The RLS hardening isn't active until you do (the server-side lead check already protects the app's own paths). The file is idempotent.
-2. **Set `APP_TIMEZONE`** on Railway (e.g. `Asia/Colombo`). Without it "today" is UTC.
+2. _(Optional)_ **`APP_TIMEZONE`** on Railway is only a deployment fallback. Dates follow each viewer's browser time zone. Leave it unset or `UTC` for a global deployment.
 3. **Deploy this change** (commit + push → Railway auto-deploys).
 4. **Run the demo script once on the live URL**, and create a second account to confirm it sees none of the first's data. This is the one thing never executed end-to-end through the app against the real Supabase.
 5. Supabase → Auth → Email: turn **off** "Confirm email" for the demo.
@@ -151,7 +151,7 @@ The audit found **4 high-severity issues**, all now fixed:
 ### Acceptable MVP limitations
 - One workspace per user; manual sending; client-side search.
 - `cold` leads aren't on the board (the UI now says so).
-- The demo seed mixes service types to show range, and its amounts are sized for USD-like currencies (they look small in LKR).
+- The demo seed mixes service types to show range, and its amounts are sized for USD-like currencies (they look small in currencies such as INR or JPY).
 - Message history stores generated drafts. The edited text you actually mark as sent is stored on the reminder and exported as `message_sent`.
 - CSV formula protection prefixes `'` to cells like `+1 555…`, which some spreadsheet apps display.
 - Reopening a skipped reminder on a closed quote makes it due again (user-initiated).
@@ -231,12 +231,36 @@ Result: a closed quote can no longer have pending reminders counted as due.
 
 - **Env vars:**
   - Required: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Both are **inlined at build time**, so redeploy after changing them.
-  - Recommended: `APP_TIMEZONE`.
+  - Optional: `APP_TIMEZONE` (deployment fallback, default `UTC`; not a business setting).
   - AI (one of): `DEEPSEEK_API_KEY` (current), `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` (+ `OPENAI_BASE_URL`). Optional `AI_MODEL`.
   - A missing Supabase config now gives a clear error instead of crashing the landing page.
 - **Build/start:** `npm run build` and `npm start` both pass. `next start` binds Railway's `$PORT`. Node is pinned to ≥ 20 (`engines` + `.nvmrc`).
 - **Railway:** Deploy from GitHub; set the variables before the first build; generate a domain; set Supabase **Site URL** to it. Vercel works identically.
-- **Setup risks:** forgetting to re-run `schema.sql`, leaving `APP_TIMEZONE` unset, or leaving email confirmation on during a demo.
+- **Setup risks:** forgetting to re-run `schema.sql`, or leaving email confirmation on during a demo.
+
+---
+
+## Addendum — global-readiness pass
+
+The product had no hard-coded country default. However, `APP_TIMEZONE` was one
+app-wide clock: setting it to any single zone would have given every user
+worldwide that zone's "today".
+
+Dates now follow each **viewer's browser time zone**. A small client component
+(`components/TimezoneCookie.tsx`) shares it with the server via a cookie, and
+`lib/request-time.ts` resolves the zone per request, with `APP_TIMEZONE` as the
+fallback and then UTC. All classification stays server-side, so pages still agree.
+
+Other changes in this pass:
+- Currency list adds NZD, CHF, SEK, NOK, DKK and PLN.
+- The dashboard's `$` icon is replaced with a currency-neutral one.
+- The phone placeholder asks for a country code.
+- The AI prompt is channel-neutral.
+- A US street reference was removed from the seed.
+- Docs no longer imply any single market.
+
+**Remaining:** there's no stored per-business time zone. That's fine for
+single-user, browser-driven use; add one before email/SMS reminders or teams.
 
 ---
 

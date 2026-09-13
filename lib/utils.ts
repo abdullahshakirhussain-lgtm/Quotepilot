@@ -7,6 +7,8 @@ export function cn(...classes: Array<string | false | null | undefined>): string
   return classes.filter(Boolean).join(" ");
 }
 
+// Formatting uses one fixed locale on purpose: month-name dates ("Sep 13, 2026")
+// are unambiguous in every market, and server and browser render identically.
 export function formatCurrency(amount: number, currency = "USD"): string {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -38,19 +40,42 @@ export function formatDate(value: string | null | undefined): string {
   });
 }
 
-/**
- * Business time zone for "today" (e.g. "Asia/Colombo"). Server-only setting:
- * in the browser this is undefined, which is why client components receive
- * `today` as a prop from the server instead of computing it themselves.
- */
-function appTimeZone(): string | undefined {
-  const tz = typeof process !== "undefined" ? process.env.APP_TIMEZONE : undefined;
-  return tz && tz.trim() ? tz.trim() : undefined;
+// ---------------------------------------------------------------------------
+// Time zones. Three separate ideas, never mixed:
+//   1. Viewer time zone  — the browser's IANA zone, shared with the server via a
+//      cookie (see components/TimezoneCookie.tsx). Used for "today".
+//   2. Deployment fallback — APP_TIMEZONE, only used before the viewer's zone is
+//      known. It is not a business setting.
+//   3. Neutral default   — UTC, when neither is available.
+// Resolution happens server-side in lib/request-time.ts.
+// ---------------------------------------------------------------------------
+
+const TIME_ZONE_NAME = /^[A-Za-z0-9_+\-/]{1,64}$/;
+
+export function isValidTimeZone(tz: string | null | undefined): tz is string {
+  if (!tz || !TIME_ZONE_NAME.test(tz)) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function zonedParts(date: Date, tz: string) {
+/** Viewer's zone if valid, else the deployment fallback if valid, else UTC. */
+export function resolveTimeZone(
+  viewerZone?: string | null,
+  deploymentFallback?: string | null
+): string {
+  if (isValidTimeZone(viewerZone)) return viewerZone;
+  const fallback = deploymentFallback?.trim();
+  if (isValidTimeZone(fallback)) return fallback;
+  return "UTC";
+}
+
+function zonedParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -61,31 +86,17 @@ function zonedParts(date: Date, tz: string) {
   return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) % 24 };
 }
 
-/** Today's date as YYYY-MM-DD in APP_TIMEZONE (or host local time if unset). */
-export function todayISO(): string {
-  const tz = appTimeZone();
-  if (tz) {
-    try {
-      return zonedParts(new Date(), tz).date;
-    } catch {
-      // Invalid zone name — fall back to host time below.
-    }
-  }
+/** Today's date as YYYY-MM-DD in `timeZone` (or the local clock if omitted). */
+export function todayISO(timeZone?: string): string {
+  if (isValidTimeZone(timeZone)) return zonedParts(new Date(), timeZone).date;
   const d = new Date();
   const offset = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - offset).toISOString().slice(0, 10);
 }
 
-/** Current hour (0–23) in APP_TIMEZONE (or host local time if unset). */
-export function currentHour(): number {
-  const tz = appTimeZone();
-  if (tz) {
-    try {
-      return zonedParts(new Date(), tz).hour;
-    } catch {
-      // Invalid zone name — fall back to host time below.
-    }
-  }
+/** Current hour (0–23) in `timeZone` (or the local clock if omitted). */
+export function currentHour(timeZone?: string): number {
+  if (isValidTimeZone(timeZone)) return zonedParts(new Date(), timeZone).hour;
   return new Date().getHours();
 }
 
