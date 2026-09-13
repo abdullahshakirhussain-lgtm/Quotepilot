@@ -22,18 +22,30 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "quoteId is required" }, { status: 400 });
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("quote_id", quoteId)
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  const [drafts, logged] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("*")
+      .eq("quote_id", quoteId)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    // The final (possibly edited) text of each follow-up the user logged.
+    supabase
+      .from("follow_ups")
+      .select("id, follow_up_number, completed_at, message_snapshot")
+      .eq("quote_id", quoteId)
+      .eq("user_id", user.id)
+      .eq("status", "completed")
+      .not("message_snapshot", "is", null)
+      .order("completed_at", { ascending: false }),
+  ]);
 
+  const error = drafts.error ?? logged.error;
   if (error) {
     console.error("[ai] history load failed:", error);
     return NextResponse.json({ error: "Could not load message history." }, { status: 500 });
   }
-  return NextResponse.json({ messages: data ?? [] });
+  return NextResponse.json({ messages: drafts.data ?? [], logged: logged.data ?? [] });
 }
 
 // POST /api/generate-message -> generate a follow-up message and store it

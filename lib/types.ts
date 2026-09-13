@@ -83,6 +83,16 @@ export interface Message {
 // Convenience joined shapes used by list views.
 export type QuoteWithLead = Quote & { lead: Pick<Lead, "id" | "customer_name" | "company_name"> | null };
 export type FollowUpWithContext = FollowUp & {
-  quote: Pick<Quote, "id" | "title" | "amount" | "currency" | "status"> | null;
+  quote: Pick<
+    Quote,
+    | "id"
+    | "title"
+    | "amount"
+    | "currency"
+    | "status"
+    | "follow_up_count"
+    | "valid_until"
+    | "next_follow_up_at"
+  > | null;
   lead: Pick<Lead, "id" | "customer_name" | "company_name"> | null;
 };

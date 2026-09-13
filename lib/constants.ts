@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Central place for enums, labels and colors used across the app.
-// Keeping these in one file keeps the UI, validation and DB constraints aligned.
+// Stored values mirror the SQL CHECK constraints; labels are what people see.
 // ---------------------------------------------------------------------------
 
 export const LEAD_STATUSES = [
@@ -97,14 +97,14 @@ export const FOLLOW_UP_DAY_OPTIONS = [1, 3, 7, 14, 21, 30] as const;
 export const DEFAULT_FOLLOW_UP_DAYS = [1, 3, 7, 14];
 
 // ---------------------------------------------------------------------------
-// Human-readable labels
+// Human-readable labels (plain business language; DB values are unchanged)
 // ---------------------------------------------------------------------------
 
 export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   new: "New",
   contacted: "Contacted",
-  quote_sent: "Quote Sent",
-  follow_up_due: "Follow-Up Due",
+  quote_sent: "Quote sent",
+  follow_up_due: "Follow-up due",
   negotiating: "Negotiating",
   won: "Won",
   lost: "Lost",
@@ -114,16 +114,16 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
   draft: "Draft",
   sent: "Sent",
-  follow_up_due: "Follow-Up Due",
+  follow_up_due: "Follow-up due",
   negotiating: "Negotiating",
-  accepted: "Accepted",
-  rejected: "Rejected",
+  accepted: "Won",
+  rejected: "Lost",
   expired: "Expired",
 };
 
 export const FOLLOW_UP_STATUS_LABELS: Record<FollowUpStatus, string> = {
   pending: "Pending",
-  completed: "Completed",
+  completed: "Done",
   skipped: "Skipped",
 };
 
@@ -132,9 +132,9 @@ export const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {
   second_follow_up: "Second follow-up",
   final_follow_up: "Final follow-up",
   quote_expiring: "Quote expiring",
-  objection_response: "Objection response",
-  lost_lead_recovery: "Lost-lead recovery",
-  thank_you_after_acceptance: "Thank you (accepted)",
+  objection_response: "Answer an objection",
+  lost_lead_recovery: "Win back a lost quote",
+  thank_you_after_acceptance: "Thank you (won)",
 };
 
 export const TONE_LABELS: Record<Tone, string> = {
@@ -146,34 +146,43 @@ export const TONE_LABELS: Record<Tone, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Tailwind color classes for status badges
+// Status pill colors. Orange = needs attention, green = won money,
+// red = lost. Everything else stays neutral.
 // ---------------------------------------------------------------------------
 
+const NEUTRAL = "bg-stone-100 text-stone-600 ring-1 ring-inset ring-stone-200";
+const ACTIVE = "bg-white text-stone-800 ring-1 ring-inset ring-stone-300";
+const ATTENTION = "bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200";
+const TALKING = "bg-sky-50 text-sky-800 ring-1 ring-inset ring-sky-200";
+const WON = "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200";
+const LOST = "bg-red-50 text-red-800 ring-1 ring-inset ring-red-200";
+const MUTED = "bg-stone-100 text-stone-400 ring-1 ring-inset ring-stone-200";
+
 export const LEAD_STATUS_COLORS: Record<LeadStatus, string> = {
-  new: "bg-slate-100 text-slate-700",
-  contacted: "bg-blue-100 text-blue-700",
-  quote_sent: "bg-indigo-100 text-indigo-700",
-  follow_up_due: "bg-amber-100 text-amber-800",
-  negotiating: "bg-purple-100 text-purple-700",
-  won: "bg-emerald-100 text-emerald-700",
-  lost: "bg-red-100 text-red-700",
-  cold: "bg-slate-100 text-slate-500",
+  new: NEUTRAL,
+  contacted: NEUTRAL,
+  quote_sent: ACTIVE,
+  follow_up_due: ATTENTION,
+  negotiating: TALKING,
+  won: WON,
+  lost: LOST,
+  cold: MUTED,
 };
 
 export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: "bg-slate-100 text-slate-700",
-  sent: "bg-blue-100 text-blue-700",
-  follow_up_due: "bg-amber-100 text-amber-800",
-  negotiating: "bg-purple-100 text-purple-700",
-  accepted: "bg-emerald-100 text-emerald-700",
-  rejected: "bg-red-100 text-red-700",
-  expired: "bg-slate-100 text-slate-500",
+  draft: NEUTRAL,
+  sent: ACTIVE,
+  follow_up_due: ATTENTION,
+  negotiating: TALKING,
+  accepted: WON,
+  rejected: LOST,
+  expired: MUTED,
 };
 
 export const FOLLOW_UP_STATUS_COLORS: Record<FollowUpStatus, string> = {
-  pending: "bg-amber-100 text-amber-800",
-  completed: "bg-emerald-100 text-emerald-700",
-  skipped: "bg-slate-100 text-slate-500",
+  pending: ATTENTION,
+  completed: WON,
+  skipped: MUTED,
 };
 
 // Pipeline columns (lead statuses grouped for the board view).

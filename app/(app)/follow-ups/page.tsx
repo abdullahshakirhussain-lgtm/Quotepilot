@@ -12,7 +12,7 @@ export default async function FollowUpsPage() {
   const { data, error } = await supabase
     .from("follow_ups")
     .select(
-      "*, quote:quotes(id, title, amount, currency, status), lead:leads(id, customer_name, company_name)"
+      "*, quote:quotes(id, title, amount, currency, status, follow_up_count, valid_until, next_follow_up_at), lead:leads(id, customer_name, company_name)"
     )
     .eq("user_id", user.id)
     .order("due_date", { ascending: true });

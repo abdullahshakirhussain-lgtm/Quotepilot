@@ -14,11 +14,14 @@ import {
 export interface QuoteActionState {
   ok?: boolean;
   error?: string;
+  message?: string;
 }
 
 export interface LogFollowUpResult {
   logged: boolean;
   message?: string;
+  followUpNumber?: number;
+  nextFollowUpAt?: string | null;
 }
 
 const MAX_SNAPSHOT_LENGTH = 10_000;
@@ -51,26 +54,27 @@ function parseDate(value: FormDataEntryValue | null, field: string): string | nu
   return s;
 }
 
-function readQuoteForm(formData: FormData, today: string) {
+/**
+ * The quote's own fields. Status is never read from forms — it only changes
+ * through markQuoteSent / setQuoteStatus, so reminders always stay in sync.
+ */
+function readQuoteFields(formData: FormData, today: string) {
   const currency = requireString(formData.get("currency"), "Currency").toUpperCase();
   if (!(CURRENCIES as readonly string[]).includes(currency)) {
     throw new Error("Unsupported currency.");
   }
-  const status = formData.get("status");
   const quoteDate = parseDate(formData.get("quote_date"), "Quote date") ?? today;
   const validUntil = parseDate(formData.get("valid_until"), "Valid-until date");
   if (validUntil && validUntil < quoteDate) {
     throw new Error("Valid-until date can't be before the quote date.");
   }
   return {
-    lead_id: requireString(formData.get("lead_id"), "Lead"),
-    title: requireString(formData.get("title"), "Title"),
+    title: requireString(formData.get("title"), "Quote title"),
     description: optionalString(formData.get("description")),
     amount: parseAmount(formData.get("amount")),
     currency,
     quote_date: quoteDate,
     valid_until: validUntil,
-    status: isQuoteStatus(status) ? status : ("draft" as QuoteStatus),
     notes: optionalString(formData.get("notes")),
   };
 }
@@ -84,7 +88,61 @@ async function assertOwnLead(supabase: SupabaseClient, userId: string, leadId: s
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("The selected lead was not found.");
+  if (!data) throw new Error("The selected customer was not found.");
+}
+
+const digitsOnly = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+/**
+ * Quote-first: use the chosen existing customer, or create one from the inline
+ * fields. A customer with the same email or phone is reused instead of
+ * duplicated (matched in code, so user input never becomes a query filter).
+ */
+async function resolveCustomer(
+  supabase: SupabaseClient,
+  userId: string,
+  formData: FormData
+): Promise<string> {
+  if (formData.get("customer_mode") === "existing") {
+    const leadId = requireString(formData.get("lead_id"), "Customer");
+    await assertOwnLead(supabase, userId, leadId);
+    return leadId;
+  }
+
+  const name = requireString(formData.get("customer_name"), "Customer name");
+  const email = optionalString(formData.get("email"));
+  const phone = optionalString(formData.get("phone"));
+
+  if (email || phone) {
+    const { data: existing, error } = await supabase
+      .from("leads")
+      .select("id, email, phone")
+      .eq("user_id", userId);
+    if (error) throw new Error(error.message);
+    const emailKey = email?.toLowerCase();
+    const phoneKey = digitsOnly(phone);
+    const match = (existing ?? []).find(
+      (l) =>
+        (emailKey && l.email?.trim().toLowerCase() === emailKey) ||
+        (phoneKey.length >= 7 && digitsOnly(l.phone) === phoneKey)
+    );
+    if (match) return match.id;
+  }
+
+  const { data: lead, error } = await supabase
+    .from("leads")
+    .insert({
+      user_id: userId,
+      customer_name: name,
+      company_name: optionalString(formData.get("company_name")),
+      email,
+      phone,
+      status: "new",
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return lead.id;
 }
 
 export async function createQuote(
@@ -92,33 +150,40 @@ export async function createQuote(
   formData: FormData
 ): Promise<QuoteActionState> {
   const user = await requireUser();
+  const markSent = formData.get("intent") === "sent";
 
-  let input;
+  let fields;
   try {
-    input = readQuoteForm(formData, await requestToday());
+    fields = readQuoteFields(formData, await requestToday());
   } catch (e) {
     return { error: errorMessage(e) };
   }
 
   const supabase = await createClient();
   try {
-    await assertOwnLead(supabase, user.id, input.lead_id);
+    const leadId = await resolveCustomer(supabase, user.id, formData);
+    const status: QuoteStatus = markSent ? "sent" : "draft";
     const { data: quote, error } = await supabase
       .from("quotes")
-      .insert({ ...input, user_id: user.id })
+      .insert({ ...fields, lead_id: leadId, status, user_id: user.id })
       .select("id, lead_id")
       .single();
     if (error) throw new Error(error.message);
 
-    // Treat creation as a transition out of draft, so "Sent" schedules reminders
-    // and Accepted/Rejected update the lead exactly like the status buttons do.
-    await applyQuoteStatusChange(supabase, user.id, quote, "draft", input.status);
+    // Same transition path as the status buttons: "sent" schedules reminders
+    // and moves the customer along the pipeline.
+    await applyQuoteStatusChange(supabase, user.id, quote, "draft", status);
   } catch (e) {
     return { error: errorMessage(e) };
   }
 
   revalidateQuoteViews();
-  return { ok: true };
+  return {
+    ok: true,
+    message: markSent
+      ? "Quote marked as sent. Follow-up reminders are scheduled."
+      : "Draft saved.",
+  };
 }
 
 export async function updateQuote(
@@ -130,9 +195,11 @@ export async function updateQuote(
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing quote id." };
 
-  let input;
+  let fields;
+  let leadId: string;
   try {
-    input = readQuoteForm(formData, await requestToday());
+    fields = readQuoteFields(formData, await requestToday());
+    leadId = requireString(formData.get("lead_id"), "Customer");
   } catch (e) {
     return { error: errorMessage(e) };
   }
@@ -141,49 +208,41 @@ export async function updateQuote(
   try {
     const { data: existing, error: readError } = await supabase
       .from("quotes")
-      .select("id, lead_id, status")
+      .select("id, lead_id")
       .eq("id", id)
       .eq("user_id", user.id)
       .maybeSingle();
     if (readError) throw new Error(readError.message);
     if (!existing) return { error: "Quote not found." };
 
-    await assertOwnLead(supabase, user.id, input.lead_id);
+    await assertOwnLead(supabase, user.id, leadId);
 
     const { error } = await supabase
       .from("quotes")
-      .update(input)
+      .update({ ...fields, lead_id: leadId })
       .eq("id", id)
       .eq("user_id", user.id);
     if (error) throw new Error(error.message);
 
-    // Reminders and message history also record the lead. Keep them on the same
-    // lead as their quote, otherwise deleting the old lead would cascade-delete
-    // this quote's reminders.
-    if (existing.lead_id !== input.lead_id) {
+    // Reminders and message history also record the customer. Keep them on the
+    // same customer as their quote, otherwise deleting the old customer would
+    // cascade-delete this quote's reminders.
+    if (existing.lead_id !== leadId) {
       for (const table of ["follow_ups", "messages"] as const) {
         const { error: moveError } = await supabase
           .from(table)
-          .update({ lead_id: input.lead_id })
+          .update({ lead_id: leadId })
           .eq("quote_id", id)
           .eq("user_id", user.id);
         if (moveError) throw new Error(moveError.message);
       }
     }
-
-    await applyQuoteStatusChange(
-      supabase,
-      user.id,
-      { id, lead_id: input.lead_id },
-      existing.status,
-      input.status
-    );
   } catch (e) {
     return { error: errorMessage(e) };
   }
 
   revalidateQuoteViews();
-  return { ok: true };
+  return { ok: true, message: "Quote updated." };
 }
 
 export async function deleteQuote(id: string): Promise<void> {
@@ -265,7 +324,7 @@ export async function logFollowUpSent(
 
   const { data: pending, error } = await supabase
     .from("follow_ups")
-    .select("id")
+    .select("id, follow_up_number")
     .eq("quote_id", quoteId)
     .eq("user_id", user.id)
     .eq("status", "pending")
@@ -292,7 +351,11 @@ export async function logFollowUpSent(
     .eq("user_id", user.id);
   if (updateError) throw new Error(updateError.message);
 
-  await recomputeQuoteFollowUpState(supabase, user.id, quoteId);
+  const state = await recomputeQuoteFollowUpState(supabase, user.id, quoteId);
   revalidateQuoteViews();
-  return { logged: true };
+  return {
+    logged: true,
+    followUpNumber: pending[0].follow_up_number,
+    nextFollowUpAt: state.next_follow_up_at,
+  };
 }

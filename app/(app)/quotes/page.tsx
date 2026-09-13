@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function QuotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string }>;
+  searchParams: Promise<{ lead?: string; new?: string }>;
 }) {
-  const { lead: preselectLeadId } = await searchParams;
+  const { lead: preselectLeadId, new: openNew } = await searchParams;
   const user = await requireUser();
   const supabase = await createClient();
 
@@ -47,6 +47,7 @@ export default async function QuotesPage({
       leads={(leadsRes.data as Pick<Lead, "id" | "customer_name" | "company_name">[]) ?? []}
       defaultCurrency={businessRes.data?.currency ?? "USD"}
       initialNewLeadId={preselectLeadId}
+      openNew={openNew === "1"}
       today={await requestToday()}
     />
   );

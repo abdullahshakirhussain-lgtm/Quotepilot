@@ -1,159 +1,252 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   CheckCircle2,
   FileText,
   Loader2,
-  Pencil,
+  Plus,
   Search,
   Send,
   Sparkles,
-  Trash2,
   XCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Menu, MenuDivider, MenuItem, MenuLabel } from "@/components/ui/Menu";
 import { QuoteFormModal } from "./QuoteFormModal";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
-import {
-  QUOTE_STATUSES,
-  QUOTE_STATUS_LABELS,
-  type QuoteStatus,
-} from "@/lib/constants";
+import type { QuoteStatus } from "@/lib/constants";
 import type { Lead, Quote, QuoteWithLead } from "@/lib/types";
-import { formatCurrency, formatDate, relativeDay } from "@/lib/utils";
-import {
-  deleteQuote,
-  markQuoteSent,
-  setQuoteStatus,
-} from "@/app/(app)/quotes/actions";
+import { cn, formatCurrency } from "@/lib/utils";
+import { followUpUrgency } from "@/lib/follow-up-state";
+import { deleteQuote, markQuoteSent, setQuoteStatus } from "@/app/(app)/quotes/actions";
 
-const ACTIVE: QuoteStatus[] = ["sent", "follow_up_due", "negotiating"];
+const OPEN: QuoteStatus[] = ["sent", "follow_up_due", "negotiating"];
+
+type Tab = "open" | "draft" | "won" | "lost" | "all";
+const TABS: { key: Tab; label: string; match: (s: QuoteStatus) => boolean }[] = [
+  { key: "open", label: "Open", match: (s) => OPEN.includes(s) },
+  { key: "draft", label: "Drafts", match: (s) => s === "draft" },
+  { key: "won", label: "Won", match: (s) => s === "accepted" },
+  { key: "lost", label: "Lost", match: (s) => s === "rejected" },
+  { key: "all", label: "All", match: () => true },
+];
+
+type Tone = "overdue" | "today" | "upcoming" | "muted" | "won" | "lost";
+
+/** The one-line "what's next" for a quote, in plain language. */
+function nextStep(q: QuoteWithLead, today: string): { text: string; tone: Tone } {
+  if (q.status === "draft") return { text: "Not sent yet", tone: "muted" };
+  if (q.status === "accepted") return { text: "Won", tone: "won" };
+  if (q.status === "rejected") return { text: "Lost", tone: "lost" };
+  if (q.status === "expired") return { text: "Expired", tone: "muted" };
+  const u = followUpUrgency(q.next_follow_up_at, today);
+  if (u.level === "overdue") {
+    return { text: `Follow-up overdue by ${u.days} day${u.days === 1 ? "" : "s"}`, tone: "overdue" };
+  }
+  if (u.level === "today") return { text: "Follow up today", tone: "today" };
+  if (u.level === "upcoming") {
+    return {
+      text: u.days === 1 ? "Next follow-up tomorrow" : `Next follow-up in ${u.days} days`,
+      tone: "upcoming",
+    };
+  }
+  return { text: "No reminder scheduled", tone: "muted" };
+}
+
+/** Most urgent first: overdue, today, upcoming, drafts, then closed quotes. */
+function priority(q: QuoteWithLead, today: string): number {
+  if (OPEN.includes(q.status)) {
+    const u = followUpUrgency(q.next_follow_up_at, today);
+    return u.level === "overdue" ? 0 : u.level === "today" ? 1 : u.level === "upcoming" ? 2 : 3;
+  }
+  return { draft: 4, expired: 5, accepted: 6, rejected: 7 }[q.status as "draft"] ?? 8;
+}
+
+const BAR: Record<Tone, string> = {
+  overdue: "bg-red-500",
+  today: "bg-brand-500",
+  upcoming: "bg-stone-300",
+  muted: "bg-stone-200",
+  won: "bg-emerald-500",
+  lost: "bg-red-300",
+};
+const TEXT: Record<Tone, string> = {
+  overdue: "text-red-700 font-medium",
+  today: "text-brand-700 font-medium",
+  upcoming: "text-stone-600",
+  muted: "text-stone-400",
+  won: "text-emerald-700 font-medium",
+  lost: "text-red-700",
+};
 
 export function QuotesClient({
   quotes,
   leads,
   defaultCurrency,
   initialNewLeadId,
+  openNew,
   today,
 }: {
   quotes: QuoteWithLead[];
   leads: Pick<Lead, "id" | "customer_name" | "company_name">[];
   defaultCurrency: string;
   initialNewLeadId?: string;
-  /** Server-computed date so relative labels match SSR and the dashboard. */
+  /** Opened from "New quote" elsewhere in the app (?new=1). */
+  openNew?: boolean;
+  /** Viewer's local date from the server. */
   today: string;
 }) {
+  const hasOpen = quotes.some((q) => OPEN.includes(q.status));
+  const [tab, setTab] = useState<Tab>(hasOpen ? "open" : "all");
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<QuoteStatus | "all">("all");
+  const [showNew, setShowNew] = useState(Boolean(openNew || initialNewLeadId));
   const [editing, setEditing] = useState<Quote | null>(null);
-  const [showNew, setShowNew] = useState(Boolean(initialNewLeadId));
   const [aiFor, setAiFor] = useState<QuoteWithLead | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const counts = useMemo(
+    () => Object.fromEntries(TABS.map((t) => [t.key, quotes.filter((q) => t.match(q.status)).length])),
+    [quotes]
+  );
+
+  const visible = useMemo(() => {
+    const match = TABS.find((t) => t.key === tab)!.match;
     const q = query.trim().toLowerCase();
-    return quotes.filter((quote) => {
-      if (statusFilter !== "all" && quote.status !== statusFilter) return false;
-      if (!q) return true;
-      return [quote.title, quote.lead?.customer_name, quote.lead?.company_name]
-        .filter(Boolean)
-        .some((v) => (v as string).toLowerCase().includes(q));
-    });
-  }, [quotes, query, statusFilter]);
+    return quotes
+      .filter((quote) => match(quote.status))
+      .filter(
+        (quote) =>
+          !q ||
+          [quote.title, quote.lead?.customer_name, quote.lead?.company_name]
+            .filter(Boolean)
+            .some((v) => (v as string).toLowerCase().includes(q))
+      )
+      .sort(
+        (a, b) =>
+          priority(a, today) - priority(b, today) ||
+          (a.next_follow_up_at ?? "").localeCompare(b.next_follow_up_at ?? "") ||
+          b.created_at.localeCompare(a.created_at)
+      );
+  }, [quotes, tab, query, today]);
 
-  const canCreate = leads.length > 0;
+  function closeNew() {
+    setShowNew(false);
+    // Don't reopen the form on refresh when it came from a ?new=1 link.
+    if (window.location.search) window.history.replaceState(null, "", "/quotes");
+  }
+
+  const openValue = quotes
+    .filter((q) => OPEN.includes(q.status))
+    .reduce((s, q) => s + Number(q.amount), 0);
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Quotes</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {quotes.length} {quotes.length === 1 ? "quote" : "quotes"} total
-          </p>
-        </div>
-        <button
-          className="btn-primary"
-          onClick={() => setShowNew(true)}
-          disabled={!canCreate}
-          title={canCreate ? undefined : "Add a lead first"}
-        >
-          <FileText className="h-4 w-4" /> New quote
-        </button>
-      </header>
+    <div>
+      <PageHeader
+        title="Quotes"
+        subtitle={
+          hasOpen ? (
+            <>
+              <span className="num font-medium text-stone-700">
+                {formatCurrency(openValue, defaultCurrency)}
+              </span>{" "}
+              waiting on {counts.open} open {counts.open === 1 ? "quote" : "quotes"}
+            </>
+          ) : (
+            "Every quote you send, and what happens next."
+          )
+        }
+        actions={
+          <button className="btn-primary" onClick={() => setShowNew(true)}>
+            <Plus className="h-4 w-4" /> New quote
+          </button>
+        }
+      />
 
-      {!canCreate && (
-        <div className="card p-4 text-sm text-slate-600">
-          You need a lead before creating a quote.{" "}
-          <a href="/leads" className="font-medium text-brand-600 hover:underline">
-            Add a lead →
-          </a>
-        </div>
-      )}
-
-      {quotes.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <input
-              className="input pl-9"
-              placeholder="Search quote or customer…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-          <select
-            className="input w-auto"
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as QuoteStatus | "all")
-            }
-          >
-            <option value="all">All statuses</option>
-            {QUOTE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {QUOTE_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
+      {toast && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> {toast}
+          </span>
+          <Link href="/follow-ups" className="font-medium underline-offset-2 hover:underline">
+            View follow-ups
+          </Link>
         </div>
       )}
 
       {quotes.length === 0 ? (
         <EmptyState
-          icon={<FileText className="h-6 w-6" />}
-          title="No quotes yet"
-          description="Create your first quote for a lead. Mark it as sent to start follow-up reminders."
+          icon={<FileText className="h-5 w-5" />}
+          title="Create your first quote"
+          description="Add who it's for and what you quoted. QuotePilot reminds you when to follow up and drafts the message."
           action={
-            canCreate ? (
-              <button className="btn-primary" onClick={() => setShowNew(true)}>
-                <FileText className="h-4 w-4" /> Create a quote
-              </button>
-            ) : (
-              <a href="/leads" className="btn-primary">
-                Add a lead first
-              </a>
-            )
+            <button className="btn-primary" onClick={() => setShowNew(true)}>
+              <Plus className="h-4 w-4" /> New quote
+            </button>
           }
         />
-      ) : filtered.length === 0 ? (
-        <div className="card p-8 text-center text-sm text-slate-500">
-          No quotes match your search.
-        </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {filtered.map((quote) => (
-            <QuoteCard
-              key={quote.id}
-              quote={quote}
-              today={today}
-              onEdit={() => setEditing(quote)}
-              onAI={() => setAiFor(quote)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-1 overflow-x-auto" role="tablist">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  role="tab"
+                  aria-selected={tab === t.key}
+                  onClick={() => setTab(t.key)}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    tab === t.key
+                      ? "bg-stone-900 text-white"
+                      : "text-stone-600 hover:bg-stone-900/5 hover:text-stone-900"
+                  )}
+                >
+                  {t.label}
+                  <span className={cn("num ml-1.5 text-xs", tab === t.key ? "text-stone-300" : "text-stone-400")}>
+                    {counts[t.key]}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-stone-400" />
+              <input
+                className="input py-1.5 pl-8"
+                placeholder="Search quotes or customers"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {visible.length === 0 ? (
+            <p className="card px-4 py-8 text-center text-sm text-stone-500">
+              {query ? "No quotes match your search." : "Nothing here right now."}
+            </p>
+          ) : (
+            <ul className="card divide-y divide-stone-100 overflow-visible">
+              {visible.map((quote) => (
+                <QuoteRow
+                  key={quote.id}
+                  quote={quote}
+                  today={today}
+                  onEdit={() => setEditing(quote)}
+                  onWrite={() => setAiFor(quote)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       {showNew && (
@@ -162,7 +255,11 @@ export function QuotesClient({
           defaultCurrency={defaultCurrency}
           today={today}
           preselectLeadId={initialNewLeadId}
-          onClose={() => setShowNew(false)}
+          onClose={closeNew}
+          onSaved={(message) => {
+            setToast(message);
+            setTab("all");
+          }}
         />
       )}
       {editing && (
@@ -172,6 +269,7 @@ export function QuotesClient({
           defaultCurrency={defaultCurrency}
           today={today}
           onClose={() => setEditing(null)}
+          onSaved={setToast}
         />
       )}
       {aiFor && (
@@ -180,7 +278,13 @@ export function QuotesClient({
             id: aiFor.id,
             title: aiFor.title,
             customerName: aiFor.lead?.customer_name ?? "the customer",
+            amount: Number(aiFor.amount),
+            currency: aiFor.currency,
+            status: aiFor.status,
+            followUpCount: aiFor.follow_up_count,
+            validUntil: aiFor.valid_until,
           }}
+          today={today}
           onClose={() => setAiFor(null)}
         />
       )}
@@ -188,145 +292,130 @@ export function QuotesClient({
   );
 }
 
-function QuoteCard({
+function QuoteRow({
   quote,
   today,
   onEdit,
-  onAI,
+  onWrite,
 }: {
   quote: QuoteWithLead;
   today: string;
   onEdit: () => void;
-  onAI: () => void;
+  onWrite: () => void;
 }) {
   const [pending, start] = useTransition();
-  const isActive = ACTIVE.includes(quote.status);
+  const step = nextStep(quote, today);
+  const isOpen = OPEN.includes(quote.status);
+  const urgent = step.tone === "overdue" || step.tone === "today";
+  const run = (fn: () => Promise<void>) => start(async () => await fn());
 
   return (
-    <div className="card flex flex-col p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate font-semibold text-slate-900">{quote.title}</h3>
-          <p className="truncate text-sm text-slate-500">
+    <li className="relative flex flex-col gap-3 py-3.5 pl-5 pr-3 sm:flex-row sm:items-center">
+      <span className={cn("absolute inset-y-3 left-0 w-1 rounded-r", BAR[step.tone])} />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-medium text-stone-900">{quote.title}</span>
+          <StatusBadge kind="quote" value={quote.status} />
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-stone-500">
+          <span className="truncate">
             {quote.lead?.customer_name ?? "—"}
             {quote.lead?.company_name ? ` · ${quote.lead.company_name}` : ""}
-          </p>
+          </span>
+          <span className="text-stone-300">/</span>
+          <span className={TEXT[step.tone]}>{step.text}</span>
+          {quote.follow_up_count > 0 && (
+            <span className="text-stone-400">
+              · {quote.follow_up_count} follow-up{quote.follow_up_count === 1 ? "" : "s"} sent
+            </span>
+          )}
         </div>
-        <StatusBadge kind="quote" value={quote.status} />
       </div>
 
-      <div className="mt-3 text-2xl font-bold text-slate-900">
+      <div className="num text-right text-[15px] font-semibold text-stone-900 sm:w-32">
         {formatCurrency(Number(quote.amount), quote.currency)}
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
-        <div>
-          <dt className="inline text-slate-400">Quoted: </dt>
-          <dd className="inline text-slate-600">{formatDate(quote.quote_date)}</dd>
-        </div>
-        <div>
-          <dt className="inline text-slate-400">Valid until: </dt>
-          <dd className="inline text-slate-600">
-            {quote.valid_until ? formatDate(quote.valid_until) : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="inline text-slate-400">Follow-ups sent: </dt>
-          <dd className="inline text-slate-600">{quote.follow_up_count}</dd>
-        </div>
-        <div>
-          <dt className="inline text-slate-400">Next follow-up: </dt>
-          <dd className="inline text-slate-600">
-            {quote.next_follow_up_at
-              ? relativeDay(quote.next_follow_up_at, today)
-              : "—"}
-          </dd>
-        </div>
-      </dl>
-
-      {quote.notes && (
-        <p className="mt-3 line-clamp-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-          {quote.notes}
-        </p>
-      )}
-
-      {/* Actions */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-        <button className="btn-primary px-3 py-1.5 text-sm" onClick={onAI}>
-          <Sparkles className="h-4 w-4" /> AI message
-        </button>
+      <div className="flex shrink-0 flex-wrap items-center gap-1 sm:flex-nowrap sm:justify-end">
+        {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
 
         {quote.status === "draft" && (
-          <button
-            className="btn-secondary px-3 py-1.5 text-sm"
-            disabled={pending}
-            onClick={() => start(async () => await markQuoteSent(quote.id))}
-          >
-            {pending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Mark sent
+          <button className="btn-primary" disabled={pending} onClick={() => run(() => markQuoteSent(quote.id))}>
+            <Send className="h-4 w-4" /> Mark sent
           </button>
         )}
-
-        {isActive && (
+        {isOpen && (
           <>
             <button
-              className="btn px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50"
+              className="btn-ghost text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
               disabled={pending}
-              onClick={() =>
-                start(async () => await setQuoteStatus(quote.id, "accepted"))
-              }
+              onClick={() => run(() => setQuoteStatus(quote.id, "accepted"))}
             >
               <CheckCircle2 className="h-4 w-4" /> Won
             </button>
             <button
-              className="btn px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+              className="btn-ghost text-red-700 hover:bg-red-50 hover:text-red-800"
               disabled={pending}
-              onClick={() =>
-                start(async () => await setQuoteStatus(quote.id, "rejected"))
-              }
+              onClick={() => run(() => setQuoteStatus(quote.id, "rejected"))}
             >
               <XCircle className="h-4 w-4" /> Lost
             </button>
+            <button className={urgent ? "btn-accent" : "btn-primary"} disabled={pending} onClick={onWrite}>
+              <Sparkles className="h-4 w-4" /> Write follow-up
+            </button>
           </>
         )}
-
-        <div className="ml-auto flex items-center gap-1">
-          <select
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600"
-            value={quote.status}
-            disabled={pending}
-            onChange={(e) => {
-              const next = e.target.value as QuoteStatus;
-              start(async () => {
-                if (next === "sent") await markQuoteSent(quote.id);
-                else await setQuoteStatus(quote.id, next);
-              });
-            }}
-            title="Change status"
-          >
-            {QUOTE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {QUOTE_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-          <button className="btn-ghost px-2 py-1" title="Edit" onClick={onEdit}>
-            <Pencil className="h-4 w-4" />
+        {quote.status === "expired" && (
+          <button className="btn-secondary" disabled={pending} onClick={onWrite}>
+            <Sparkles className="h-4 w-4" /> Nudge customer
           </button>
-          <ConfirmButton
-            className="btn-ghost px-2 py-1 text-red-500 hover:bg-red-50"
-            title="Delete quote"
-            confirmMessage={`Delete the quote "${quote.title}"? This also deletes its follow-ups and messages.`}
-            action={deleteQuote.bind(null, quote.id)}
+        )}
+        {quote.status === "rejected" && (
+          <button className="btn-secondary" disabled={pending} onClick={onWrite}>
+            <Sparkles className="h-4 w-4" /> Win back
+          </button>
+        )}
+        {quote.status === "accepted" && (
+          <button className="btn-ghost" disabled={pending} onClick={onWrite}>
+            <Sparkles className="h-4 w-4" /> Say thanks
+          </button>
+        )}
+
+        <Menu>
+          <MenuItem onClick={onEdit}>Edit quote</MenuItem>
+          <MenuDivider />
+          <MenuLabel>Status</MenuLabel>
+          {!isOpen && quote.status !== "draft" && (
+            <MenuItem onClick={() => run(() => markQuoteSent(quote.id))}>Reopen as sent</MenuItem>
+          )}
+          {isOpen && quote.status !== "negotiating" && (
+            <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "negotiating"))}>
+              Mark negotiating
+            </MenuItem>
+          )}
+          {!isOpen && quote.status !== "accepted" && (
+            <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "accepted"))}>Mark won</MenuItem>
+          )}
+          {!isOpen && quote.status !== "rejected" && (
+            <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "rejected"))}>Mark lost</MenuItem>
+          )}
+          {quote.status !== "expired" && quote.status !== "draft" && (
+            <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "expired"))}>Mark expired</MenuItem>
+          )}
+          <MenuDivider />
+          <MenuItem
+            danger
+            onClick={() => {
+              if (window.confirm(`Delete "${quote.title}"? Its follow-ups and messages are deleted too.`)) {
+                run(() => deleteQuote(quote.id));
+              }
+            }}
           >
-            <Trash2 className="h-4 w-4" />
-          </ConfirmButton>
-        </div>
+            Delete quote
+          </MenuItem>
+        </Menu>
       </div>
-    </div>
+    </li>
   );
 }

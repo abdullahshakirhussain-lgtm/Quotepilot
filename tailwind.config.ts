@@ -9,17 +9,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Warm paper background the whole app sits on.
+        canvas: "#F6F5F1",
+        // Burnt-orange accent: brand mark, urgency, focus. Used sparingly.
         brand: {
-          50: "#eef4ff",
-          100: "#d9e6ff",
-          200: "#bcd3ff",
-          300: "#8eb6ff",
-          400: "#598cff",
-          500: "#3563ff",
-          600: "#1d40f5",
-          700: "#162fe1",
-          800: "#1829b6",
-          900: "#1a298f",
+          50: "#FFF5EF",
+          100: "#FFE7D9",
+          200: "#FFCDB0",
+          300: "#FDA77A",
+          400: "#F77E45",
+          500: "#EA5F22",
+          600: "#D24A12",
+          700: "#AE3A0E",
+          800: "#8C3010",
+          900: "#732B12",
         },
       },
       fontFamily: {

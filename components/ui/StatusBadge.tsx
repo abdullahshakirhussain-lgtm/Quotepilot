@@ -17,7 +17,7 @@ type Props =
   | { kind: "followup"; value: FollowUpStatus };
 
 export function StatusBadge(props: Props) {
-  let color = "bg-slate-100 text-slate-700";
+  let color = "bg-stone-100 text-stone-700";
   let label = props.value as string;
 
   if (props.kind === "lead") {

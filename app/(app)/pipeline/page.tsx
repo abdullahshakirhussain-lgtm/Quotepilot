@@ -4,6 +4,7 @@ import {
   type PipelineLead,
 } from "@/components/pipeline/PipelineClient";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { KanbanSquare } from "lucide-react";
 import Link from "next/link";
 import type { LeadStatus } from "@/lib/constants";
@@ -47,15 +48,15 @@ export default async function PipelinePage() {
 
   if (rows.length === 0) {
     return (
-      <div className="space-y-5">
-        <h1 className="text-2xl font-bold text-slate-900">Pipeline</h1>
+      <div>
+        <PageHeader title="Pipeline" subtitle="Every customer by stage." />
         <EmptyState
-          icon={<KanbanSquare className="h-6 w-6" />}
+          icon={<KanbanSquare className="h-5 w-5" />}
           title="Your pipeline is empty"
-          description="Add leads to see them organised by stage here."
+          description="Customers appear here as you add quotes, grouped by how far along they are."
           action={
-            <Link href="/leads" className="btn-primary">
-              Add a lead
+            <Link href="/quotes?new=1" className="btn-primary">
+              New quote
             </Link>
           }
         />

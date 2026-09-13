@@ -8,7 +8,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_FOLLOW_UP_DAYS, type QuoteStatus } from "./constants";
 import { addDays } from "./utils";
 import { requestToday } from "./request-time";
-import { deriveQuoteFollowUpState, nextFollowUpNumber } from "./follow-up-state";
+import {
+  deriveQuoteFollowUpState,
+  nextFollowUpNumber,
+  type QuoteFollowUpState,
+} from "./follow-up-state";
 
 export const CLOSED_QUOTE_STATUSES: QuoteStatus[] = ["accepted", "rejected", "expired"];
 
@@ -30,7 +34,7 @@ export async function recomputeQuoteFollowUpState(
   supabase: SupabaseClient,
   userId: string,
   quoteId: string
-): Promise<void> {
+): Promise<QuoteFollowUpState> {
   const { data, error } = await supabase
     .from("follow_ups")
     .select("status, due_date, completed_at")
@@ -38,12 +42,14 @@ export async function recomputeQuoteFollowUpState(
     .eq("user_id", userId);
   check(error, "Could not read follow-ups");
 
+  const state = deriveQuoteFollowUpState(data ?? []);
   const { error: updateError } = await supabase
     .from("quotes")
-    .update(deriveQuoteFollowUpState(data ?? []))
+    .update(state)
     .eq("id", quoteId)
     .eq("user_id", userId);
   check(updateError, "Could not update quote");
+  return state;
 }
 
 /**

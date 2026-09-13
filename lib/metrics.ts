@@ -13,10 +13,16 @@ export const ACTIVE_LEAD_STATUSES = [
   "negotiating",
 ] as const;
 
+/** Quotes that are out with the customer and still undecided. */
+export const OPEN_QUOTE_STATUSES = ["sent", "follow_up_due", "negotiating"] as const;
+
 export interface DashboardMetrics {
   activeLeads: number;
-  /** Quotes that have left draft (includes accepted / rejected / expired). */
+  /** Quotes that have left draft (includes won / lost / expired). */
   quotesSent: number;
+  /** Undecided quotes still with the customer, and their total value. */
+  openCount: number;
+  openValue: number;
   wonCount: number;
   lostCount: number;
   totalQuoted: number;
@@ -48,6 +54,7 @@ export function computeDashboardMetrics(input: {
   ).length;
 
   const sent = quotes.filter((q) => q.status !== "draft");
+  const open = quotes.filter((q) => (OPEN_QUOTE_STATUSES as readonly string[]).includes(q.status));
   const won = quotes.filter((q) => q.status === "accepted");
   const lost = quotes.filter((q) => q.status === "rejected");
 
@@ -57,6 +64,8 @@ export function computeDashboardMetrics(input: {
   return {
     activeLeads,
     quotesSent: sent.length,
+    openCount: open.length,
+    openValue: open.reduce((s, q) => s + amountOf(q), 0),
     wonCount: won.length,
     lostCount: lost.length,
     totalQuoted,

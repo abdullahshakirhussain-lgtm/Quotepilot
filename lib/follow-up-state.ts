@@ -3,6 +3,8 @@
 // the demo seed. "How many follow-ups were sent", "what's next", and "what's
 // due today / overdue" each have exactly one definition, here.
 // ---------------------------------------------------------------------------
+import type { MessageType } from "./constants";
+import { daysBetween } from "./utils";
 
 /** Reminders are date-based; quote timestamps store 09:00 UTC on the due date. */
 export function dueDateToTimestamp(date: string): string {
@@ -62,4 +64,38 @@ export function classifyFollowUp(
   if (d < today) return "overdue";
   if (d === today) return "today";
   return "upcoming";
+}
+
+export type Urgency =
+  | { level: "overdue"; days: number }
+  | { level: "today"; days: 0 }
+  | { level: "upcoming"; days: number }
+  | { level: "none" };
+
+/** How urgent a quote's next follow-up is (drives the quote card label). */
+export function followUpUrgency(nextFollowUpAt: string | null, today: string): Urgency {
+  if (!nextFollowUpAt) return { level: "none" };
+  const d = daysBetween(today, nextFollowUpAt.slice(0, 10));
+  if (d < 0) return { level: "overdue", days: -d };
+  if (d === 0) return { level: "today", days: 0 };
+  return { level: "upcoming", days: d };
+}
+
+/**
+ * The message a person most likely wants for this quote right now, so the
+ * assistant can draft it without asking. Users can still change it.
+ */
+export function suggestMessageType(
+  quote: { status: string; follow_up_count: number; valid_until?: string | null },
+  today: string
+): MessageType {
+  if (quote.status === "accepted") return "thank_you_after_acceptance";
+  if (quote.status === "rejected") return "lost_lead_recovery";
+  if (quote.status === "expired") return "quote_expiring";
+  if (quote.valid_until && daysBetween(today, quote.valid_until.slice(0, 10)) <= 3) {
+    return "quote_expiring";
+  }
+  if (quote.follow_up_count <= 0) return "first_follow_up";
+  if (quote.follow_up_count <= 2) return "second_follow_up";
+  return "final_follow_up";
 }

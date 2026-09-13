@@ -36,7 +36,8 @@ export function LeadFormModal({
       title={isEdit ? "Edit lead" : "Add lead"}
       description="Track a potential customer and their details."
     >
-      <form action={formAction} className="space-y-4">
+      {/* flex+gap, not space-y: React injects hidden action inputs first. */}
+      <form action={formAction} className="flex flex-col gap-4">
         {isEdit && <input type="hidden" name="id" value={lead!.id} />}
 
         <div className="grid gap-4 sm:grid-cols-2">

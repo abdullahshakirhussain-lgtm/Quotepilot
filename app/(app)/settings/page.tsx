@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
 import { DataControls } from "@/components/DataControls";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { updateBusiness } from "./actions";
 import type { Business } from "@/lib/types";
 
@@ -19,54 +20,46 @@ export default async function SettingsPage() {
   if (error) throw new Error(`Could not load settings: ${error.message}`);
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Manage your business profile, follow-up defaults and data.
-        </p>
-      </header>
+    <div>
+      <PageHeader title="Settings" subtitle="Your business details, reminder schedule and data." />
 
-      <section className="card p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Business profile</h2>
-        <p className="mb-5 text-sm text-slate-500">
-          Used across the app and in AI-generated follow-up messages. Changing
-          the follow-up schedule affects quotes you mark as sent from now on.
-        </p>
-        <BusinessForm
-          action={updateBusiness}
-          initial={business}
-          submitLabel="Save changes"
-        />
-      </section>
+      <div className="space-y-6">
+        <section className="card p-5">
+          <h2 className="text-[15px] font-semibold text-stone-900">Business profile</h2>
+          <p className="mb-5 mt-0.5 text-sm text-stone-500">
+            Used to sign AI-drafted follow-ups. The reminder schedule applies to
+            quotes you mark as sent from now on.
+          </p>
+          <BusinessForm action={updateBusiness} initial={business} submitLabel="Save changes" />
+        </section>
 
-      <section className="card p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Export data</h2>
-        <p className="mb-4 text-sm text-slate-500">
-          Download your records as CSV files (opens in Excel / Google Sheets).
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <a href="/api/export/leads" className="btn-secondary">
-            <Download className="h-4 w-4" /> Leads CSV
-          </a>
-          <a href="/api/export/quotes" className="btn-secondary">
-            <Download className="h-4 w-4" /> Quotes CSV
-          </a>
-          <a href="/api/export/follow-ups" className="btn-secondary">
-            <Download className="h-4 w-4" /> Follow-ups CSV
-          </a>
-        </div>
-      </section>
+        <section className="card p-5">
+          <h2 className="text-[15px] font-semibold text-stone-900">Export</h2>
+          <p className="mb-4 mt-0.5 text-sm text-stone-500">
+            Download your records as CSV. Opens in Excel or Google Sheets.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a href="/api/export/quotes" className="btn-secondary">
+              <Download className="h-4 w-4" /> Quotes
+            </a>
+            <a href="/api/export/follow-ups" className="btn-secondary">
+              <Download className="h-4 w-4" /> Follow-ups
+            </a>
+            <a href="/api/export/leads" className="btn-secondary">
+              <Download className="h-4 w-4" /> Customers
+            </a>
+          </div>
+        </section>
 
-      <section className="card p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Demo data</h2>
-        <p className="mb-4 text-sm text-slate-500">
-          Load a set of realistic sample records into an empty workspace to
-          explore the app, or wipe your leads, quotes and follow-ups to start
-          clean. Your business profile is kept.
-        </p>
-        <DataControls />
-      </section>
+        <section className="card p-5">
+          <h2 className="text-[15px] font-semibold text-stone-900">Demo data</h2>
+          <p className="mb-4 mt-0.5 text-sm text-stone-500">
+            Load sample quotes into an empty workspace to explore, or clear your
+            customers, quotes and follow-ups to start fresh. Your business profile is kept.
+          </p>
+          <DataControls />
+        </section>
+      </div>
     </div>
   );
 }

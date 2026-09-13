@@ -24,7 +24,8 @@ export function BusinessForm({
   const selectedDays = initial?.default_follow_up_days ?? DEFAULT_FOLLOW_UP_DAYS;
 
   return (
-    <form action={formAction} className="space-y-5">
+    // flex+gap, not space-y: React injects hidden action inputs first.
+    <form action={formAction} className="flex flex-col gap-5">
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label htmlFor="business_name" className="label">
@@ -120,7 +121,7 @@ export function BusinessForm({
 
       <div>
         <span className="label">Default follow-up schedule</span>
-        <p className="mb-2 text-xs text-slate-500">
+        <p className="mb-2 text-xs text-stone-500">
           When you mark a quote as sent, reminders are created on these days
           after sending.
         </p>
@@ -128,7 +129,7 @@ export function BusinessForm({
           {FOLLOW_UP_DAY_OPTIONS.map((d) => (
             <label
               key={d}
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-stone-300 px-3 py-1.5 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
             >
               <input
                 type="checkbox"
@@ -154,7 +155,7 @@ export function BusinessForm({
         </div>
       )}
 
-      <button type="submit" className="btn-primary" disabled={pending}>
+      <button type="submit" className="btn-primary self-start" disabled={pending}>
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}
         {submitLabel}
       </button>

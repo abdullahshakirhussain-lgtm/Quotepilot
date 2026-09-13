@@ -8,6 +8,7 @@ import {
   KanbanSquare,
   LayoutDashboard,
   LogOut,
+  Plus,
   Settings,
   Users,
 } from "lucide-react";
@@ -15,53 +16,90 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/follow-ups", label: "Follow-ups", icon: BellRing },
+  { href: "/follow-ups", label: "Follow-ups", icon: BellRing, badge: true },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/leads", label: "Customers", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar({ businessName }: { businessName: string }) {
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "grid h-7 w-7 shrink-0 place-items-center rounded-md bg-brand-600 text-[13px] font-bold text-white",
+        className
+      )}
+    >
+      Q
+    </span>
+  );
+}
+
+export function Sidebar({
+  businessName,
+  attentionCount,
+}: {
+  businessName: string;
+  /** Pending follow-ups due today or overdue. */
+  attentionCount: number;
+}) {
   const pathname = usePathname();
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
 
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
-        <div className="flex items-center gap-2 px-5 py-5 text-lg font-bold text-slate-900">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-white">
-            Q
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-stone-950 text-stone-400 md:flex">
+        <div className="flex items-center gap-2.5 px-5 pb-1 pt-5">
+          <BrandMark />
+          <span className="text-[15px] font-semibold tracking-tight text-white">
+            QuotePilot
           </span>
-          QuotePilot
         </div>
-        <div className="truncate px-5 pb-4 text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="truncate px-5 pb-5 pl-[3.35rem] text-xs text-stone-500">
           {businessName}
         </div>
-        <nav className="flex-1 space-y-1 px-3">
+
+        <div className="px-3 pb-4">
+          <Link href="/quotes?new=1" className="btn-accent w-full">
+            <Plus className="h-4 w-4" /> New quote
+          </Link>
+        </div>
+
+        <nav className="flex-1 space-y-0.5 px-3">
           {NAV.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+            const active = isActive(item.href);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   active
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-slate-600 hover:bg-slate-100"
+                    ? "bg-white/10 text-white"
+                    : "hover:bg-white/5 hover:text-stone-200"
                 )}
               >
+                {active && (
+                  <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand-500" />
+                )}
                 <Icon className="h-4 w-4" />
                 {item.label}
+                {item.badge && attentionCount > 0 && (
+                  <span className="num ml-auto rounded bg-brand-600 px-1.5 py-px text-[11px] font-semibold text-white">
+                    {attentionCount}
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
-        <form action="/auth/signout" method="post" className="p-3">
-          <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
+
+        <form action="/auth/signout" method="post" className="border-t border-white/5 p-3">
+          <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-white/5 hover:text-stone-200">
             <LogOut className="h-4 w-4" />
             Sign out
           </button>
@@ -69,39 +107,41 @@ export function Sidebar({ businessName }: { businessName: string }) {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white md:hidden">
+      <div className="sticky top-0 z-30 bg-stone-950 text-stone-400 md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2 font-bold text-slate-900">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-600 text-sm text-white">
-              Q
-            </span>
+          <div className="flex items-center gap-2 font-semibold text-white">
+            <BrandMark className="h-6 w-6 text-xs" />
             QuotePilot
           </div>
-          <form action="/auth/signout" method="post">
-            <button className="btn-ghost px-2 py-1 text-sm">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </form>
+          <div className="flex items-center gap-1">
+            <Link href="/quotes?new=1" className="btn-accent px-2.5 py-1 text-xs">
+              <Plus className="h-3.5 w-3.5" /> Quote
+            </Link>
+            <form action="/auth/signout" method="post">
+              <button className="rounded-md p-1.5 hover:bg-white/10" aria-label="Sign out">
+                <LogOut className="h-4 w-4" />
+              </button>
+            </form>
+          </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {NAV.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium",
-                  active
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-slate-600 hover:bg-slate-100"
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+                isActive(item.href) ? "bg-white/10 text-white" : "hover:bg-white/5"
+              )}
+            >
+              {item.label}
+              {item.badge && attentionCount > 0 && (
+                <span className="num rounded bg-brand-600 px-1 text-[11px] font-semibold text-white">
+                  {attentionCount}
+                </span>
+              )}
+            </Link>
+          ))}
         </nav>
       </div>
     </>
