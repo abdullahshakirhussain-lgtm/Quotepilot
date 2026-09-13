@@ -15,10 +15,13 @@ export function BusinessForm({
   action,
   initial,
   submitLabel,
+  suggested,
 }: {
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   initial?: Business | null;
   submitLabel: string;
+  /** Prefill for new workspaces (e.g. name and email from Google sign-in). */
+  suggested?: { owner_name?: string; email?: string };
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const selectedDays = initial?.default_follow_up_days ?? DEFAULT_FOLLOW_UP_DAYS;
@@ -50,7 +53,7 @@ export function BusinessForm({
             name="owner_name"
             required
             className="input"
-            defaultValue={initial?.owner_name ?? ""}
+            defaultValue={initial?.owner_name ?? suggested?.owner_name ?? ""}
             placeholder="e.g. Sam Carter"
           />
         </div>
@@ -113,7 +116,7 @@ export function BusinessForm({
             name="email"
             type="email"
             className="input"
-            defaultValue={initial?.email ?? ""}
+            defaultValue={initial?.email ?? suggested?.email ?? ""}
             placeholder="hello@yourbusiness.com"
           />
         </div>

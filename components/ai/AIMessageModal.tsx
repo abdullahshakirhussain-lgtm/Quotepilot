@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import {
   AlertTriangle,
   Check,
   Loader2,
+  Mail,
   RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
@@ -22,10 +25,13 @@ import {
   type QuoteStatus,
   type Tone,
 } from "@/lib/constants";
-import type { Message } from "@/lib/types";
+import type { EmailLogEntry, Message } from "@/lib/types";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { suggestMessageType } from "@/lib/follow-up-state";
 import { logFollowUpSent } from "@/app/(app)/quotes/actions";
+import { sendFollowUpEmail } from "@/app/(app)/quotes/email-actions";
+
+type SendOutcome = Awaited<ReturnType<typeof sendFollowUpEmail>>;
 
 export interface AIQuoteContext {
   id: string;
@@ -46,8 +52,19 @@ interface LoggedEntry {
 }
 
 type HistoryEntry =
+  | { kind: "emailed"; id: string; at: string; text: string; to: string; number: number | null }
   | { kind: "logged"; id: string; at: string; text: string; number: number }
+  | { kind: "unconfirmed"; id: string; at: string; text: string; to: string }
+  | { kind: "failed"; id: string; at: string; to: string }
   | { kind: "draft"; id: string; at: string; text: string; type: MessageType; tone: Tone };
+
+type Banner = { tone: "success" | "warning" | "error" | "info"; text: string };
+
+/** The footer is appended when sending; history shows the message itself. */
+function withoutFooter(body: string): string {
+  const i = body.lastIndexOf("\n\n—\n");
+  return i === -1 ? body : body.slice(0, i);
+}
 
 export function AIMessageModal({
   quote,
@@ -74,17 +91,30 @@ export function AIMessageModal({
   const [adjusting, setAdjusting] = useState(false);
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
+  const [subject, setSubject] = useState(`Following up on your quote: ${quote.title}`);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Message[]>([]);
   const [logged, setLogged] = useState<LoggedEntry[]>([]);
-  const [logging, startLog] = useTransition();
-  const [logResult, setLogResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [emails, setEmails] = useState<EmailLogEntry[]>([]);
+  const [recipient, setRecipient] = useState<string | null>(null);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [busy, startAction] = useTransition();
+  const [action, setAction] = useState<"send" | "log" | null>(null);
+  // Tracked separately: an email can go out while its reminder still needs logging.
+  const [emailSent, setEmailSent] = useState(false);
+  const [followedUp, setFollowedUp] = useState(false);
+  // Sent, but its reminder couldn't be completed: logging by hand stays open.
+  const [manualLogNeeded, setManualLogNeeded] = useState(false);
+  // The last send had no clear outcome, so sending again could duplicate it.
+  const [sendLocked, setSendLocked] = useState(false);
+  const [banner, setBanner] = useState<Banner | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   const firstName = quote.customerName.split(" ")[0] || quote.customerName;
   const edited = content.trim() !== "" && content.trim() !== draft.trim();
+  const canEmail = emailEnabled && Boolean(recipient);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -93,6 +123,9 @@ export function AIMessageModal({
       const data = await res.json();
       setDrafts(data.messages ?? []);
       setLogged(data.logged ?? []);
+      setEmails(data.emails ?? []);
+      setRecipient(data.recipientEmail ?? null);
+      setEmailEnabled(Boolean(data.emailEnabled));
     } catch {
       /* history is optional; the assistant still works without it */
     }
@@ -134,33 +167,101 @@ export function AIMessageModal({
     }
   }
 
+  const nextReminder = (at: string | null) =>
+    at ? `Next reminder ${relativeDay(at, today)}.` : "No more reminders are scheduled for this quote.";
+
+  function sendEmail() {
+    if (!content.trim()) return;
+    setBanner(null);
+    setAction("send");
+    startAction(async () => {
+      let r: SendOutcome;
+      try {
+        // Sends the text exactly as it is now — including any edits.
+        r = await sendFollowUpEmail({ quoteId: quote.id, subject, message: content });
+      } catch (e) {
+        unstable_rethrow(e); // e.g. the session expired: let Next redirect to login
+        // The request itself broke (connection lost, app restarting), so the
+        // email may or may not have gone out.
+        r = {
+          ok: false,
+          unconfirmed: true,
+          error: "We couldn't confirm whether the email was sent. Check the history below before sending it again.",
+        };
+      }
+      if (!r.ok) {
+        // After an unclear outcome, don't offer a resend that could duplicate it.
+        if (r.unconfirmed) {
+          setSendLocked(true);
+          loadHistory();
+        }
+        setBanner({ tone: r.unconfirmed ? "warning" : "error", text: r.error });
+        return;
+      }
+      // Never allow a second send. Logging by hand stays open only when this
+      // email's reminder couldn't be recorded.
+      setEmailSent(true);
+      if (r.followUpLogged) setFollowedUp(true);
+      setManualLogNeeded(Boolean(r.needsManualLog));
+      const next = r.nextFollowUpAt === undefined ? "" : ` ${nextReminder(r.nextFollowUpAt)}`;
+      const summary = r.followUpLogged
+        ? `Email sent to ${r.recipient} and follow-up #${r.followUpNumber} logged.${next}`
+        : `Email sent to ${r.recipient}.`;
+      setBanner(
+        r.warning
+          ? { tone: "warning", text: `${summary} ${r.warning}` }
+          : { tone: "success", text: summary }
+      );
+      loadHistory();
+    });
+  }
+
   function markFollowedUp() {
-    setLogResult(null);
-    startLog(async () => {
+    setBanner(null);
+    setAction("log");
+    startAction(async () => {
       // Logs the text as it is now — including any edits — not the AI draft.
       const result = await logFollowUpSent(quote.id, content || null);
       if (result.logged) {
-        const next = result.nextFollowUpAt
-          ? `Next reminder ${relativeDay(result.nextFollowUpAt, today)}.`
-          : "No more reminders are scheduled for this quote.";
-        setLogResult({ ok: true, text: `Logged as follow-up #${result.followUpNumber}. ${next}` });
+        setFollowedUp(true);
+        setBanner({
+          tone: "success",
+          text:
+            `Logged as follow-up #${result.followUpNumber}. ${nextReminder(result.nextFollowUpAt ?? null)}` +
+            (edited ? " Your edited text was saved as the message used." : ""),
+        });
         loadHistory();
       } else {
-        setLogResult({ ok: false, text: result.message ?? "Nothing was logged." });
+        setBanner({ tone: "info", text: result.message ?? "Nothing was logged." });
       }
     });
   }
 
+  // History: emailed follow-ups, manually logged follow-ups, unconfirmed and
+  // failed sends, drafts. A sent email is shown once, on the reminder it completed.
+  const mergedEmails = new Set<string>();
   const history: HistoryEntry[] = [
-    ...logged.map((l) => ({
-      kind: "logged" as const,
-      id: `l-${l.id}`,
-      at: l.completed_at ?? "",
-      text: l.message_snapshot,
-      number: l.follow_up_number,
-    })),
-    ...drafts.map((m) => ({
-      kind: "draft" as const,
+    ...logged.map((l): HistoryEntry => {
+      const email = emails.find(
+        (e) => e.status === "sent" && e.follow_up_id === l.id && !mergedEmails.has(e.id)
+      );
+      if (!email) {
+        return { kind: "logged", id: `l-${l.id}`, at: l.completed_at ?? "", text: l.message_snapshot, number: l.follow_up_number };
+      }
+      mergedEmails.add(email.id);
+      return { kind: "emailed", id: `l-${l.id}`, at: l.completed_at ?? email.created_at, text: l.message_snapshot, to: email.recipient_email, number: l.follow_up_number };
+    }),
+    ...emails
+      .filter((e) => !mergedEmails.has(e.id))
+      .map((e): HistoryEntry =>
+        e.status === "sent"
+          ? { kind: "emailed", id: `e-${e.id}`, at: e.sent_at ?? e.created_at, text: withoutFooter(e.body), to: e.recipient_email, number: null }
+          : e.status === "pending"
+            ? { kind: "unconfirmed", id: `e-${e.id}`, at: e.created_at, text: withoutFooter(e.body), to: e.recipient_email }
+            : { kind: "failed", id: `e-${e.id}`, at: e.created_at, to: e.recipient_email }
+      ),
+    ...drafts.map((m): HistoryEntry => ({
+      kind: "draft",
       id: `d-${m.id}`,
       at: m.created_at,
       text: m.content,
@@ -169,6 +270,13 @@ export function AIMessageModal({
     })),
   ].sort((a, b) => Date.parse(b.at || "0") - Date.parse(a.at || "0"));
   const visibleHistory = showAll ? history : history.slice(0, 3);
+
+  const bannerStyle: Record<Banner["tone"], string> = {
+    success: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+    warning: "bg-amber-50 text-amber-900 ring-amber-200",
+    error: "bg-red-50 text-red-800 ring-red-200",
+    info: "bg-stone-100 text-stone-700 ring-stone-200",
+  };
 
   return (
     <Modal
@@ -265,7 +373,7 @@ export function AIMessageModal({
               <Sparkles className="h-4 w-4" /> Draft follow-up for {firstName}
             </button>
             <p className="mt-2 text-xs text-stone-500">
-              Written from this quote&apos;s details. You review it; nothing is sent automatically.
+              Written from this quote&apos;s details. You review it; nothing is sent until you choose to.
             </p>
           </div>
         )}
@@ -283,6 +391,24 @@ export function AIMessageModal({
 
         {content && !loading && (
           <div className="space-y-3">
+            {canEmail && (
+              <div className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
+                <div className="flex items-center gap-3 px-3 py-2">
+                  <span className="w-14 shrink-0 text-stone-500">To</span>
+                  <span className="truncate font-medium text-stone-800">{recipient}</span>
+                </div>
+                <div className="flex items-center gap-3 px-3 py-1.5">
+                  <label htmlFor="ai-subject" className="w-14 shrink-0 text-stone-500">Subject</label>
+                  <input
+                    id="ai-subject"
+                    className="w-full bg-transparent py-0.5 text-stone-800 focus:outline-none"
+                    value={subject}
+                    maxLength={200}
+                    onChange={(e) => setSubject(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
             <div className="relative">
               <textarea
                 aria-label="Follow-up message"
@@ -298,37 +424,68 @@ export function AIMessageModal({
             </div>
             <p className="flex items-center gap-1.5 text-xs text-stone-500">
               <ShieldCheck className="h-3.5 w-3.5 text-stone-400" />
-              Review before sending. QuotePilot never sends messages. Copy it into your own email or phone.
+              {canEmail
+                ? "Review before sending. It's only emailed when you click Send email."
+                : "Review before sending. Copy it into your own email or phone."}
             </p>
+
             <div className="flex flex-wrap items-center gap-2">
-              <CopyButton text={content} label="Copy message" />
+              {canEmail && (
+                <button
+                  className="btn-accent"
+                  onClick={sendEmail}
+                  disabled={busy || !content.trim() || emailSent || followedUp || sendLocked}
+                >
+                  {busy && action === "send" ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
+                  ) : emailSent ? (
+                    <><Check className="h-4 w-4" /> Email sent</>
+                  ) : (
+                    <><Mail className="h-4 w-4" /> Send email</>
+                  )}
+                </button>
+              )}
+              <CopyButton
+                text={content}
+                label="Copy message"
+                className={canEmail ? "btn-secondary" : "btn-primary"}
+              />
               <button
-                className="btn-secondary"
+                className={canEmail ? "btn-ghost" : "btn-secondary"}
                 onClick={markFollowedUp}
-                disabled={logging || Boolean(logResult?.ok)}
+                disabled={busy || followedUp || (emailSent && !manualLogNeeded)}
+                title="Record that you sent this yourself"
               >
-                {logging ? (
+                {busy && action === "log" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : logResult?.ok ? (
+                ) : followedUp ? (
                   <Check className="h-4 w-4 text-emerald-600" />
                 ) : null}
-                {logResult?.ok ? "Followed up" : "Mark as followed up"}
+                {followedUp ? "Followed up" : "Mark as followed up"}
               </button>
-              <button className="btn-ghost ml-auto" onClick={generate}>
+              <button className="btn-ghost ml-auto" onClick={generate} disabled={busy}>
                 <RotateCcw className="h-4 w-4" /> Rewrite
               </button>
             </div>
-            {logResult && (
-              <div
-                className={cn(
-                  "rounded-md px-3 py-2 text-sm",
-                  logResult.ok
-                    ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200"
-                    : "bg-stone-100 text-stone-700"
+
+            {!canEmail && (
+              <p className="text-xs text-stone-500">
+                {!emailEnabled ? (
+                  "Email sending isn't set up for this workspace, so copy the message and send it yourself."
+                ) : (
+                  <>
+                    Add an email address to this customer to send from QuotePilot.{" "}
+                    <Link href="/leads" className="font-medium text-stone-700 underline-offset-2 hover:underline">
+                      Open Customers
+                    </Link>
+                  </>
                 )}
-              >
-                {logResult.text}
-                {logResult.ok && edited && " Your edited text was saved as the message used."}
+              </p>
+            )}
+
+            {banner && (
+              <div className={cn("rounded-md px-3 py-2 text-sm ring-1 ring-inset", bannerStyle[banner.tone])} role="status">
+                {banner.text}
               </div>
             )}
           </div>
@@ -346,7 +503,7 @@ export function AIMessageModal({
           </div>
         )}
 
-        {/* History: logged follow-ups (final text used) vs generated drafts */}
+        {/* History */}
         <div className="border-t border-stone-200 pt-4">
           <div className="mb-2 flex items-center justify-between">
             <span className="eyebrow">History</span>
@@ -358,8 +515,8 @@ export function AIMessageModal({
           </div>
           {history.length === 0 ? (
             <p className="text-sm text-stone-500">
-              Messages you draft will appear here for reference. When you mark one as
-              followed up, the exact text you used is kept.
+              Messages you draft will appear here for reference. When you send or log
+              one, the exact text you used is kept.
             </p>
           ) : (
             <ul className="space-y-3">
@@ -368,13 +525,32 @@ export function AIMessageModal({
                   key={h.id}
                   className={cn(
                     "border-l-2 pl-3",
-                    h.kind === "logged" ? "border-emerald-500" : "border-stone-200"
+                    h.kind === "emailed" || h.kind === "logged"
+                      ? "border-emerald-500"
+                      : h.kind === "unconfirmed"
+                        ? "border-amber-400"
+                        : h.kind === "failed"
+                          ? "border-red-300"
+                          : "border-stone-200"
                   )}
                 >
                   <div className="flex items-center justify-between gap-2 text-xs">
-                    {h.kind === "logged" ? (
+                    {h.kind === "emailed" ? (
+                      <span className="truncate font-semibold text-emerald-800">
+                        Email sent to {h.to} · final text used
+                        {h.number ? ` · follow-up #${h.number}` : ""}
+                      </span>
+                    ) : h.kind === "logged" ? (
                       <span className="font-semibold text-emerald-800">
                         Logged follow-up #{h.number} · final text used
+                      </span>
+                    ) : h.kind === "unconfirmed" ? (
+                      <span className="truncate font-medium text-amber-800">
+                        Email to {h.to} · delivery not confirmed
+                      </span>
+                    ) : h.kind === "failed" ? (
+                      <span className="truncate font-medium text-red-700">
+                        Email to {h.to} failed · nothing was marked done
                       </span>
                     ) : (
                       <span className="font-medium text-stone-500">
@@ -383,15 +559,19 @@ export function AIMessageModal({
                     )}
                     <span className="shrink-0 text-stone-400">{formatDate(h.at)}</span>
                   </div>
-                  <p
-                    className={cn(
-                      "mt-1 line-clamp-4 whitespace-pre-wrap text-sm",
-                      h.kind === "logged" ? "text-stone-800" : "text-stone-500"
-                    )}
-                  >
-                    {h.text}
-                  </p>
-                  <CopyButton text={h.text} label="Copy" className="btn-ghost -ml-2 mt-0.5 px-2 py-0.5 text-xs" />
+                  {h.kind !== "failed" && (
+                    <>
+                      <p
+                        className={cn(
+                          "mt-1 line-clamp-4 whitespace-pre-wrap text-sm",
+                          h.kind === "draft" ? "text-stone-500" : "text-stone-800"
+                        )}
+                      >
+                        {h.text}
+                      </p>
+                      <CopyButton text={h.text} label="Copy" className="btn-ghost -ml-2 mt-0.5 px-2 py-0.5 text-xs" />
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

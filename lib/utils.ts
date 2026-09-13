@@ -139,6 +139,25 @@ export function clip(value: string | null | undefined, max: number): string {
   return (value ?? "").slice(0, max);
 }
 
+/**
+ * Only same-site paths are allowed as a post-login destination. Rejects
+ * absolute URLs, protocol-relative `//host`, `/\host`, and whitespace/control
+ * characters (browsers strip tabs/newlines, so `/\t/evil.com` becomes
+ * `//evil.com`). Anything else would be an open redirect for phishing links.
+ */
+export function safeRedirectPath(value: string | null | undefined, fallback = "/dashboard"): string {
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.startsWith("/\\") ||
+    /[\x00-\x1f\x7f\s]/.test(value)
+  ) {
+    return fallback;
+  }
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // CSV export
 // ---------------------------------------------------------------------------

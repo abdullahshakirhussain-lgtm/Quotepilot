@@ -126,6 +126,9 @@ All configured in `.env.local` (see `.env.local.example`).
 | `OPENAI_BASE_URL` | ⬜ | Override for the OpenAI-compatible base URL. Defaults to `https://api.openai.com/v1`. |
 | `AI_MODEL` | ⬜ | Model override. Defaults: `deepseek-chat` (DeepSeek), `claude-haiku-4-5-20251001` (Anthropic), `gpt-4o-mini` (OpenAI). |
 | `APP_TIMEZONE` | ⬜ | **Deployment fallback** time zone, used only until a viewer's browser time zone is known. Not a business setting. Defaults to `UTC`. |
+| `RESEND_API_KEY` | ⬜ | Turns on **Send email** in the AI assistant (Resend). Server-only. |
+| `EMAIL_FROM` | ⬜ | Sender address on your **verified** Resend domain, e.g. `QuotePilot <followups@yourdomain.com>`. Required together with `RESEND_API_KEY`. |
+| `EMAIL_REPLY_TO` | ⬜ | Reply-To used when the business profile has no email address. |
 
 Provider priority when several keys are set: **Anthropic → DeepSeek → OpenAI → templates**.
 
@@ -144,6 +147,86 @@ small cookie, and every date is computed server-side, so all pages agree.
 - It is **not** a per-business setting. A stored business time zone is
   recommended before adding anything that runs without a browser (email/SMS
   reminders, scheduled digests) or multi-user workspaces.
+
+### Google sign-in
+
+"Continue with Google" appears on the login and signup pages. It uses Supabase
+Auth (OAuth with PKCE) and needs **no app environment variables**.
+
+1. **Google Cloud Console → APIs & Services → Credentials → Create OAuth client
+   ID** (type *Web application*). Set up the OAuth consent screen with the default
+   `openid`, `email` and `profile` scopes only — no Gmail or other scopes.
+2. **Authorized redirect URI:** copy the *Callback URL* shown in Supabase →
+   Authentication → Providers → Google (it looks like
+   `https://<project-ref>.supabase.co/auth/v1/callback`) into the Google client.
+   Add your app URL(s) under *Authorized JavaScript origins*.
+3. **Supabase → Authentication → Providers → Google:** enable it and paste the
+   Google client ID and secret.
+4. **Supabase → Authentication → URL Configuration:**
+   - **Site URL:** your production URL, e.g. `https://<your-domain>` (same
+     scheme and host). Supabase always allows redirects back to this site.
+   - **Redirect URLs:** add `https://<your-domain>/auth/callback**`, and for local
+     development `http://localhost:3000/**`. Keep the `**`: the callback URL
+     carries a `?next=` path and Supabase matches the whole URL, so an entry
+     without it won't match. Don't add wildcards for domains you don't control.
+5. Sign in with Google. New users land in onboarding (name and email prefilled
+   from Google); returning users land on the dashboard.
+
+Google always returns to `/auth/callback` on the current site, which exchanges the
+one-time code for a session and then continues to a **same-site path only** (no
+open redirects). Email/password sign-in is unchanged. Email-confirmation links now
+use the same callback, so confirming an address in the same browser signs the user
+straight in (keep Supabase's default "Confirm signup" email template). Until Google
+is enabled in Supabase, the button says Google sign-in isn't set up yet instead of
+opening Google.
+
+### Email sending (manual, 1-to-1)
+
+From the AI assistant, users can email the reviewed follow-up to the customer's
+**saved** email address with **Send email**. Nothing is ever sent automatically,
+and every email needs an explicit click.
+
+- **Provider:** Resend, called server-side with `fetch`. The key never reaches
+  the browser.
+- **Variables:** `RESEND_API_KEY`, `EMAIL_FROM` (an address on a **verified**
+  Resend domain), and optionally `EMAIL_REPLY_TO`.
+- **Sender and replies:** the sender shows as "*Business name* via QuotePilot".
+  Replies go to the business email in Settings, or `EMAIL_REPLY_TO`. With
+  neither set, replies go to the `EMAIL_FROM` address.
+- **Audit and logging:** every attempt is written to `email_logs` **before**
+  sending, then marked `sent` or `failed`. The reminder is marked done only after
+  the provider accepts the email, and it stores the final (edited) text. Users can
+  read their log but can't edit or delete entries (they go with their quote or
+  customer).
+- **Unclear outcomes:** if Resend doesn't answer clearly (a timeout or dropped
+  connection), the attempt stays `pending`, shows as "delivery not confirmed", and
+  the assistant won't offer an immediate resend. Check the Resend dashboard
+  (Emails) to see whether it went out.
+- **Limits:** 25 emails per user in any 24 hours and 100 in any 30 days (sent and
+  unconfirmed attempts count; rejected ones don't). AI drafts are limited to 50
+  per user in any 24 hours.
+- **Schema:** re-run `supabase/schema.sql` to add `email_logs`. Until then, Send
+  stays hidden and copy/manual logging work as before.
+
+**Setup:**
+1. In Resend, add your domain and verify its DNS records (add DMARC too).
+2. Create an API key.
+3. Set the variables in Railway and redeploy.
+4. Put a monitored address in Settings → Business email, since replies go there.
+
+**Limitations:**
+- Manual 1-to-1 follow-ups only: no sequences, bulk or scheduled sending.
+- No unsubscribe or suppression handling yet.
+- Emails are plain text.
+- Rate limits are basic per-user counts: deleting a quote also deletes its email
+  log (freeing that part of the limit), and two simultaneous sends can both pass.
+- Bounces and delivery status aren't surfaced.
+- Anyone who can sign up can email the addresses they save as customers (within
+  the limits) from your domain, so keep sign-ups controlled until abuse controls
+  exist.
+
+Before production scale, add suppression/opt-out handling, a global send cap and
+domain monitoring.
 
 **AI is optional.** With no key set, QuotePilot uses smart built-in templates,
 so it is fully demoable offline. Add a key to switch on real AI generation.
@@ -317,8 +400,9 @@ one code path; only the base URL, model and key differ. All calls are plain
 
 ## 6. Known limitations
 
-- **You send messages yourself.** QuotePilot generates and lets you copy — it does
-  not send email, SMS or chat messages (by design for this MVP).
+- **Manual sending only.** QuotePilot drafts messages; you copy them, or send one
+  email at a time with an explicit click. No automatic, scheduled or bulk
+  sending, no SMS or chat, and no unsubscribe/suppression handling yet.
 - **No automated reminders.** Follow-up due dates are shown in-app; there are no
   push/email notifications yet (would need a cron job / edge function).
 - **Single currency per business for totals.** Each quote stores its own currency,

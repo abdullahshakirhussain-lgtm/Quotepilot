@@ -217,3 +217,93 @@ create policy "messages_owner" on public.messages
       )
     )
   );
+
+-- ===========================================================================
+-- email_logs: audit trail of follow-up emails sent from QuotePilot.
+-- Every send attempt is recorded BEFORE the provider is called ('pending'),
+-- then marked 'sent' or 'failed'. It stays 'pending' if the provider never
+-- answered clearly (e.g. a timeout), since the email may still have gone out.
+-- Also used for per-user send limits. Added with manual email sending; safe
+-- to re-run.
+-- ===========================================================================
+create table if not exists public.email_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  quote_id uuid not null references public.quotes (id) on delete cascade,
+  lead_id uuid not null references public.leads (id) on delete cascade,
+  follow_up_id uuid references public.follow_ups (id) on delete set null,
+  recipient_email text not null,
+  subject text not null,
+  body text not null,
+  provider text not null default 'resend',
+  provider_message_id text,
+  status text not null default 'pending'
+    check (status in ('pending','sent','failed')),
+  error_message text,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+
+create index if not exists idx_email_logs_user_created on public.email_logs (user_id, created_at);
+create index if not exists idx_email_logs_quote on public.email_logs (quote_id);
+create index if not exists idx_email_logs_follow_up on public.email_logs (follow_up_id);
+
+alter table public.email_logs enable row level security;
+
+-- email_logs policies: users can read and add their own entries (referencing
+-- only their own quote, lead and optional follow-up) and resolve a 'pending'
+-- one, but can't edit a finished entry or delete any. That keeps the audit
+-- trail and the send limits from being reset through the API. Entries still
+-- go when their quote, lead or account is deleted (foreign-key cascades).
+drop policy if exists "email_logs_owner" on public.email_logs;
+
+drop policy if exists "email_logs_select" on public.email_logs;
+create policy "email_logs_select" on public.email_logs
+  for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "email_logs_insert" on public.email_logs;
+create policy "email_logs_insert" on public.email_logs
+  for insert to authenticated
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.quotes q
+      where q.id = email_logs.quote_id and q.user_id = (select auth.uid())
+    )
+    and exists (
+      select 1 from public.leads l
+      where l.id = email_logs.lead_id and l.user_id = (select auth.uid())
+    )
+    and (
+      email_logs.follow_up_id is null
+      or exists (
+        select 1 from public.follow_ups f
+        where f.id = email_logs.follow_up_id and f.user_id = (select auth.uid())
+      )
+    )
+  );
+
+-- Only a 'pending' attempt can be resolved; finished entries are read-only.
+drop policy if exists "email_logs_update" on public.email_logs;
+create policy "email_logs_update" on public.email_logs
+  for update to authenticated
+  using ((select auth.uid()) = user_id and status = 'pending')
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.quotes q
+      where q.id = email_logs.quote_id and q.user_id = (select auth.uid())
+    )
+    and exists (
+      select 1 from public.leads l
+      where l.id = email_logs.lead_id and l.user_id = (select auth.uid())
+    )
+    and (
+      email_logs.follow_up_id is null
+      or exists (
+        select 1 from public.follow_ups f
+        where f.id = email_logs.follow_up_id and f.user_id = (select auth.uid())
+      )
+    )
+  );

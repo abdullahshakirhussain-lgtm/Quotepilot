@@ -9,10 +9,15 @@ import {
 } from "@/lib/constants";
 import { clip, daysSince } from "@/lib/utils";
 import { requestToday } from "@/lib/request-time";
+import { emailConfig, isValidEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/generate-message?quoteId=... -> message history for that quote
+/** AI drafts per user per rolling 24 hours (cost control). */
+const AI_DAILY_LIMIT = 50;
+
+// GET /api/generate-message?quoteId=... -> history for that quote, plus
+// whether it can be emailed from QuotePilot.
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,7 +27,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "quoteId is required" }, { status: 400 });
 
   const supabase = await createClient();
-  const [drafts, logged] = await Promise.all([
+  const [drafts, logged, emails, quote] = await Promise.all([
     supabase
       .from("messages")
       .select("*")
@@ -38,14 +43,40 @@ export async function GET(request: Request) {
       .eq("status", "completed")
       .not("message_snapshot", "is", null)
       .order("completed_at", { ascending: false }),
+    // Emails sent or attempted from QuotePilot for this quote ('pending' ones
+    // are in flight, or the provider never confirmed them).
+    supabase
+      .from("email_logs")
+      .select("id, follow_up_id, recipient_email, subject, body, status, created_at, sent_at")
+      .eq("quote_id", quoteId)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("quotes")
+      .select("lead:leads(email)")
+      .eq("id", quoteId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
   ]);
 
-  const error = drafts.error ?? logged.error;
+  const error = drafts.error ?? logged.error ?? quote.error;
   if (error) {
     console.error("[ai] history load failed:", error);
     return NextResponse.json({ error: "Could not load message history." }, { status: 500 });
   }
-  return NextResponse.json({ messages: drafts.data ?? [], logged: logged.data ?? [] });
+  // The email log is optional (e.g. schema not yet re-run): degrade, don't fail.
+  if (emails.error) console.error("[email] email history unavailable:", emails.error.message);
+
+  const leadRel = quote.data?.lead as { email?: string | null } | { email?: string | null }[] | null | undefined;
+  const leadEmail = (Array.isArray(leadRel) ? leadRel[0]?.email : leadRel?.email) ?? null;
+
+  return NextResponse.json({
+    messages: drafts.data ?? [],
+    logged: logged.data ?? [],
+    emails: emails.error ? [] : (emails.data ?? []),
+    recipientEmail: isValidEmail(leadEmail) ? leadEmail.trim() : null,
+    emailEnabled: emailConfig() !== null && !emails.error,
+  });
 }
 
 // POST /api/generate-message -> generate a follow-up message and store it
@@ -81,6 +112,21 @@ export async function POST(request: Request) {
     typeof body.objection === "string" ? clip(body.objection.trim(), 500) || null : null;
 
   const supabase = await createClient();
+
+  // Cost control: cap AI drafts per user per rolling 24 hours.
+  const { count: recentDrafts, error: countError } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
+  if (!countError && (recentDrafts ?? 0) >= AI_DAILY_LIMIT) {
+    return NextResponse.json(
+      {
+        error: `You've reached the limit of ${AI_DAILY_LIMIT} AI drafts in 24 hours. You can still write or edit a message yourself.`,
+      },
+      { status: 429 }
+    );
+  }
 
   // Fetch the quote + its lead, scoped to the current user (RLS also enforces this).
   const { data: quote, error: quoteErr } = await supabase

@@ -80,6 +80,20 @@ export interface Message {
   created_at: string;
 }
 
+/** A follow-up email sent (or attempted) from QuotePilot — see email_logs. */
+export interface EmailLogEntry {
+  id: string;
+  follow_up_id: string | null;
+  recipient_email: string;
+  subject: string;
+  /** Exact text sent, including the short footer. */
+  body: string;
+  /** 'pending': still in flight, or the provider never confirmed it. */
+  status: "pending" | "sent" | "failed";
+  created_at: string;
+  sent_at: string | null;
+}
+
 // Convenience joined shapes used by list views.
 export type QuoteWithLead = Quote & { lead: Pick<Lead, "id" | "customer_name" | "company_name"> | null };
 export type FollowUpWithContext = FollowUp & {

@@ -264,6 +264,51 @@ single-user, browser-driven use; add one before email/SMS reminders or teams.
 
 ---
 
+## Addendum — Google sign-in and manual email sending
+
+**Google sign-in:**
+- Uses Supabase OAuth with PKCE, via `/auth/callback`. No extra scopes are requested (no Gmail access).
+- The destination is checked by one shared `safeRedirectPath`. It also rejects whitespace/control-character tricks such as `/\t/evil.com`.
+- There are no app secrets; the provider is configured in Supabase.
+- Email confirmation links now use the same callback.
+- If Google isn't enabled in Supabase yet, the button says so instead of opening Supabase's raw error page.
+
+**Manual email:** one email per explicit click, from the AI assistant, to the customer's saved address (never a client-supplied address). A new `email_logs` audit table checks ownership of every row it references. Users can read and add entries and resolve a pending one, but can't edit finished entries or delete any.
+
+Send order:
+1. Ownership checks.
+2. Per-user limits (25 in any 24 hours, 100 in any 30 days).
+3. A `pending` log.
+4. The send.
+5. Rejected by the provider: the log is marked `failed` and nothing else changes.
+6. No clear answer (timeout, dropped connection, 5xx): the log stays `pending`, the user is told delivery is unconfirmed, and the assistant won't offer an immediate resend.
+7. Accepted: the log is marked `sent`, the reminder is completed with the final text, and the counters are recomputed.
+
+**Fixed in the pre-commit audit:**
+- Timeouts were reported as "wasn't sent", inviting a duplicate email.
+- A counter-refresh failure after the reminder was completed was reported as "not logged", inviting a double log.
+- A dropped request replaced the assistant with the error page.
+- "Mark as followed up" stayed open after a send in race cases.
+- The email log could be deleted or edited through the API, resetting the limits.
+- The Google "not enabled" message could never appear.
+- The local redirect-URL docs didn't match Supabase's matching rules.
+
+Verified with:
+- the RLS harness (37/37, including 17 `email_logs` checks and the schema re-run/upgrade);
+- an email workflow harness (68/68) against the real code with a fake store and provider;
+- redirect safety tests (22/22, including a 50,000-input fuzz);
+- HTTP checks against the production build (18/18) and a headless-browser pass (29/29);
+- a clean browser-bundle scan.
+
+**Not transactional:**
+- If the provider accepts an email but the reminder update then fails, the user is told to use "Mark as followed up". The log still says `sent`.
+- Two sends at the same moment can both pass the limit check, and deleting a quote deletes its email log (freeing that part of the limit).
+- These need database-side enforcement or an idempotency key before paid launch.
+
+**Needs live credentials to confirm:** Google OAuth, and Resend delivery from a verified domain.
+
+---
+
 ## 10. Buyer-demo script (90 seconds)
 
 _Production URL, fresh account, email confirmation off._

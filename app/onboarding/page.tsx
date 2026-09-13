@@ -36,7 +36,18 @@ export default async function OnboardingPage() {
             change any of this later in Settings.
           </p>
           <div className="mt-6">
-            <BusinessForm action={createBusiness} submitLabel="Create workspace" />
+            <BusinessForm
+              action={createBusiness}
+              submitLabel="Create workspace"
+              suggested={{
+                // Google sign-in provides a name; email/password users type theirs.
+                owner_name:
+                  (user.user_metadata?.full_name as string | undefined) ??
+                  (user.user_metadata?.name as string | undefined) ??
+                  "",
+                email: user.email ?? "",
+              }}
+            />
           </div>
         </div>
       </div>
