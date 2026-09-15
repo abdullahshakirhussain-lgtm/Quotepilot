@@ -16,7 +16,7 @@ const SEND_TIMEOUT_MS = 15_000;
 
 export interface EmailConfig {
   apiKey: string;
-  /** e.g. "QuotePilot <followups@your-verified-domain.com>" */
+  /** e.g. "QuoteLoop <followups@your-verified-domain.com>" */
   from: string;
   replyToFallback: string | null;
 }
@@ -49,11 +49,11 @@ export function cleanSubject(raw: string | null | undefined, quoteTitle: string)
   return s || defaultSubject(quoteTitle);
 }
 
-/** `"Business via QuotePilot" <address>` using the verified EMAIL_FROM address. */
+/** `"Business via QuoteLoop" <address>` using the verified EMAIL_FROM address. */
 export function formatFrom(configFrom: string, businessName: string): string {
   const address = (/<([^>]+)>/.exec(configFrom)?.[1] ?? configFrom).trim();
   const name = businessName.replace(/[\r\n"<>\\]/g, "").trim().slice(0, 80);
-  return name ? `"${name} via QuotePilot" <${address}>` : `QuotePilot <${address}>`;
+  return name ? `"${name} via QuoteLoop" <${address}>` : `QuoteLoop <${address}>`;
 }
 
 /** The exact plain-text body sent: the user's final message plus a 1-to-1 footer. */
@@ -69,7 +69,7 @@ export function composeEmailText(message: string, businessName: string): string 
 /** Friendly limit message, or null when the user may send. */
 export function quotaError(counts: { day: number; month: number }): string | null {
   if (counts.day >= EMAIL_DAILY_LIMIT) {
-    return `You've reached the limit of ${EMAIL_DAILY_LIMIT} emails from QuotePilot in 24 hours. You can still copy the message and send it yourself.`;
+    return `You've reached the limit of ${EMAIL_DAILY_LIMIT} emails from QuoteLoop in 24 hours. You can still copy the message and send it yourself.`;
   }
   if (counts.month >= EMAIL_MONTHLY_LIMIT) {
     return `You've reached the limit of ${EMAIL_MONTHLY_LIMIT} emails in 30 days. You can still copy the message and send it yourself.`;

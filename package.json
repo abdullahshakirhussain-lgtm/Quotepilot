@@ -2,7 +2,7 @@
   "name": "quotepilot",
   "version": "0.1.0",
   "private": true,
-  "description": "QuotePilot — quotation follow-up CRM for small service businesses.",
+  "description": "QuoteLoop — quotation follow-up CRM for small service businesses.",
   "engines": {
     "node": ">=20"
   },

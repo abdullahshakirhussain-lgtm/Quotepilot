@@ -24,7 +24,7 @@ export async function updateSession(request: NextRequest) {
   // page that needs data fails with a clear configuration error.
   if (!hasSupabaseEnv()) {
     console.error(
-      "[quotepilot] NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set."
+      "[quoteloop] NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set."
     );
     return supabaseResponse;
   }

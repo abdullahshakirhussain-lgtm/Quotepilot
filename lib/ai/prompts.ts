@@ -78,7 +78,7 @@ export function buildUserPrompt(ctx: MessageContext): string {
 
 /**
  * Deterministic template used when no AI key is configured, or if the AI
- * request fails. Keeps QuotePilot fully demoable offline.
+ * request fails. Keeps QuoteLoop fully demoable offline.
  */
 export function templateFallback(ctx: MessageContext): string {
   const first = ctx.customerName.split(" ")[0] || ctx.customerName;

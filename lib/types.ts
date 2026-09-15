@@ -80,7 +80,7 @@ export interface Message {
   created_at: string;
 }
 
-/** A follow-up email sent (or attempted) from QuotePilot — see email_logs. */
+/** A follow-up email sent (or attempted) from QuoteLoop — see email_logs. */
 export interface EmailLogEntry {
   id: string;
   follow_up_id: string | null;

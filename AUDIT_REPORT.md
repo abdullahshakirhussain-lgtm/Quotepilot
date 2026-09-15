@@ -1,4 +1,4 @@
-# QuotePilot — Deep Debugging, Consistency & Reliability Audit
+# QuoteLoop — Deep Debugging, Consistency & Reliability Audit
 
 _Scope: find and fix real bugs, drift, security gaps and demo risks. No new
 features, integrations or redesigns. Audited as a skeptical technical buyer._
@@ -62,7 +62,7 @@ The audit found **4 high-severity issues**, all now fixed:
 | 9 | Medium (demo) | `lib/ai/provider.ts` | `fetch` had no timeout. | A slow provider (DeepSeek at peak) leaves the AI modal spinning indefinitely. | **Fixed** (25 s → template fallback) |
 | 10 | Medium (demo/security) | provider + modal | Raw provider error body shown to users. | JSON error dumps (can include masked key fragments) on screen mid-demo. | **Fixed** (short, safe reason in the UI; details in server logs) |
 | 11 | Medium (demo) | `logFollowUpSent` + modal | Result ignored; UI always showed success. | "Follow-up logged ✓" on a draft/no-reminder quote while nothing changed. | **Fixed** (honest message) |
-| 12 | Medium (demo) | demo seed | Quotes hard-coded `USD`; message signed "QuotePilot Demo". | Non-USD workspace: "$780" on cards vs "€13,450" totals. | **Fixed** (uses business currency + owner name) |
+| 12 | Medium (demo) | demo seed | Quotes hard-coded `USD`; message signed "QuoteLoop Demo". | Non-USD workspace: "$780" on cards vs "€13,450" totals. | **Fixed** (uses business currency + owner name) |
 | 13 | Medium (demo) | demo seed | `customer_name: "The Corner Bakery"`. | Template fallback greets **"Hi The,"**. | **Fixed** (customer is a person) |
 | 14 | Medium (demo) | seed + `DataControls` | No guard, no feedback. | Repeat "Load demo data" silently doubles every record. | **Fixed** (loads only into an empty workspace; result shown) |
 | 15 | Medium (cost) | `generate-message` route | Stored title/description passed to the AI unbounded. | One huge description = expensive calls on every generation. | **Fixed** (all AI inputs clipped) |
@@ -322,7 +322,7 @@ _Production URL, fresh account, email confirmation off._
 7. **(5s)** **Pipeline:** Priya has moved to **Won** automatically.
 8. **(5s)** **Settings → Quotes CSV** → it opens cleanly in Excel.
 
-Close: _"Every quote you've sent is money on the table. QuotePilot makes sure you follow up — and you always review before anything goes out."_
+Close: _"Every quote you've sent is money on the table. QuoteLoop makes sure you follow up — and you always review before anything goes out."_
 
 ---
 

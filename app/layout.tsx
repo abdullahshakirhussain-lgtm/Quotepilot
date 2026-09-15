@@ -12,9 +12,9 @@ const plex = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "QuotePilot — Follow up on every quote. Win more jobs.",
+  title: "QuoteLoop — Follow up on every quote. Win more jobs.",
   description:
-    "QuotePilot helps small service businesses follow up on the quotes they send, with reminders and AI-written messages they review and send themselves.",
+    "QuoteLoop helps small service businesses follow up on the quotes they send, with reminders and AI-written messages they review and send themselves.",
 };
 
 export default function RootLayout({

@@ -1,8 +1,8 @@
-# QuotePilot
+# QuoteLoop
 
 **Win more jobs from the quotes you already send.**
 
-QuotePilot is a focused quotation follow-up CRM for small service businesses —
+QuoteLoop is a focused quotation follow-up CRM for small service businesses —
 contractors, electricians, plumbers, AC repair, cleaners, printers/signage,
 interior designers, furniture makers, freelancers and small agencies. It helps
 them **track sent quotes, get follow-up reminders, and generate AI-written
@@ -127,14 +127,14 @@ All configured in `.env.local` (see `.env.local.example`).
 | `AI_MODEL` | ⬜ | Model override. Defaults: `deepseek-chat` (DeepSeek), `claude-haiku-4-5-20251001` (Anthropic), `gpt-4o-mini` (OpenAI). |
 | `APP_TIMEZONE` | ⬜ | **Deployment fallback** time zone, used only until a viewer's browser time zone is known. Not a business setting. Defaults to `UTC`. |
 | `RESEND_API_KEY` | ⬜ | Turns on **Send email** in the AI assistant (Resend). Server-only. |
-| `EMAIL_FROM` | ⬜ | Sender address on your **verified** Resend domain, e.g. `QuotePilot <followups@yourdomain.com>`. Required together with `RESEND_API_KEY`. |
+| `EMAIL_FROM` | ⬜ | Sender address on your **verified** Resend domain, e.g. `QuoteLoop <followups@yourdomain.com>`. Required together with `RESEND_API_KEY`. |
 | `EMAIL_REPLY_TO` | ⬜ | Reply-To used when the business profile has no email address. |
 
 Provider priority when several keys are set: **Anthropic → DeepSeek → OpenAI → templates**.
 
 ### Time zones
 
-QuotePilot is global: there is no built-in country, currency or time zone.
+QuoteLoop is global: there is no built-in country, currency or time zone.
 "Today", due, overdue, reminder dates and the dashboard greeting follow each
 **viewer's own browser time zone**. The browser shares it with the server via a
 small cookie, and every date is computed server-side, so all pages agree.
@@ -190,7 +190,7 @@ and every email needs an explicit click.
   the browser.
 - **Variables:** `RESEND_API_KEY`, `EMAIL_FROM` (an address on a **verified**
   Resend domain), and optionally `EMAIL_REPLY_TO`.
-- **Sender and replies:** the sender shows as "*Business name* via QuotePilot".
+- **Sender and replies:** the sender shows as "*Business name* via QuoteLoop".
   Replies go to the business email in Settings, or `EMAIL_REPLY_TO`. With
   neither set, replies go to the `EMAIL_FROM` address.
 - **Audit and logging:** every attempt is written to `email_logs` **before**
@@ -228,7 +228,7 @@ and every email needs an explicit click.
 Before production scale, add suppression/opt-out handling, a global send cap and
 domain monitoring.
 
-**AI is optional.** With no key set, QuotePilot uses smart built-in templates,
+**AI is optional.** With no key set, QuoteLoop uses smart built-in templates,
 so it is fully demoable offline. Add a key to switch on real AI generation.
 
 Only the two `NEXT_PUBLIC_` values reach the browser; AI keys stay server-side
@@ -400,7 +400,7 @@ one code path; only the base URL, model and key differ. All calls are plain
 
 ## 6. Known limitations
 
-- **Manual sending only.** QuotePilot drafts messages; you copy them, or send one
+- **Manual sending only.** QuoteLoop drafts messages; you copy them, or send one
   email at a time with an explicit click. No automatic, scheduled or bulk
   sending, no SMS or chat, and no unsubscribe/suppression handling yet.
 - **No automated reminders.** Follow-up due dates are shown in-app; there are no

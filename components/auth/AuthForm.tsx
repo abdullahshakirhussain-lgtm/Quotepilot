@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import { Loader2 } from "lucide-react";
-import { BrandMark } from "@/components/Sidebar";
 import { safeRedirectPath } from "@/lib/utils";
 
 function GoogleLogo() {
@@ -140,8 +139,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <div className="w-full max-w-sm">
       <Link href="/" className="mb-8 flex items-center justify-center gap-2.5 text-[15px] font-semibold tracking-tight">
-        <BrandMark />
-        QuotePilot
+        QuoteLoop
       </Link>
 
       {checkEmail ? (
@@ -238,7 +236,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           </>
         ) : (
           <>
-            New to QuotePilot?{" "}
+            New to QuoteLoop?{" "}
             <Link href="/signup" className="font-medium text-stone-900 underline-offset-2 hover:underline">
               Create an account
             </Link>

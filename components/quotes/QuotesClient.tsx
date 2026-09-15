@@ -187,7 +187,7 @@ export function QuotesClient({
         <EmptyState
           icon={<FileText className="h-5 w-5" />}
           title="Create your first quote"
-          description="Add who it's for and what you quoted. QuotePilot reminds you when to follow up and drafts the message."
+          description="Add who it's for and what you quoted. QuoteLoop reminds you when to follow up and drafts the message."
           action={
             <button className="btn-primary" onClick={() => setShowNew(true)}>
               <Plus className="h-4 w-4" /> New quote

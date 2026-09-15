@@ -23,19 +23,6 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "grid h-7 w-7 shrink-0 place-items-center rounded-md bg-brand-600 text-[13px] font-bold text-white",
-        className
-      )}
-    >
-      Q
-    </span>
-  );
-}
-
 export function Sidebar({
   businessName,
   attentionCount,
@@ -53,12 +40,11 @@ export function Sidebar({
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-stone-950 text-stone-400 md:flex">
         <div className="flex items-center gap-2.5 px-5 pb-1 pt-5">
-          <BrandMark />
           <span className="text-[15px] font-semibold tracking-tight text-white">
-            QuotePilot
+            QuoteLoop
           </span>
         </div>
-        <div className="truncate px-5 pb-5 pl-[3.35rem] text-xs text-stone-500">
+        <div className="truncate px-5 pb-5 text-xs text-stone-500">
           {businessName}
         </div>
 
@@ -110,8 +96,7 @@ export function Sidebar({
       <div className="sticky top-0 z-30 bg-stone-950 text-stone-400 md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2 font-semibold text-white">
-            <BrandMark className="h-6 w-6 text-xs" />
-            QuotePilot
+            QuoteLoop
           </div>
           <div className="flex items-center gap-1">
             <Link href="/quotes?new=1" className="btn-accent px-2.5 py-1 text-xs">

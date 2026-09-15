@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { ArrowRight, BellRing, ShieldCheck, Sparkles } from "lucide-react";
-import { BrandMark } from "@/components/Sidebar";
 
 export default function LandingPage() {
   return (
     <main className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-          <BrandMark />
-          QuotePilot
+          QuoteLoop
         </div>
         <nav className="flex items-center gap-2">
           <Link href="/login" className="btn-ghost">
@@ -27,7 +25,7 @@ export default function LandingPage() {
             Every quote you send is money on the table.
           </h1>
           <p className="mt-5 max-w-lg text-lg text-stone-600">
-            QuotePilot tells you who to follow up with today, drafts the message
+            QuoteLoop tells you who to follow up with today, drafts the message
             for you to review, and shows what you&apos;ve won and lost, so quoted
             jobs don&apos;t quietly go cold.
           </p>
@@ -99,12 +97,12 @@ export default function LandingPage() {
             {
               icon: <Sparkles className="h-5 w-5" />,
               title: "A better follow-up in seconds",
-              body: "AI drafts a short, specific message from the quote. You edit it and send it from your own email or phone.",
+              body: "AI drafts a short, specific message from the quote. Review and send it from inside QuoteLoop — or copy it to your own email or phone.",
             },
             {
               icon: <ShieldCheck className="h-5 w-5" />,
               title: "You stay in control",
-              body: "Nothing is ever sent automatically. QuotePilot keeps the text you actually used, and your data stays private.",
+              body: "Nothing is ever sent automatically. QuoteLoop keeps the text you actually used, and your data stays private.",
             },
           ].map((f) => (
             <div key={f.title}>
@@ -117,7 +115,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="py-8 text-center text-sm text-stone-400">
-        © {new Date().getFullYear()} QuotePilot · Quote follow-up for small service businesses
+        © {new Date().getFullYear()} QuoteLoop · Quote follow-up for small service businesses
       </footer>
     </main>
   );

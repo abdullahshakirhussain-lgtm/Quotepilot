@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const AI_DAILY_LIMIT = 50;
 
 // GET /api/generate-message?quoteId=... -> history for that quote, plus
-// whether it can be emailed from QuotePilot.
+// whether it can be emailed from QuoteLoop.
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       .eq("status", "completed")
       .not("message_snapshot", "is", null)
       .order("completed_at", { ascending: false }),
-    // Emails sent or attempted from QuotePilot for this quote ('pending' ones
+    // Emails sent or attempted from QuoteLoop for this quote ('pending' ones
     // are in flight, or the provider never confirmed them).
     supabase
       .from("email_logs")

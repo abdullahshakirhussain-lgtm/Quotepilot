@@ -32,7 +32,7 @@ export function DashboardView({
     <div className="space-y-6">
       {!hasData && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">
-          <span>New here? Load realistic sample quotes to see how QuotePilot works.</span>
+          <span>New here? Load realistic sample quotes to see how QuoteLoop works.</span>
           <Link href="/settings" className="font-semibold underline-offset-2 hover:underline">
             Settings → Load demo data
           </Link>

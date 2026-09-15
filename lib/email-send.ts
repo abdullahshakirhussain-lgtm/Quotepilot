@@ -99,7 +99,7 @@ export async function sendFollowUpEmailCore(
   // The recipient always comes from the saved customer, never from the client.
   const to = lead.email?.trim() ?? "";
   if (!isValidEmail(to)) {
-    return { ok: false, error: "Add a valid email address to this customer to send from QuotePilot." };
+    return { ok: false, error: "Add a valid email address to this customer to send from QuoteLoop." };
   }
 
   const limit = quotaError(await deps.countRecentEmails());

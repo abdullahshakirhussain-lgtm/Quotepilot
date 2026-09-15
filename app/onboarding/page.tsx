@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
-import { BrandMark } from "@/components/Sidebar";
 import { createBusiness } from "@/app/(app)/settings/actions";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +22,7 @@ export default async function OnboardingPage() {
     <main className="grid min-h-screen place-items-center px-4 py-10">
       <div className="w-full max-w-2xl">
         <div className="mb-6 flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-          <BrandMark />
-          QuotePilot
+          QuoteLoop
         </div>
         <div className="card p-6 sm:p-8">
           <p className="eyebrow text-brand-700">Step 1 of 1</p>
@@ -32,7 +30,7 @@ export default async function OnboardingPage() {
             Tell us about your business
           </h1>
           <p className="mt-1 text-sm text-stone-500">
-            Your name and business sign the follow-ups QuotePilot drafts. You can
+            Your name and business sign the follow-ups QuoteLoop drafts. You can
             change any of this later in Settings.
           </p>
           <div className="mt-6">

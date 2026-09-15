@@ -41,7 +41,7 @@ export async function GET(
       "notes",
       "created_at",
     ]);
-    filename = "quotepilot-leads.csv";
+    filename = "quoteloop-leads.csv";
   } else if (type === "quotes") {
     const { data, error } = await supabase
       .from("quotes")
@@ -74,7 +74,7 @@ export async function GET(
       "notes",
       "created_at",
     ]);
-    filename = "quotepilot-quotes.csv";
+    filename = "quoteloop-quotes.csv";
   } else if (type === "follow-ups") {
     const { data, error } = await supabase
       .from("follow_ups")
@@ -112,7 +112,7 @@ export async function GET(
       "message_sent",
       "created_at",
     ]);
-    filename = "quotepilot-follow-ups.csv";
+    filename = "quoteloop-follow-ups.csv";
   } else {
     return NextResponse.json({ error: "Unknown export type" }, { status: 404 });
   }

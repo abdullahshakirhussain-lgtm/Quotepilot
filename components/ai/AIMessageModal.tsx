@@ -474,7 +474,7 @@ export function AIMessageModal({
                   "Email sending isn't set up for this workspace, so copy the message and send it yourself."
                 ) : (
                   <>
-                    Add an email address to this customer to send from QuotePilot.{" "}
+                    Add an email address to this customer to send from QuoteLoop.{" "}
                     <Link href="/leads" className="font-medium text-stone-700 underline-offset-2 hover:underline">
                       Open Customers
                     </Link>

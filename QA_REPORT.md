@@ -1,4 +1,4 @@
-# QuotePilot — Demo-Readiness QA Report
+# QuoteLoop — Demo-Readiness QA Report
 
 _Scope: QA only. No new features, integrations, or redesigns._
 
@@ -23,7 +23,7 @@ _Scope: QA only. No new features, integrations, or redesigns._
 | 1 | Medium (data accuracy) | Follow-ups / Quotes | `follow_up_count` was updated two different ways: the AI modal's **Mark follow-up sent** *incremented* it (`+1`), while the Follow-ups page *recomputed* it from rows. Using both on one quote made the count drift and disagree with reality. |
 | 2 | Medium (demo quality) | Demo seed | Seeded quotes had `follow_up_count` = 1/2/1 but only **one** completed follow-up row existed (Dana's). Counts didn't match the rows, the Follow-ups "Completed" section was nearly empty, and the numbers would visibly jump the first time a user completed/reopened anything. |
 | 3 | Low (resilience) | Error/loading states | No route-level error or loading boundary in the app area. A failed Supabase query mid-demo would drop to Next's raw error page. |
-| 4 | Not app code (environment) | Dev tooling | `next dev` (Next 15.5.x) logs a `segment-explorer-node … React Client Manifest` error and shows a red **"1 Issue"** badge. **Production build + `next start` are clean** (verified). This is a known Next dev-tools bug, not a QuotePilot defect. |
+| 4 | Not app code (environment) | Dev tooling | `next dev` (Next 15.5.x) logs a `segment-explorer-node … React Client Manifest` error and shows a red **"1 Issue"** badge. **Production build + `next start` are clean** (verified). This is a known Next dev-tools bug, not a QuoteLoop defect. |
 
 Areas audited and found **correct** (no change needed): RLS policies vs. app
 queries (every table `auth.uid() = user_id`, plus explicit `.eq("user_id", …)` in
@@ -87,7 +87,7 @@ dashboard metric formulas; auth redirect gating.
 8. **Pipeline** — move a lead to another stage with the card menu.
 9. **Settings → Export** — download **Quotes CSV**, open in a spreadsheet.
 10. Close with the one-liner: _"Every quote you've sent is money on the table —
-    QuotePilot makes sure you follow up and win more of them."_
+    QuoteLoop makes sure you follow up and win more of them."_
 
 ## 5. Buyer-facing feature summary
 

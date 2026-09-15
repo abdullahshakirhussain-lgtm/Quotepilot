@@ -1,5 +1,5 @@
 -- ===========================================================================
--- QuotePilot database schema
+-- QuoteLoop database schema
 -- Run this in the Supabase SQL editor (or via `supabase db push`).
 -- Every table is scoped to auth.users via user_id and protected by RLS so that
 -- a user can only ever read or write their own rows.
@@ -219,7 +219,7 @@ create policy "messages_owner" on public.messages
   );
 
 -- ===========================================================================
--- email_logs: audit trail of follow-up emails sent from QuotePilot.
+-- email_logs: audit trail of follow-up emails sent from QuoteLoop.
 -- Every send attempt is recorded BEFORE the provider is called ('pending'),
 -- then marked 'sent' or 'failed'. It stays 'pending' if the provider never
 -- answered clearly (e.g. a timeout), since the email may still have gone out.
