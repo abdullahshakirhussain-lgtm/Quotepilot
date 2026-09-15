@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, BellRing, ShieldCheck, Sparkles } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export default function LandingPage() {
   return (
@@ -114,9 +115,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="py-8 text-center text-sm text-stone-400">
-        © {new Date().getFullYear()} QuoteLoop · Quote follow-up for small service businesses
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

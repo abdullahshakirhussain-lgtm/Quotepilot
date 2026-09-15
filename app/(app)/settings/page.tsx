@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Download } from "lucide-react";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
@@ -59,6 +60,16 @@ export default async function SettingsPage() {
           </p>
           <DataControls />
         </section>
+
+        <p className="text-center text-xs text-stone-500">
+          <Link href="/privacy" className="hover:text-stone-800">
+            Privacy Policy
+          </Link>
+          {" · "}
+          <Link href="/terms" className="hover:text-stone-800">
+            Terms of Service
+          </Link>
+        </p>
       </div>
     </div>
   );
