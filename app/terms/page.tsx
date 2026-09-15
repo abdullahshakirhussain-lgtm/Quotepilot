@@ -87,7 +87,9 @@ export default function TermsPage() {
             "Only email people you have a business relationship with, such as customers who asked you for a quote.",
             "Do not use QuoteLoop for spam, bulk unsolicited email, cold mass outreach or misleading messages.",
             "Do not contact people who have asked you not to contact them.",
+            "You must promptly honor any request from a recipient who asks not to receive more emails from you.",
             "You are responsible for the content of the emails you send.",
+            "If a law that applies to you requires a physical mailing address, unsubscribe method, advertising disclosure, or other information in your emails, you are responsible for including it.",
           ]}
         />
         <p>

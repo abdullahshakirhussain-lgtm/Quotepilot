@@ -130,6 +130,11 @@ export default function PrivacyPage() {
           asked your business for a quote. Replies go to the business email set in QuoteLoop, or to
           our configured fallback reply-to address.
         </p>
+        <p>
+          If you receive an email sent through QuoteLoop and do not want more emails from that
+          business, reply to that business and ask them to stop contacting you. You can also email{" "}
+          <ContactEmail /> if you believe QuoteLoop is being misused.
+        </p>
         <p>For each email, we store:</p>
         <LegalList
           items={[
