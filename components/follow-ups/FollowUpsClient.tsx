@@ -26,10 +26,13 @@ const SECTIONS: { key: Exclude<FollowUpBucket, "done">; title: string; accent: s
 export function FollowUpsClient({
   followUps,
   today,
+  emailEnabled,
 }: {
   followUps: FollowUpWithContext[];
   /** Server-computed date so grouping matches the dashboard and SSR. */
   today: string;
+  /** Whether this workspace can send email at all. */
+  emailEnabled: boolean;
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -64,7 +67,7 @@ export function FollowUpsClient({
         <EmptyState
           icon={<BellRing className="h-5 w-5" />}
           title="No follow-ups due"
-          description="When you mark a quote as sent, its reminders appear here, each with a ready-to-write message."
+          description="Add a quote and QuoteLoop schedules its follow-ups here, each with a ready-to-write message."
           action={
             <Link href="/quotes" className="btn-primary">
               Go to quotes
@@ -84,7 +87,13 @@ export function FollowUpsClient({
                 </h2>
                 <ul className="card divide-y divide-stone-100">
                   {groups[s.key].map((f) => (
-                    <FollowUpRow key={f.id} f={f} today={today} onWrite={() => setAiFor(f)} />
+                    <FollowUpRow
+                      key={f.id}
+                      f={f}
+                      today={today}
+                      emailEnabled={emailEnabled}
+                      onWrite={() => setAiFor(f)}
+                    />
                   ))}
                 </ul>
               </section>
@@ -93,7 +102,7 @@ export function FollowUpsClient({
 
           {needAttention === 0 && groups.upcoming.length === 0 && (
             <p className="card px-4 py-6 text-sm text-stone-500">
-              You&apos;re all caught up. New reminders appear when you mark a quote as sent.
+              You&apos;re all caught up. New follow-ups appear when you add your next quote.
             </p>
           )}
 
@@ -111,7 +120,13 @@ export function FollowUpsClient({
               {showDone && (
                 <ul className="card divide-y divide-stone-100">
                   {groups.done.map((f) => (
-                    <FollowUpRow key={f.id} f={f} today={today} onWrite={() => setAiFor(f)} />
+                    <FollowUpRow
+                      key={f.id}
+                      f={f}
+                      today={today}
+                      emailEnabled={emailEnabled}
+                      onWrite={() => setAiFor(f)}
+                    />
                   ))}
                 </ul>
               )}
@@ -143,15 +158,18 @@ export function FollowUpsClient({
 function FollowUpRow({
   f,
   today,
+  emailEnabled,
   onWrite,
 }: {
   f: FollowUpWithContext;
   today: string;
+  emailEnabled: boolean;
   onWrite: () => void;
 }) {
   const [pending, start] = useTransition();
   const bucket = classifyFollowUp(f, today);
   const isPending = f.status === "pending";
+  const canEmail = emailEnabled && Boolean(f.lead?.email?.trim());
   const urgent = bucket === "overdue" || bucket === "today";
 
   return (
@@ -170,6 +188,11 @@ function FollowUpRow({
             <span className="num"> · {formatCurrency(Number(f.quote.amount), f.quote.currency)}</span>
           )}
         </div>
+        {isPending && !canEmail && (
+          <p className="mt-0.5 text-xs text-stone-500">
+            Add an email address to send from QuoteLoop, or copy the message.
+          </p>
+        )}
         {f.status === "completed" && f.message_snapshot && (
           <p className="mt-1 line-clamp-1 border-l-2 border-emerald-400 pl-2 text-xs italic text-stone-500">
             Final text used: {f.message_snapshot}

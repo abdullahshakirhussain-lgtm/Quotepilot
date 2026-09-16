@@ -5,7 +5,8 @@
 //
 // Order matters:
 //   1. validate + ownership (deps only ever return the caller's own rows)
-//   2. rate limit
+//   2. rate limit (checked here for a fast answer, and enforced again by the
+//      log write, which claims a slot so two sends at once can't both pass)
 //   3. write a 'pending' audit log  -> if this fails, nothing is sent
 //   4. send                         -> rejected: log 'failed', follow-up untouched
 //                                      no clear answer (e.g. timeout): log stays
@@ -16,6 +17,7 @@ import {
   cleanSubject,
   composeEmailText,
   formatFrom,
+  isEmailQuotaError,
   isValidEmail,
   MAX_BODY_LENGTH,
   quotaError,
@@ -50,6 +52,7 @@ export interface SendDeps {
   getBusiness(): Promise<{ business_name: string; email: string | null } | null>;
   countRecentEmails(): Promise<{ day: number; month: number }>;
   getPendingFollowUp(quoteId: string): Promise<{ id: string; follow_up_number: number } | null>;
+  /** Writes the log AND claims a send slot; throws EmailQuotaError if at a limit. */
   insertLog(row: EmailLogInsert): Promise<string>;
   updateLog(id: string, patch: EmailLogPatch): Promise<void>;
   /** Completes a still-pending reminder; false if it was no longer pending. */
@@ -113,15 +116,21 @@ export async function sendFollowUpEmailCore(
   const pending = await deps.getPendingFollowUp(quote.id);
 
   // Audit first: if the log can't be written, nothing is sent.
-  const logId = await deps.insertLog({
-    quote_id: quote.id,
-    lead_id: lead.id,
-    follow_up_id: pending?.id ?? null,
-    recipient_email: to,
-    subject,
-    body: text,
-    status: "pending",
-  });
+  let logId: string;
+  try {
+    logId = await deps.insertLog({
+      quote_id: quote.id,
+      lead_id: lead.id,
+      follow_up_id: pending?.id ?? null,
+      recipient_email: to,
+      subject,
+      body: text,
+      status: "pending",
+    });
+  } catch (e) {
+    if (!isEmailQuotaError(e)) throw e;
+    return { ok: false, error: e.message };
+  }
 
   const result = await deps.send({
     from: formatFrom(deps.config.from, businessName),

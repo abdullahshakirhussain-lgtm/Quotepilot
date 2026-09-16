@@ -1,7 +1,9 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { QuotesClient } from "@/components/quotes/QuotesClient";
 import { requestToday } from "@/lib/request-time";
-import type { Business, Lead, QuoteWithLead } from "@/lib/types";
+import { emailConfig } from "@/lib/email";
+import type { Business, QuoteWithLead } from "@/lib/types";
+import type { QuoteCustomer } from "@/components/quotes/NewQuoteModal";
 
 export const dynamic = "force-dynamic";
 
@@ -17,25 +19,25 @@ export default async function QuotesPage({
   const [quotesRes, leadsRes, businessRes] = await Promise.all([
     supabase
       .from("quotes")
-      .select("*, lead:leads(id, customer_name, company_name)")
+      .select("*, lead:leads(id, customer_name, company_name, email)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase
       .from("leads")
-      .select("id, customer_name, company_name")
+      .select("id, customer_name, company_name, email")
       .eq("user_id", user.id)
       .order("customer_name", { ascending: true }),
     supabase
       .from("businesses")
-      .select("currency")
+      .select("currency, business_name, owner_name, email")
       .eq("user_id", user.id)
-      .maybeSingle<Pick<Business, "currency">>(),
+      .maybeSingle<Pick<Business, "currency" | "business_name" | "owner_name" | "email">>(),
   ]);
 
   const failed = [quotesRes, leadsRes, businessRes].find((r) => r.error);
   if (failed?.error) throw new Error(`Could not load quotes: ${failed.error.message}`);
 
-  // Normalise the embedded lead (Supabase may return it as an array).
+  // Normalise the embedded customer (Supabase may return it as an array).
   const quotes: QuoteWithLead[] = (quotesRes.data ?? []).map((q) => ({
     ...(q as QuoteWithLead),
     lead: Array.isArray(q.lead) ? (q.lead[0] ?? null) : (q.lead ?? null),
@@ -44,8 +46,14 @@ export default async function QuotesPage({
   return (
     <QuotesClient
       quotes={quotes}
-      leads={(leadsRes.data as Pick<Lead, "id" | "customer_name" | "company_name">[]) ?? []}
+      customers={(leadsRes.data as QuoteCustomer[]) ?? []}
       defaultCurrency={businessRes.data?.currency ?? "USD"}
+      business={{
+        name: businessRes.data?.business_name ?? "",
+        ownerName: businessRes.data?.owner_name ?? null,
+        email: businessRes.data?.email ?? null,
+      }}
+      emailEnabled={emailConfig() !== null}
       initialNewLeadId={preselectLeadId}
       openNew={openNew === "1"}
       today={await requestToday()}

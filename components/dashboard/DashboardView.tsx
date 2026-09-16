@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, BellRing, CalendarCheck, Plus } from "lucide-react";
+import { HowItWorks } from "@/components/quotes/HowItWorks";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AttentionList } from "./AttentionList";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -31,12 +32,25 @@ export function DashboardView({
   return (
     <div className="space-y-6">
       {!hasData && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">
-          <span>New here? Load realistic sample quotes to see how QuoteLoop works.</span>
-          <Link href="/settings" className="font-semibold underline-offset-2 hover:underline">
-            Settings → Load demo data
-          </Link>
-        </div>
+        <section className="space-y-3">
+          <div className="card flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+            <div>
+              <h2 className="text-[15px] font-semibold text-stone-900">Start with your first quote</h2>
+              <p className="mt-0.5 text-sm text-stone-500">
+                Send it with QuoteLoop, or track one you already sent.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/quotes?new=1" className="btn-primary">
+                <Plus className="h-4 w-4" /> New quote
+              </Link>
+              <Link href="/settings" className="btn-secondary">
+                Load demo data
+              </Link>
+            </div>
+          </div>
+          <HowItWorks />
+        </section>
       )}
 
       {/* Hero: what needs doing, and how much money is riding on it */}
@@ -102,7 +116,7 @@ export function DashboardView({
           hint={m.winRate === null ? "Nothing won or lost yet" : `${m.wonCount} won / ${m.lostCount} lost`}
         />
         <Metric label="Average quote" value={formatCurrency(m.avgQuote, currency)} hint="Across quotes sent" />
-        <Metric label="Quotes sent" value={String(m.quotesSent)} hint={`${m.activeLeads} active leads`} />
+        <Metric label="Quotes sent" value={String(m.quotesSent)} hint={`${m.activeLeads} active customers`} />
       </section>
 
       {/* The work */}
@@ -122,7 +136,7 @@ export function DashboardView({
                 compact
                 icon={<CalendarCheck className="h-5 w-5" />}
                 title="Nothing due right now"
-                description="When a quote's next reminder comes due, it appears here with a ready-to-write follow-up."
+                description="When a quote's next follow-up comes due, it appears here, ready to write."
               />
             </div>
           ) : (
@@ -136,7 +150,7 @@ export function DashboardView({
           </div>
           {upcoming.length === 0 ? (
             <p className="px-4 py-6 text-sm text-stone-500">
-              No reminders scheduled. Mark a quote as sent to schedule them.
+              No follow-ups scheduled yet. Add a quote and QuoteLoop schedules them.
             </p>
           ) : (
             <AttentionList items={upcoming} today={today} compact />

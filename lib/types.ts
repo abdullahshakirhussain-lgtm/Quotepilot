@@ -51,6 +51,8 @@ export interface Quote {
   last_follow_up_at: string | null;
   next_follow_up_at: string | null;
   notes: string | null;
+  /** How a quote the user sent themselves went out. Metadata, never in notes. */
+  sent_method: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -83,6 +85,8 @@ export interface Message {
 /** A follow-up email sent (or attempted) from QuoteLoop — see email_logs. */
 export interface EmailLogEntry {
   id: string;
+  /** Null once the quote it belonged to was deleted; the record itself stays. */
+  quote_id: string | null;
   follow_up_id: string | null;
   recipient_email: string;
   subject: string;
@@ -95,7 +99,7 @@ export interface EmailLogEntry {
 }
 
 // Convenience joined shapes used by list views.
-export type QuoteWithLead = Quote & { lead: Pick<Lead, "id" | "customer_name" | "company_name"> | null };
+export type QuoteWithLead = Quote & { lead: Pick<Lead, "id" | "customer_name" | "company_name" | "email"> | null };
 export type FollowUpWithContext = FollowUp & {
   quote: Pick<
     Quote,
@@ -108,5 +112,5 @@ export type FollowUpWithContext = FollowUp & {
     | "valid_until"
     | "next_follow_up_at"
   > | null;
-  lead: Pick<Lead, "id" | "customer_name" | "company_name"> | null;
+  lead: Pick<Lead, "id" | "customer_name" | "company_name" | "email"> | null;
 };

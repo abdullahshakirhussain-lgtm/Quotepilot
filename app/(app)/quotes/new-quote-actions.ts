@@ -1,0 +1,296 @@
+"use server";
+
+// Server actions for the two first-use quote flows. Every lookup and write is
+// scoped to the signed-in user; the email recipient always comes from the saved
+// customer, never from the browser.
+import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient, requireUser } from "@/lib/supabase/server";
+import { emailConfig, isValidEmail, sendViaResend, type EmailConfig } from "@/lib/email";
+import { countRecentEmails, insertLogWithinLimits } from "@/lib/email-quota";
+import { applyQuoteStatusChange } from "@/lib/quote-state";
+import { requestToday } from "@/lib/request-time";
+import { resolveCustomerRecord } from "@/lib/quote-write";
+import {
+  sendQuoteCore,
+  trackQuoteCore,
+  type CustomerRecord,
+  type QuoteFields,
+  type QuoteFlowOutcome,
+  type ScheduledFollowUp,
+  type SendQuoteDeps,
+  type TrackQuoteDeps,
+} from "@/lib/quote-flows";
+import { clip } from "@/lib/utils";
+
+function check(error: { message: string } | null, context: string) {
+  if (error) throw new Error(`${context}: ${error.message}`);
+}
+
+/** The database is missing a column this build knows about. */
+function missingColumn(error: { message: string; code?: string }, column: string): boolean {
+  return (
+    (error.code === "PGRST204" || error.code === "42703" || /column|schema cache/i.test(error.message)) &&
+    error.message.includes(column)
+  );
+}
+
+function revalidateViews() {
+  for (const path of ["/quotes", "/follow-ups", "/dashboard", "/pipeline", "/leads"]) {
+    revalidatePath(path);
+  }
+}
+
+/** Trim and cap everything that reaches the database. */
+function clean(input: QuoteFields, sentDate: string): QuoteFields {
+  return {
+    customerMode: input?.customerMode === "existing" ? "existing" : "new",
+    leadId: input?.leadId ? String(input.leadId) : null,
+    customerName: clip(input?.customerName ?? "", 120),
+    email: clip(input?.email ?? "", 254),
+    phone: clip(input?.phone ?? "", 40),
+    companyName: clip(input?.companyName ?? "", 120),
+    title: clip(input?.title ?? "", 200),
+    amount: input?.amount ?? "",
+    currency: String(input?.currency ?? "USD"),
+    sentDate,
+    validUntil: clip(input?.validUntil ?? "", 10) || null,
+    description: clip(input?.description ?? "", 1500) || null,
+    notes: clip(input?.notes ?? "", 500) || null,
+    sentMethod: clip(input?.sentMethod ?? "", 40) || null,
+    subject: clip(input?.subject ?? "", 200),
+    message: clip(input?.message ?? "", 10_000),
+  };
+}
+
+function quoteDeps(supabase: SupabaseClient, uid: string): TrackQuoteDeps {
+  return {
+    resolveCustomer: (f) => resolveCustomerRecord(supabase, uid, f),
+    async createQuote(row) {
+      const insert = (values: object) =>
+        supabase.from("quotes").insert({ ...values, user_id: uid }).select("id").single();
+
+      let { data, error } = await insert(row);
+      if (error && missingColumn(error, "sent_method")) {
+        // This database hasn't had schema.sql re-run yet. Saving the quote
+        // matters more than recording how it was sent.
+        const { sent_method: _dropped, ...rest } = row;
+        ({ data, error } = await insert(rest));
+      }
+      check(error, "saving the quote");
+      return data!.id as string;
+    },
+    async markSent(quoteId, leadId, scheduleFrom) {
+      const { error } = await supabase
+        .from("quotes")
+        .update({ status: "sent" })
+        .eq("id", quoteId)
+        .eq("user_id", uid);
+      check(error, "marking the quote sent");
+      // Same path as the status buttons: schedules reminders, moves the
+      // customer along the pipeline and re-derives the quote's counters.
+      await applyQuoteStatusChange(
+        supabase,
+        uid,
+        { id: quoteId, lead_id: leadId },
+        "draft",
+        "sent",
+        { scheduleFrom }
+      );
+    },
+    async getSchedule(quoteId) {
+      const { data, error } = await supabase
+        .from("follow_ups")
+        .select("follow_up_number, due_date")
+        .eq("quote_id", quoteId)
+        .eq("user_id", uid)
+        .eq("status", "pending")
+        .order("due_date", { ascending: true });
+      check(error, "reading the follow-up schedule");
+      return (data ?? []) as ScheduledFollowUp[];
+    },
+  };
+}
+
+function emailDeps(
+  supabase: SupabaseClient,
+  uid: string,
+  config: EmailConfig | null
+): Omit<SendQuoteDeps, keyof TrackQuoteDeps> {
+  return {
+    config,
+    async getBusiness() {
+      const { data, error } = await supabase
+        .from("businesses")
+        .select("business_name, email")
+        .eq("user_id", uid)
+        .maybeSingle();
+      check(error, "workspace lookup");
+      return data;
+    },
+    countRecentEmails: () => countRecentEmails(supabase, uid),
+    insertLog: insertLogWithinLimits(supabase, uid),
+    async updateLog(id, patch) {
+      const { error } = await supabase.from("email_logs").update(patch).eq("id", id).eq("user_id", uid);
+      check(error, "email log update");
+    },
+    send: (email) => sendViaResend(config!, email),
+    now: () => new Date(),
+  };
+}
+
+/**
+ * Flow B - "Track a quote already sent". Saves the quote as sent and schedules
+ * follow-up reminders. Never sends an email.
+ */
+export async function trackQuoteAlreadySent(input: QuoteFields): Promise<QuoteFlowOutcome> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const today = await requestToday();
+
+  try {
+    const fields = clean(input, String(input?.sentDate ?? "").slice(0, 10));
+    const outcome = await trackQuoteCore(quoteDeps(supabase, user.id), fields, today);
+    if (outcome.ok) revalidateViews();
+    return outcome;
+  } catch (e) {
+    console.error("[quotes] tracking an existing quote failed:", e);
+    return { ok: false, error: "The quote couldn't be saved just now. Please try again." };
+  }
+}
+
+/**
+ * Flow A - "Send a quote with QuoteLoop". The quote is saved as a draft, the
+ * email is sent, and only then is it marked sent with reminders scheduled.
+ */
+export async function sendQuoteWithQuoteLoop(input: QuoteFields): Promise<QuoteFlowOutcome> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const today = await requestToday();
+  const config = emailConfig();
+
+  try {
+    // The send date is the server's today; the browser doesn't get a say.
+    const fields = clean(input, today);
+    const deps: SendQuoteDeps = {
+      ...quoteDeps(supabase, user.id),
+      ...emailDeps(supabase, user.id, config),
+    };
+    const outcome = await sendQuoteCore(deps, fields, today);
+    if (outcome.ok) revalidateViews();
+    return outcome;
+  } catch (e) {
+    // Only steps BEFORE the send can throw here, so nothing went out.
+    console.error("[quotes] send flow stopped before sending:", e);
+    return {
+      ok: false,
+      error: "QuoteLoop couldn't send the quote just now, so nothing was sent. Please try again.",
+    };
+  }
+}
+
+/**
+ * Sends the quote email for a quote already saved as a draft (the "Send quote
+ * email" action on a draft card). Same rules as flow A.
+ */
+export async function sendDraftQuoteEmail(input: {
+  quoteId: string;
+  subject: string;
+  message: string;
+}): Promise<QuoteFlowOutcome> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const today = await requestToday();
+  const config = emailConfig();
+
+  try {
+    const { data: quote, error } = await supabase
+      .from("quotes")
+      .select("id, lead_id, title, description, amount, currency, valid_until, notes, status")
+      .eq("id", String(input?.quoteId ?? ""))
+      .eq("user_id", user.id)
+      .maybeSingle();
+    check(error, "quote lookup");
+    if (!quote) return { ok: false, error: "Quote not found." };
+    if (quote.status !== "draft") {
+      return { ok: false, error: "This quote is already marked as sent." };
+    }
+
+    const { data: customer, error: leadError } = await supabase
+      .from("leads")
+      .select("id, customer_name, email")
+      .eq("id", quote.lead_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    check(leadError, "customer lookup");
+    if (!customer) return { ok: false, error: "Customer not found." };
+
+    const deps: SendQuoteDeps = {
+      ...quoteDeps(supabase, user.id),
+      ...emailDeps(supabase, user.id, config),
+      // The quote already exists: reuse it instead of creating another.
+      resolveCustomer: async () => customer as CustomerRecord,
+      createQuote: async () => quote.id as string,
+    };
+
+    const validUntil =
+      quote.valid_until && String(quote.valid_until) >= today ? String(quote.valid_until) : null;
+    const fields: QuoteFields = {
+      customerMode: "existing",
+      leadId: quote.lead_id,
+      email: (customer as CustomerRecord).email ?? "",
+      title: String(quote.title),
+      amount: quote.amount as number,
+      currency: String(quote.currency),
+      sentDate: today,
+      validUntil,
+      description: quote.description as string | null,
+      notes: quote.notes as string | null,
+      subject: clip(input?.subject ?? "", 200),
+      message: clip(input?.message ?? "", 10_000),
+    };
+
+    const outcome = await sendQuoteCore(deps, fields, today);
+    if (outcome.ok) revalidateViews();
+    return outcome;
+  } catch (e) {
+    console.error("[quotes] draft send stopped before sending:", e);
+    return {
+      ok: false,
+      error: "QuoteLoop couldn't send the quote just now, so nothing was sent. Please try again.",
+    };
+  }
+}
+
+/**
+ * Saves an email address on one of the caller's own customers, so a draft quote
+ * that had nowhere to go can be sent from QuoteLoop.
+ */
+export async function addCustomerEmail(
+  leadId: string,
+  email: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const address = clip(email ?? "", 254).trim();
+  if (!isValidEmail(address)) {
+    return { ok: false, error: "That email address doesn't look right. Check it and try again." };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("leads")
+      .update({ email: address })
+      .eq("id", String(leadId ?? ""))
+      .eq("user_id", user.id)
+      .select("id");
+    check(error, "saving the customer's email");
+    if (!data?.length) return { ok: false, error: "That customer was not found." };
+  } catch (e) {
+    console.error("[quotes] saving a customer email failed:", e);
+    return { ok: false, error: "The email address couldn't be saved just now. Please try again." };
+  }
+
+  revalidateViews();
+  return { ok: true };
+}

@@ -3,11 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { emailConfig, sendViaResend, MAX_BODY_LENGTH } from "@/lib/email";
+import { countRecentEmails, insertLogWithinLimits } from "@/lib/email-quota";
 import { sendFollowUpEmailCore, type SendOutcome } from "@/lib/email-send";
 import { recomputeQuoteFollowUpState } from "@/lib/quote-state";
 import { clip } from "@/lib/utils";
-
-const DAY_MS = 86_400_000;
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -62,19 +61,7 @@ export async function sendFollowUpEmail(input: {
           check(error, "workspace lookup");
           return data;
         },
-        async countRecentEmails() {
-          const now = Date.now();
-          const countSince = (ms: number) =>
-            supabase
-              .from("email_logs")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", uid)
-              .in("status", ["pending", "sent"])
-              .gte("created_at", new Date(now - ms).toISOString());
-          const [day, month] = await Promise.all([countSince(DAY_MS), countSince(30 * DAY_MS)]);
-          check(day.error ?? month.error, "email limit check");
-          return { day: day.count ?? 0, month: month.count ?? 0 };
-        },
+        countRecentEmails: () => countRecentEmails(supabase, uid),
         async getPendingFollowUp(quoteId) {
           const { data, error } = await supabase
             .from("follow_ups")
@@ -87,15 +74,8 @@ export async function sendFollowUpEmail(input: {
           check(error, "reminder lookup");
           return data?.[0] ?? null;
         },
-        async insertLog(row) {
-          const { data, error } = await supabase
-            .from("email_logs")
-            .insert({ ...row, user_id: uid, provider: "resend" })
-            .select("id")
-            .single();
-          check(error, "email log");
-          return data!.id as string;
-        },
+        // Writes the audit log and claims a slot against the send limits.
+        insertLog: insertLogWithinLimits(supabase, uid),
         async updateLog(id, patch) {
           const { error } = await supabase
             .from("email_logs")

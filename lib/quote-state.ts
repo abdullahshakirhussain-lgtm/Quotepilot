@@ -16,6 +16,8 @@ import {
 
 export const CLOSED_QUOTE_STATUSES: QuoteStatus[] = ["accepted", "rejected", "expired"];
 
+const isDate = (value?: string | null): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value ?? "");
+
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
 }
@@ -53,15 +55,21 @@ export async function recomputeQuoteFollowUpState(
 }
 
 /**
- * Replaces a quote's pending reminders with a fresh schedule (today + each
- * configured day). Completed/skipped history is kept and numbering continues
- * after it.
+ * Replaces a quote's pending reminders with a fresh schedule (the base date +
+ * each configured day). Completed/skipped history is kept and numbering
+ * continues after it.
+ *
+ * `baseDate` is the day the quote actually went out. For a quote the user sent
+ * themselves days ago that puts the early reminders in the past, where they
+ * belong — they show as overdue rather than being quietly pushed forward.
+ * Defaults to the viewer's today.
  */
 export async function scheduleFollowUps(
   supabase: SupabaseClient,
   userId: string,
   quoteId: string,
-  leadId: string
+  leadId: string,
+  baseDate?: string
 ): Promise<void> {
   const { data: business } = await supabase
     .from("businesses")
@@ -86,8 +94,8 @@ export async function scheduleFollowUps(
   check(historyError, "Could not read reminder history");
 
   const start = nextFollowUpNumber(history ?? []);
-  // Reminder dates count from the user's own local day.
-  const base = await requestToday();
+  // Reminder dates count from the send date, or the user's own local day.
+  const base = isDate(baseDate) ? baseDate! : await requestToday();
   const rows = days.map((d, i) => ({
     user_id: userId,
     quote_id: quoteId,
@@ -154,12 +162,14 @@ export async function applyQuoteStatusChange(
   userId: string,
   quote: { id: string; lead_id: string },
   prev: QuoteStatus,
-  next: QuoteStatus
+  next: QuoteStatus,
+  /** The day the quote went out, when it wasn't today. */
+  options?: { scheduleFrom?: string }
 ): Promise<void> {
   if (prev === next) return;
 
   if (next === "sent") {
-    await scheduleFollowUps(supabase, userId, quote.id, quote.lead_id);
+    await scheduleFollowUps(supabase, userId, quote.id, quote.lead_id, options?.scheduleFrom);
   }
 
   if (CLOSED_QUOTE_STATUSES.includes(next)) {

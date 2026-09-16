@@ -125,8 +125,8 @@ export function BusinessForm({
       <div>
         <span className="label">Default follow-up schedule</span>
         <p className="mb-2 text-xs text-stone-500">
-          When you mark a quote as sent, reminders are created on these days
-          after sending.
+          Once a quote goes out, QuoteLoop schedules follow-ups on these days
+          after it was sent.
         </p>
         <div className="flex flex-wrap gap-2">
           {FOLLOW_UP_DAY_OPTIONS.map((d) => (

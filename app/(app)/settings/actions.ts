@@ -185,5 +185,9 @@ export async function clearAllData(): Promise<ActionState> {
   }
 
   revalidateAll();
-  return { ok: true, message: "All leads, quotes, follow-ups and messages were deleted." };
+  return {
+    ok: true,
+    message:
+      "All customers, quotes, follow-ups and messages were deleted. Records of emails QuoteLoop already sent were kept.",
+  };
 }

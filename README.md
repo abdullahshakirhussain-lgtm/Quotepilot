@@ -67,8 +67,9 @@ npm install
 cp .env.local.example .env.local
 # then edit .env.local with your Supabase URL + anon key (see section 2)
 
-# 3. Create the database
+# 3. Create (or update) the database
 #    Open Supabase -> SQL Editor -> paste the contents of supabase/schema.sql -> Run
+#    Re-run this whenever you pull a release that changes the schema.
 
 # 4. (Recommended for demos) Turn OFF email confirmation
 #    Supabase -> Authentication -> Providers -> Email -> disable "Confirm email"
@@ -90,6 +91,15 @@ npm run dev
    start adding your own leads.
 
 ### Production build
+
+> **Re-run `supabase/schema.sql` before deploying this quote-flow update.**
+> Open Supabase → SQL Editor, paste the file, Run. It is idempotent and safe to
+> re-run on a live database. This release depends on it: it adds
+> `quotes.sent_method`, makes `email_logs.quote_id` / `lead_id` nullable so
+> sent-email history survives a deleted quote, and installs the
+> `insert_email_log_within_limits` function that stops two simultaneous sends
+> from passing the same limit. Deploy the code **after** the schema has been
+> applied.
 
 ```bash
 npm run build && npm start
@@ -196,8 +206,8 @@ and every email needs an explicit click.
 - **Audit and logging:** every attempt is written to `email_logs` **before**
   sending, then marked `sent` or `failed`. The reminder is marked done only after
   the provider accepts the email, and it stores the final (edited) text. Users can
-  read their log but can't edit or delete entries (they go with their quote or
-  customer).
+  read their log but can't edit or delete entries, and deleting a quote or
+  customer detaches its entries rather than removing them.
 - **Unclear outcomes:** if Resend doesn't answer clearly (a timeout or dropped
   connection), the attempt stays `pending`, shows as "delivery not confirmed", and
   the assistant won't offer an immediate resend. Check the Resend dashboard
@@ -205,8 +215,19 @@ and every email needs an explicit click.
 - **Limits:** 25 emails per user in any 24 hours and 100 in any 30 days (sent and
   unconfirmed attempts count; rejected ones don't). AI drafts are limited to 50
   per user in any 24 hours.
-- **Schema:** re-run `supabase/schema.sql` to add `email_logs`. Until then, Send
-  stays hidden and copy/manual logging work as before.
+- **Limits are enforced in the database.** A send writes its audit row through
+  `insert_email_log_within_limits`, which counts and inserts inside one
+  transaction behind a per-user advisory lock, so two sends started at the same
+  moment can't both pass. If the code is deployed before the schema is applied,
+  the app falls back to inserting first and then checking its position in the
+  window — a safety net for that gap, not a configuration to run on.
+- **Schema (required):** `supabase/schema.sql` must be re-run before this
+  release is deployed. It adds `email_logs`, the send-limit function and
+  `quotes.sent_method`, and stops sent-email records from being deleted along
+  with their quote. Deploying without it degrades quietly rather than crashing —
+  how a quote was sent isn't recorded, email history still disappears with its
+  quote, and send limits fall back to the weaker check — so treat it as part of
+  the deploy, not a follow-up task.
 
 **Setup:**
 1. In Resend, add your domain and verify its DNS records (add DMARC too).
@@ -238,9 +259,11 @@ Only the two `NEXT_PUBLIC_` values reach the browser; AI keys stay server-side
 
 ## 3. Supabase schema / migration notes
 
-The entire schema lives in **`supabase/schema.sql`** — run it once in the
-Supabase SQL editor. It is idempotent (`create table if not exists`, `drop policy
-if exists`) so it is safe to re-run.
+The entire schema lives in **`supabase/schema.sql`** — run it in the Supabase SQL
+editor, and re-run it as part of any deploy that changes it, **including this
+quote-flow release**. It is idempotent (`create table if not exists`, `drop
+policy if exists`, `add column if not exists`), so re-running it on a live
+database is safe and leaves existing rows untouched.
 
 ### Tables
 
@@ -251,6 +274,7 @@ if exists`) so it is safe to re-run.
 | `quotes` | Quotes, each belonging to a lead |
 | `follow_ups` | Scheduled reminders per quote |
 | `messages` | AI-generated message history per quote |
+| `email_logs` | Every email sent (or attempted) from QuoteLoop, and the send limits |
 
 ### Data isolation (important)
 
@@ -267,6 +291,11 @@ if exists`) so it is safe to re-run.
   Server queries also add an explicit `.eq("user_id", user.id)` as defence in depth.
 - `ON DELETE CASCADE` means deleting a lead cleans up its quotes, follow-ups and
   messages automatically.
+- **`email_logs` is the exception.** Deleting a quote or a customer sets the
+  record's `quote_id` / `lead_id` to null instead of deleting it, so a record of
+  an email that really was sent survives — for the user's own history, and so
+  the send limits can't be reset by deleting things. There is still no delete
+  policy on the table; only deleting the account clears those rows.
 
 ### Status values
 

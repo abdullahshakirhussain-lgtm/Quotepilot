@@ -37,7 +37,8 @@ export function DataControls() {
           onClick={() => {
             if (
               window.confirm(
-                "Delete ALL of your leads, quotes, follow-ups and messages? This cannot be undone."
+                "Delete ALL of your customers, quotes, follow-ups and messages? This cannot be undone. " +
+                  "Records of emails QuoteLoop already sent are kept as your sending history."
               )
             ) {
               setResult(null);

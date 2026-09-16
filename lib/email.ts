@@ -66,6 +66,33 @@ export function composeEmailText(message: string, businessName: string): string 
   );
 }
 
+/**
+ * Refusal because the user is already at a send limit. Carries a plain marker
+ * rather than relying on `instanceof`, which is unreliable across bundles.
+ */
+export class EmailQuotaError extends Error {
+  readonly quota = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "EmailQuotaError";
+  }
+}
+
+export function isEmailQuotaError(e: unknown): e is EmailQuotaError {
+  return typeof e === "object" && e !== null && (e as { quota?: unknown }).quota === true;
+}
+
+/**
+ * Whether a log that was just written is inside the allowance, given the ids of
+ * every counted log in that window, oldest first. Used when the database can't
+ * do the count and the insert together: both racing requests read the same
+ * order, so only the earlier one finds itself inside the limit.
+ */
+export function slotWithinLimit(orderedIds: string[], logId: string, limit: number): boolean {
+  const position = orderedIds.indexOf(logId);
+  return position >= 0 && position < limit;
+}
+
 /** Friendly limit message, or null when the user may send. */
 export function quotaError(counts: { day: number; month: number }): string | null {
   if (counts.day >= EMAIL_DAILY_LIMIT) {

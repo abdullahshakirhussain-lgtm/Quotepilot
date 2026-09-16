@@ -72,9 +72,15 @@ create table if not exists public.quotes (
   last_follow_up_at timestamptz,
   next_follow_up_at timestamptz,
   notes text,
+  -- How a quote the user sent themselves went out ("WhatsApp", "Phone", ...).
+  -- Metadata only: it must never be mixed into the user's own notes.
+  sent_method text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Added after the first release; safe to re-run.
+alter table public.quotes add column if not exists sent_method text;
 
 -- ---------------------------------------------------------------------------
 -- follow_ups
@@ -229,8 +235,10 @@ create policy "messages_owner" on public.messages
 create table if not exists public.email_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  quote_id uuid not null references public.quotes (id) on delete cascade,
-  lead_id uuid not null references public.leads (id) on delete cascade,
+  -- Detached, not deleted, when the quote or customer goes: a record of an
+  -- email that really was sent has to outlive the row it was sent about.
+  quote_id uuid references public.quotes (id) on delete set null,
+  lead_id uuid references public.leads (id) on delete set null,
   follow_up_id uuid references public.follow_ups (id) on delete set null,
   recipient_email text not null,
   subject text not null,
@@ -253,8 +261,9 @@ alter table public.email_logs enable row level security;
 -- email_logs policies: users can read and add their own entries (referencing
 -- only their own quote, lead and optional follow-up) and resolve a 'pending'
 -- one, but can't edit a finished entry or delete any. That keeps the audit
--- trail and the send limits from being reset through the API. Entries still
--- go when their quote, lead or account is deleted (foreign-key cascades).
+-- trail and the send limits from being reset through the API. Deleting a quote
+-- or customer detaches its entries rather than removing them; only deleting the
+-- account itself clears them (the user_id cascade).
 drop policy if exists "email_logs_owner" on public.email_logs;
 
 drop policy if exists "email_logs_select" on public.email_logs;
@@ -291,13 +300,19 @@ create policy "email_logs_update" on public.email_logs
   using ((select auth.uid()) = user_id and status = 'pending')
   with check (
     (select auth.uid()) = user_id
-    and exists (
-      select 1 from public.quotes q
-      where q.id = email_logs.quote_id and q.user_id = (select auth.uid())
+    and (
+      email_logs.quote_id is null
+      or exists (
+        select 1 from public.quotes q
+        where q.id = email_logs.quote_id and q.user_id = (select auth.uid())
+      )
     )
-    and exists (
-      select 1 from public.leads l
-      where l.id = email_logs.lead_id and l.user_id = (select auth.uid())
+    and (
+      email_logs.lead_id is null
+      or exists (
+        select 1 from public.leads l
+        where l.id = email_logs.lead_id and l.user_id = (select auth.uid())
+      )
     )
     and (
       email_logs.follow_up_id is null
@@ -307,3 +322,90 @@ create policy "email_logs_update" on public.email_logs
       )
     )
   );
+
+-- ===========================================================================
+-- Upgrade for workspaces created before sent-email history was detachable.
+-- Re-running is safe: the column changes are no-ops once applied.
+-- ===========================================================================
+alter table public.email_logs alter column quote_id drop not null;
+alter table public.email_logs alter column lead_id drop not null;
+
+alter table public.email_logs drop constraint if exists email_logs_quote_id_fkey;
+alter table public.email_logs add constraint email_logs_quote_id_fkey
+  foreign key (quote_id) references public.quotes (id) on delete set null;
+
+alter table public.email_logs drop constraint if exists email_logs_lead_id_fkey;
+alter table public.email_logs add constraint email_logs_lead_id_fkey
+  foreign key (lead_id) references public.leads (id) on delete set null;
+
+-- ===========================================================================
+-- Send limits that two requests can't slip past at once.
+--
+-- Counting rows and then inserting takes two round trips, so two sends started
+-- together could both read "24 sent today" and both go out. This does the
+-- count and the insert in ONE transaction, behind a per-user advisory lock, so
+-- the second attempt waits for the first and then sees it. Returns the new
+-- log's id, or null when the user is already at a limit.
+--
+-- security invoker (the default): row-level security still applies, so this
+-- can only ever count and insert the caller's own rows.
+-- ===========================================================================
+create or replace function public.insert_email_log_within_limits(
+  p_quote_id uuid,
+  p_lead_id uuid,
+  p_follow_up_id uuid,
+  p_recipient_email text,
+  p_subject text,
+  p_body text,
+  p_day_limit integer,
+  p_month_limit integer
+) returns uuid
+language plpgsql
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_count integer;
+  v_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  -- Held until this transaction ends, so this user's concurrent sends queue up.
+  perform pg_advisory_xact_lock(hashtext('quoteloop:email:' || v_uid::text)::bigint);
+
+  select count(*) into v_count
+  from public.email_logs
+  where user_id = v_uid
+    and status in ('pending', 'sent')
+    and created_at >= now() - interval '24 hours';
+  if v_count >= p_day_limit then
+    return null;
+  end if;
+
+  select count(*) into v_count
+  from public.email_logs
+  where user_id = v_uid
+    and status in ('pending', 'sent')
+    and created_at >= now() - interval '30 days';
+  if v_count >= p_month_limit then
+    return null;
+  end if;
+
+  insert into public.email_logs (
+    user_id, quote_id, lead_id, follow_up_id,
+    recipient_email, subject, body, provider, status
+  )
+  values (
+    v_uid, p_quote_id, p_lead_id, p_follow_up_id,
+    p_recipient_email, p_subject, p_body, 'resend', 'pending'
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+grant execute on function public.insert_email_log_within_limits(
+  uuid, uuid, uuid, text, text, text, integer, integer
+) to authenticated;

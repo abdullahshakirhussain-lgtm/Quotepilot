@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  BellRing,
+  CalendarCheck,
   CheckCircle2,
   FileText,
   Loader2,
+  Mail,
   Plus,
   Search,
-  Send,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -17,10 +20,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Menu, MenuDivider, MenuItem, MenuLabel } from "@/components/ui/Menu";
 import { QuoteFormModal } from "./QuoteFormModal";
+import { NewQuoteModal, type QuoteCustomer } from "./NewQuoteModal";
+import { SendDraftQuoteModal } from "./SendDraftQuoteModal";
+import { AddCustomerEmailModal } from "./AddCustomerEmailModal";
+import { HowItWorks } from "./HowItWorks";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import type { QuoteStatus } from "@/lib/constants";
-import type { Lead, Quote, QuoteWithLead } from "@/lib/types";
-import { cn, formatCurrency } from "@/lib/utils";
+import type { Quote, QuoteWithLead } from "@/lib/types";
+import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { followUpUrgency } from "@/lib/follow-up-state";
 import { deleteQuote, markQuoteSent, setQuoteStatus } from "@/app/(app)/quotes/actions";
 
@@ -29,7 +36,7 @@ const OPEN: QuoteStatus[] = ["sent", "follow_up_due", "negotiating"];
 type Tab = "open" | "draft" | "won" | "lost" | "all";
 const TABS: { key: Tab; label: string; match: (s: QuoteStatus) => boolean }[] = [
   { key: "open", label: "Open", match: (s) => OPEN.includes(s) },
-  { key: "draft", label: "Drafts", match: (s) => s === "draft" },
+  { key: "draft", label: "Not sent", match: (s) => s === "draft" },
   { key: "won", label: "Won", match: (s) => s === "accepted" },
   { key: "lost", label: "Lost", match: (s) => s === "rejected" },
   { key: "all", label: "All", match: () => true },
@@ -37,27 +44,27 @@ const TABS: { key: Tab; label: string; match: (s: QuoteStatus) => boolean }[] = 
 
 type Tone = "overdue" | "today" | "upcoming" | "muted" | "won" | "lost";
 
-/** The one-line "what's next" for a quote, in plain language. */
+/** The one-line "where this quote stands", in plain language. */
 function nextStep(q: QuoteWithLead, today: string): { text: string; tone: Tone } {
   if (q.status === "draft") return { text: "Not sent yet", tone: "muted" };
   if (q.status === "accepted") return { text: "Won", tone: "won" };
   if (q.status === "rejected") return { text: "Lost", tone: "lost" };
   if (q.status === "expired") return { text: "Expired", tone: "muted" };
+
   const u = followUpUrgency(q.next_follow_up_at, today);
   if (u.level === "overdue") {
-    return { text: `Follow-up overdue by ${u.days} day${u.days === 1 ? "" : "s"}`, tone: "overdue" };
-  }
-  if (u.level === "today") return { text: "Follow up today", tone: "today" };
-  if (u.level === "upcoming") {
     return {
-      text: u.days === 1 ? "Next follow-up tomorrow" : `Next follow-up in ${u.days} days`,
-      tone: "upcoming",
+      text: `Waiting for customer · follow-up overdue by ${u.days} day${u.days === 1 ? "" : "s"}`,
+      tone: "overdue",
     };
   }
-  return { text: "No reminder scheduled", tone: "muted" };
+  if (u.level === "today") return { text: "Waiting for customer · follow up today", tone: "today" };
+  // Nothing is due, so the date goes in the quieter line underneath instead.
+  if (u.level === "upcoming") return { text: "Waiting for customer", tone: "upcoming" };
+  return { text: "Waiting for customer · no follow-up scheduled", tone: "muted" };
 }
 
-/** Most urgent first: overdue, today, upcoming, drafts, then closed quotes. */
+/** Most urgent first: overdue, today, upcoming, not sent, then closed quotes. */
 function priority(q: QuoteWithLead, today: string): number {
   if (OPEN.includes(q.status)) {
     const u = followUpUrgency(q.next_follow_up_at, today);
@@ -85,32 +92,39 @@ const TEXT: Record<Tone, string> = {
 
 export function QuotesClient({
   quotes,
-  leads,
+  customers,
   defaultCurrency,
+  business,
+  emailEnabled,
   initialNewLeadId,
   openNew,
   today,
 }: {
   quotes: QuoteWithLead[];
-  leads: Pick<Lead, "id" | "customer_name" | "company_name">[];
+  customers: QuoteCustomer[];
   defaultCurrency: string;
+  business: { name: string; ownerName: string | null; email: string | null };
+  emailEnabled: boolean;
   initialNewLeadId?: string;
   /** Opened from "New quote" elsewhere in the app (?new=1). */
   openNew?: boolean;
   /** Viewer's local date from the server. */
   today: string;
 }) {
+  const router = useRouter();
   const hasOpen = quotes.some((q) => OPEN.includes(q.status));
   const [tab, setTab] = useState<Tab>(hasOpen ? "open" : "all");
   const [query, setQuery] = useState("");
   const [showNew, setShowNew] = useState(Boolean(openNew || initialNewLeadId));
   const [editing, setEditing] = useState<Quote | null>(null);
   const [aiFor, setAiFor] = useState<QuoteWithLead | null>(null);
+  const [sendDraft, setSendDraft] = useState<QuoteWithLead | null>(null);
+  const [addEmailFor, setAddEmailFor] = useState<QuoteWithLead | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 6000);
+    const t = setTimeout(() => setToast(null), 8000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -162,7 +176,7 @@ export function QuotesClient({
               waiting on {counts.open} open {counts.open === 1 ? "quote" : "quotes"}
             </>
           ) : (
-            "Every quote you send, and what happens next."
+            "Send a quote, or track one you already sent."
           )
         }
         actions={
@@ -175,25 +189,28 @@ export function QuotesClient({
       {toast && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
           <span className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> {toast}
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> {toast}
           </span>
-          <Link href="/follow-ups" className="font-medium underline-offset-2 hover:underline">
+          <Link href="/follow-ups" className="shrink-0 font-medium underline-offset-2 hover:underline">
             View follow-ups
           </Link>
         </div>
       )}
 
       {quotes.length === 0 ? (
-        <EmptyState
-          icon={<FileText className="h-5 w-5" />}
-          title="Create your first quote"
-          description="Add who it's for and what you quoted. QuoteLoop reminds you when to follow up and drafts the message."
-          action={
-            <button className="btn-primary" onClick={() => setShowNew(true)}>
-              <Plus className="h-4 w-4" /> New quote
-            </button>
-          }
-        />
+        <div className="space-y-4">
+          <HowItWorks />
+          <EmptyState
+            icon={<FileText className="h-5 w-5" />}
+            title="Add your first quote"
+            description="Send it with QuoteLoop, or track one you already sent. Either way, QuoteLoop schedules the follow-ups."
+            action={
+              <button className="btn-primary" onClick={() => setShowNew(true)}>
+                <Plus className="h-4 w-4" /> New quote
+              </button>
+            }
+          />
+        </div>
       ) : (
         <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -240,8 +257,13 @@ export function QuotesClient({
                   key={quote.id}
                   quote={quote}
                   today={today}
+                  emailEnabled={emailEnabled}
                   onEdit={() => setEditing(quote)}
                   onWrite={() => setAiFor(quote)}
+                  onSendQuote={() => setSendDraft(quote)}
+                  onAddEmail={() => setAddEmailFor(quote)}
+                  onViewFollowUps={() => router.push("/follow-ups")}
+                  onTracked={() => setToast("Quote marked as sent. Follow-up reminders are scheduled.")}
                 />
               ))}
             </ul>
@@ -250,26 +272,55 @@ export function QuotesClient({
       )}
 
       {showNew && (
-        <QuoteFormModal
-          leads={leads}
+        <NewQuoteModal
+          customers={customers}
           defaultCurrency={defaultCurrency}
           today={today}
-          preselectLeadId={initialNewLeadId}
+          business={business}
+          emailEnabled={emailEnabled}
+          preselectCustomerId={initialNewLeadId}
           onClose={closeNew}
           onSaved={(message) => {
             setToast(message);
             setTab("all");
+          }}
+          onWriteFollowUp={(quoteId) => {
+            closeNew();
+            const quote = quotes.find((q) => q.id === quoteId);
+            if (quote) setAiFor(quote);
           }}
         />
       )}
       {editing && (
         <QuoteFormModal
           quote={editing}
-          leads={leads}
+          leads={customers}
           defaultCurrency={defaultCurrency}
           today={today}
           onClose={() => setEditing(null)}
           onSaved={setToast}
+        />
+      )}
+      {addEmailFor?.lead && (
+        <AddCustomerEmailModal
+          customerId={addEmailFor.lead.id}
+          customerName={addEmailFor.lead.customer_name}
+          onClose={() => setAddEmailFor(null)}
+          onSaved={() => {
+            setAddEmailFor(null);
+            setToast("Email address saved. You can send this quote from QuoteLoop now.");
+            // The list is server-rendered, so refresh before offering the send.
+            router.refresh();
+          }}
+        />
+      )}
+      {sendDraft && (
+        <SendDraftQuoteModal
+          quote={sendDraft}
+          business={business}
+          today={today}
+          onClose={() => setSendDraft(null)}
+          onSent={setToast}
         />
       )}
       {aiFor && (
@@ -295,19 +346,42 @@ export function QuotesClient({
 function QuoteRow({
   quote,
   today,
+  emailEnabled,
   onEdit,
   onWrite,
+  onSendQuote,
+  onAddEmail,
+  onViewFollowUps,
+  onTracked,
 }: {
   quote: QuoteWithLead;
   today: string;
+  emailEnabled: boolean;
   onEdit: () => void;
   onWrite: () => void;
+  onSendQuote: () => void;
+  onAddEmail: () => void;
+  onViewFollowUps: () => void;
+  onTracked: () => void;
 }) {
   const [pending, start] = useTransition();
   const step = nextStep(quote, today);
   const isOpen = OPEN.includes(quote.status);
+  const isDraft = quote.status === "draft";
+  // "Urgent" decides which action leads: chase the customer, or just look.
   const urgent = step.tone === "overdue" || step.tone === "today";
+  const hasCustomerEmail = Boolean(quote.lead?.email?.trim());
+  const canEmailQuote = emailEnabled && hasCustomerEmail;
   const run = (fn: () => Promise<void>) => start(async () => await fn());
+
+  // Why a draft can't be emailed, in the user's terms.
+  const draftHint = !isDraft
+    ? null
+    : !emailEnabled
+      ? "Email sending is not configured. You can still track a quote you sent elsewhere."
+      : !hasCustomerEmail
+        ? "Add an email address to send this quote from QuoteLoop, or mark it as already sent if you sent it elsewhere."
+        : null;
 
   return (
     <li className="relative flex flex-col gap-3 py-3.5 pl-5 pr-3 sm:flex-row sm:items-center">
@@ -325,12 +399,23 @@ function QuoteRow({
           </span>
           <span className="text-stone-300">/</span>
           <span className={TEXT[step.tone]}>{step.text}</span>
+          {isOpen && urgent && quote.next_follow_up_at && (
+            <span className="text-stone-400">· {formatDate(quote.next_follow_up_at)}</span>
+          )}
           {quote.follow_up_count > 0 && (
             <span className="text-stone-400">
               · {quote.follow_up_count} follow-up{quote.follow_up_count === 1 ? "" : "s"} sent
             </span>
           )}
+          {quote.sent_method && <span className="text-stone-400">· sent by {quote.sent_method}</span>}
         </div>
+        {draftHint && <p className="mt-0.5 text-xs text-stone-500">{draftHint}</p>}
+        {isOpen && !urgent && quote.next_follow_up_at && (
+          <p className="mt-0.5 text-xs text-stone-500">
+            Next follow-up: {formatDate(quote.next_follow_up_at)} ·{" "}
+            {relativeDay(quote.next_follow_up_at, today)}
+          </p>
+        )}
       </div>
 
       <div className="num text-right text-[15px] font-semibold text-stone-900 sm:w-32">
@@ -340,13 +425,51 @@ function QuoteRow({
       <div className="flex shrink-0 flex-wrap items-center gap-1 sm:flex-nowrap sm:justify-end">
         {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
 
-        {quote.status === "draft" && (
-          <button className="btn-primary" disabled={pending} onClick={() => run(() => markQuoteSent(quote.id))}>
-            <Send className="h-4 w-4" /> Mark sent
-          </button>
+        {/* Drafts: one obvious way forward, whether or not we can email it. */}
+        {isDraft && (
+          <>
+            {canEmailQuote && (
+              <button className="btn-accent" disabled={pending} onClick={onSendQuote}>
+                <Mail className="h-4 w-4" /> Send quote email
+              </button>
+            )}
+            {emailEnabled && !hasCustomerEmail && (
+              <button className="btn-primary" disabled={pending} onClick={onAddEmail}>
+                <Mail className="h-4 w-4" /> Add customer email
+              </button>
+            )}
+            <button
+              className={canEmailQuote || (emailEnabled && !hasCustomerEmail) ? "btn-secondary" : "btn-primary"}
+              disabled={pending}
+              title="Record that you sent this quote yourself"
+              onClick={() =>
+                run(async () => {
+                  await markQuoteSent(quote.id);
+                  onTracked();
+                })
+              }
+            >
+              <CalendarCheck className="h-4 w-4" /> I already sent this
+            </button>
+          </>
         )}
+        {/* Sent: chasing leads when a follow-up is due, looking when it isn't. */}
         {isOpen && (
           <>
+            {urgent ? (
+              <>
+                <button className="btn-accent" disabled={pending} onClick={onWrite}>
+                  <Sparkles className="h-4 w-4" /> Write follow-up
+                </button>
+                <button className="btn-secondary" disabled={pending} onClick={onViewFollowUps}>
+                  <BellRing className="h-4 w-4" /> View follow-ups
+                </button>
+              </>
+            ) : (
+              <button className="btn-secondary" disabled={pending} onClick={onViewFollowUps}>
+                <BellRing className="h-4 w-4" /> View follow-ups
+              </button>
+            )}
             <button
               className="btn-ghost text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
               disabled={pending}
@@ -360,9 +483,6 @@ function QuoteRow({
               onClick={() => run(() => setQuoteStatus(quote.id, "rejected"))}
             >
               <XCircle className="h-4 w-4" /> Lost
-            </button>
-            <button className={urgent ? "btn-accent" : "btn-primary"} disabled={pending} onClick={onWrite}>
-              <Sparkles className="h-4 w-4" /> Write follow-up
             </button>
           </>
         )}
@@ -384,6 +504,7 @@ function QuoteRow({
 
         <Menu>
           <MenuItem onClick={onEdit}>Edit quote</MenuItem>
+          {isOpen && !urgent && <MenuItem onClick={onWrite}>Write early follow-up</MenuItem>}
           <MenuDivider />
           <MenuLabel>Status</MenuLabel>
           {!isOpen && quote.status !== "draft" && (
@@ -407,7 +528,12 @@ function QuoteRow({
           <MenuItem
             danger
             onClick={() => {
-              if (window.confirm(`Delete "${quote.title}"? Its follow-ups and messages are deleted too.`)) {
+              if (
+                window.confirm(
+                  `Delete "${quote.title}"? Its follow-ups and messages are deleted too. ` +
+                    "Records of emails QuoteLoop already sent are kept."
+                )
+              ) {
                 run(() => deleteQuote(quote.id));
               }
             }}
