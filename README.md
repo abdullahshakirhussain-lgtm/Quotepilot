@@ -96,10 +96,12 @@ npm run dev
 > Open Supabase → SQL Editor, paste the file, Run. It is idempotent and safe to
 > re-run on a live database. This release depends on it: it adds
 > `quotes.sent_method`, makes `email_logs.quote_id` / `lead_id` nullable so
-> sent-email history survives a deleted quote, and installs the
+> sent-email history survives a deleted quote, installs the
 > `insert_email_log_within_limits` function that stops two simultaneous sends
-> from passing the same limit. Deploy the code **after** the schema has been
-> applied.
+> from passing the same limit, and locks each email log's recipient, subject,
+> body and timestamp once written. Deploy the code **after** the schema has been
+> applied. Already ran it for an earlier build of this update? Run it again —
+> the email-log column lock was added afterwards.
 
 ```bash
 npm run build && npm start
@@ -206,12 +208,18 @@ and every email needs an explicit click.
 - **Audit and logging:** every attempt is written to `email_logs` **before**
   sending, then marked `sent` or `failed`. The reminder is marked done only after
   the provider accepts the email, and it stores the final (edited) text. Users can
-  read their log but can't edit or delete entries, and deleting a quote or
-  customer detaches its entries rather than removing them.
+  read their log but can't delete entries or change who an email went to, what it
+  said or when it was logged (only an unfinished attempt's outcome columns can be
+  written), and deleting a quote or customer detaches its entries rather than
+  removing them.
 - **Unclear outcomes:** if Resend doesn't answer clearly (a timeout or dropped
-  connection), the attempt stays `pending`, shows as "delivery not confirmed", and
-  the assistant won't offer an immediate resend. Check the Resend dashboard
-  (Emails) to see whether it went out.
+  connection), the attempt stays `pending` and shows as "delivery not confirmed".
+- **One email per quote and per reminder.** The server refuses to email a draft
+  quote again once a quote email for it was sent or left unconfirmed, and refuses
+  to email a reminder again once an email for it was. The user is told to use
+  “I already sent this” / “Mark as followed up”, or to copy the text and send it
+  themselves. Check the Resend dashboard (Emails) to see whether an unconfirmed
+  one went out.
 - **Limits:** 25 emails per user in any 24 hours and 100 in any 30 days (sent and
   unconfirmed attempts count; rejected ones don't). AI drafts are limited to 50
   per user in any 24 hours.
@@ -223,8 +231,9 @@ and every email needs an explicit click.
   window — a safety net for that gap, not a configuration to run on.
 - **Schema (required):** `supabase/schema.sql` must be re-run before this
   release is deployed. It adds `email_logs`, the send-limit function and
-  `quotes.sent_method`, and stops sent-email records from being deleted along
-  with their quote. Deploying without it degrades quietly rather than crashing —
+  `quotes.sent_method`, stops sent-email records from being deleted along with
+  their quote, and locks email logs' audit columns. Deploying without it degrades
+  quietly rather than crashing —
   how a quote was sent isn't recorded, email history still disappears with its
   quote, and send limits fall back to the weaker check — so treat it as part of
   the deploy, not a follow-up task.
@@ -295,7 +304,8 @@ database is safe and leaves existing rows untouched.
   record's `quote_id` / `lead_id` to null instead of deleting it, so a record of
   an email that really was sent survives — for the user's own history, and so
   the send limits can't be reset by deleting things. There is still no delete
-  policy on the table; only deleting the account clears those rows.
+  policy on the table; only deleting the account clears those rows. The privacy
+  policy says the same.
 
 ### Status values
 

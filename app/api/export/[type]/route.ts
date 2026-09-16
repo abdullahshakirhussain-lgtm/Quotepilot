@@ -41,7 +41,7 @@ export async function GET(
       "notes",
       "created_at",
     ]);
-    filename = "quoteloop-leads.csv";
+    filename = "quoteloop-customers.csv";
   } else if (type === "quotes") {
     const { data, error } = await supabase
       .from("quotes")

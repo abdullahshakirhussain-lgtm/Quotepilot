@@ -176,11 +176,15 @@ export async function clearAllData(): Promise<ActionState> {
   const supabase = await createClient();
 
   // Children first, so a failure part-way never leaves orphaned references.
+  const labels = { messages: "messages", follow_ups: "follow-ups", quotes: "quotes", leads: "customers" };
   for (const table of ["messages", "follow_ups", "quotes", "leads"] as const) {
     const { error } = await supabase.from(table).delete().eq("user_id", user.id);
     if (error) {
+      console.error(`[settings] clearing ${table} failed:`, error.message);
       revalidateAll();
-      return { error: `Could not delete ${table.replace("_", "-")}: ${error.message}` };
+      return {
+        error: `QuoteLoop couldn't finish deleting your data (it stopped at your ${labels[table]}). Anything already deleted stays deleted. Please try again.`,
+      };
     }
   }
 

@@ -56,11 +56,20 @@ export async function resolveCustomerRecord(
     if (error) throw new Error(error.message);
     const emailKey = typedEmail?.toLowerCase();
     const phoneKey = digitsOnly(phone);
-    const match = (existing ?? []).find(
-      (l) =>
-        (emailKey && l.email?.trim().toLowerCase() === emailKey) ||
-        (phoneKey.length >= 7 && digitsOnly(l.phone) === phoneKey)
-    );
+    const rows = existing ?? [];
+    const byEmail = emailKey ? rows.find((l) => l.email?.trim().toLowerCase() === emailKey) : undefined;
+    // A shared phone number (an office line, a family phone) must never send the
+    // email somewhere other than the address that was typed and previewed, so a
+    // phone match only counts when that customer has no email yet or the same one.
+    const byPhone =
+      phoneKey.length >= 7
+        ? rows.find(
+            (l) =>
+              digitsOnly(l.phone) === phoneKey &&
+              (!emailKey || !l.email?.trim() || l.email.trim().toLowerCase() === emailKey)
+          )
+        : undefined;
+    const match = byEmail ?? byPhone;
     if (match) {
       // Same customer, new quote. Add the email if we now have one.
       if (typedEmail && !match.email?.trim()) {

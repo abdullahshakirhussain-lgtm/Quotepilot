@@ -17,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effectiveDate="September 15, 2026"
+      effectiveDate="September 16, 2026"
       intro={
         <>
           <p>
@@ -121,8 +121,9 @@ export default function PrivacyPage() {
 
       <LegalSection title="Emails sent from QuoteLoop">
         <p>
-          You can send a follow-up email from inside QuoteLoop. QuoteLoop never sends emails
-          automatically: an email is only sent when you click Send email, one email per click.
+          You can send a quote email or a follow-up email from inside QuoteLoop. QuoteLoop never
+          sends emails automatically: an email is only sent when you click Send quote email or Send
+          email, one email per click.
         </p>
         <p>
           Emails are delivered by Resend to the email address saved for that customer. Each email
@@ -204,7 +205,7 @@ export default function PrivacyPage() {
             "to run your account and show your quotes, customers, reminders and stats",
             "to sign you in, including with Google if you choose it",
             "to write AI drafts when you ask for one",
-            "to send a follow-up email when you click Send email",
+            "to send a quote or follow-up email when you click to send it",
             "to send account emails, such as sign-up confirmation",
             "to keep QuoteLoop secure, prevent abuse (for example, with sending limits) and fix problems",
             "to answer your questions and requests",
@@ -237,6 +238,7 @@ export default function PrivacyPage() {
           items={[
             "You can delete individual records, such as customers and quotes, at any time.",
             "In Settings, you can clear all your customers, quotes, follow-ups and messages at once. Your business profile stays until your account is deleted.",
+            "Records of emails you sent from QuoteLoop are kept when you delete a quote or customer, or clear your data, so your sending history and sending limits stay accurate. They are deleted when your account is deleted.",
             "In Settings, you can export your quotes, follow-ups and customers as CSV files.",
             <>
               To delete your whole account, email <ContactEmail />.

@@ -43,6 +43,27 @@ export default async function QuotesPage({
     lead: Array.isArray(q.lead) ? (q.lead[0] ?? null) : (q.lead ?? null),
   }));
 
+  // A draft whose quote email already went out (or may have) must not offer to
+  // send it again. The server refuses anyway; this keeps the card honest.
+  const earlierQuoteEmails: Record<string, "sent" | "pending"> = {};
+  const draftIds = quotes.filter((q) => q.status === "draft").map((q) => q.id);
+  if (draftIds.length) {
+    const { data: attempts, error: attemptsError } = await supabase
+      .from("email_logs")
+      .select("quote_id, status")
+      .eq("user_id", user.id)
+      .in("quote_id", draftIds)
+      .in("status", ["pending", "sent"]);
+    if (attemptsError) {
+      console.error("[quotes] earlier quote emails unavailable:", attemptsError.message);
+    }
+    for (const a of attempts ?? []) {
+      if (a.status === "sent" || !earlierQuoteEmails[a.quote_id]) {
+        earlierQuoteEmails[a.quote_id] = a.status as "sent" | "pending";
+      }
+    }
+  }
+
   return (
     <QuotesClient
       quotes={quotes}
@@ -54,6 +75,7 @@ export default async function QuotesPage({
         email: businessRes.data?.email ?? null,
       }}
       emailEnabled={emailConfig() !== null}
+      earlierQuoteEmails={earlierQuoteEmails}
       initialNewLeadId={preselectLeadId}
       openNew={openNew === "1"}
       today={await requestToday()}

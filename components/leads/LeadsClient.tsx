@@ -146,7 +146,7 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                             <ConfirmButton
                               className="btn-ghost px-2 py-1 text-stone-400 hover:bg-red-50 hover:text-red-700"
                               title="Delete customer"
-                              confirmMessage={`Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too.`}
+                              confirmMessage={`Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too. Records of emails QuoteLoop already sent are kept.`}
                               action={deleteLead.bind(null, lead.id)}
                             >
                               <Trash2 className="h-4 w-4" />

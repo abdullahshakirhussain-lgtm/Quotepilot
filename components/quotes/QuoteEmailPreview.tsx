@@ -31,9 +31,10 @@ export function QuoteEmailPreview({
   return (
     <div className="space-y-3">
       <div className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
-        <div className="flex items-center gap-3 px-3 py-2">
+        <div className="flex items-start gap-3 px-3 py-2">
           <span className="w-16 shrink-0 text-stone-500">To</span>
-          <span className="truncate font-medium text-stone-800">{to}</span>
+          {/* Wraps rather than truncates: the whole address must be checkable. */}
+          <span className="min-w-0 font-medium text-stone-800 [overflow-wrap:anywhere]">{to}</span>
         </div>
         <div className="flex items-center gap-3 px-3 py-1.5">
           <label htmlFor="quote-subject" className="w-16 shrink-0 text-stone-500">
@@ -47,9 +48,9 @@ export function QuoteEmailPreview({
             onChange={(e) => onSubjectChange(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3 px-3 py-2">
+        <div className="flex items-start gap-3 px-3 py-2">
           <span className="w-16 shrink-0 text-stone-500">From</span>
-          <span className="truncate text-stone-700">
+          <span className="min-w-0 text-stone-700 [overflow-wrap:anywhere]">
             {businessName || "Your business"} via QuoteLoop
             {replyTo ? ` · replies go to ${replyTo}` : ""}
           </span>

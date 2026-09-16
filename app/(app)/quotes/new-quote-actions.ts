@@ -12,6 +12,7 @@ import { applyQuoteStatusChange } from "@/lib/quote-state";
 import { requestToday } from "@/lib/request-time";
 import { resolveCustomerRecord } from "@/lib/quote-write";
 import {
+  MarkSentError,
   sendQuoteCore,
   trackQuoteCore,
   type CustomerRecord,
@@ -33,6 +34,40 @@ function missingColumn(error: { message: string; code?: string }, column: string
     (error.code === "PGRST204" || error.code === "42703" || /column|schema cache/i.test(error.message)) &&
     error.message.includes(column)
   );
+}
+
+/** A send that stopped before anything went out; says whether a draft was kept. */
+function stoppedBeforeSending(e: unknown): QuoteFlowOutcome {
+  const quoteId = (e as { savedQuoteId?: string } | null)?.savedQuoteId;
+  return quoteId
+    ? {
+        ok: false,
+        quoteSaved: true,
+        quoteId,
+        error: "QuoteLoop couldn't send the quote just now, so nothing was sent. Your quote is saved as a draft, so you can try again.",
+      }
+    : { ok: false, error: "QuoteLoop couldn't send the quote just now, so nothing was sent. Please try again." };
+}
+
+/**
+ * The most telling earlier quote email for a quote: "sent" if one went out,
+ * "pending" if one was never confirmed, otherwise null. Failed attempts don't
+ * count — they definitely didn't go out.
+ */
+async function earlierQuoteEmail(
+  supabase: SupabaseClient,
+  uid: string,
+  quoteId: string
+): Promise<"sent" | "pending" | null> {
+  const { data, error } = await supabase
+    .from("email_logs")
+    .select("status")
+    .eq("quote_id", quoteId)
+    .eq("user_id", uid)
+    .in("status", ["pending", "sent"]);
+  check(error, "email history lookup");
+  const statuses = (data ?? []).map((r) => r.status);
+  return statuses.includes("sent") ? "sent" : statuses.includes("pending") ? "pending" : null;
 }
 
 function revalidateViews() {
@@ -81,22 +116,27 @@ function quoteDeps(supabase: SupabaseClient, uid: string): TrackQuoteDeps {
       return data!.id as string;
     },
     async markSent(quoteId, leadId, scheduleFrom) {
+      // The quote's date is the day it actually went out, matching its reminders.
       const { error } = await supabase
         .from("quotes")
-        .update({ status: "sent" })
+        .update({ status: "sent", quote_date: scheduleFrom })
         .eq("id", quoteId)
         .eq("user_id", uid);
-      check(error, "marking the quote sent");
-      // Same path as the status buttons: schedules reminders, moves the
-      // customer along the pipeline and re-derives the quote's counters.
-      await applyQuoteStatusChange(
-        supabase,
-        uid,
-        { id: quoteId, lead_id: leadId },
-        "draft",
-        "sent",
-        { scheduleFrom }
-      );
+      if (error) throw new MarkSentError("status", error.message);
+      try {
+        // Same path as the status buttons: schedules reminders, moves the
+        // customer along the pipeline and re-derives the quote's counters.
+        await applyQuoteStatusChange(
+          supabase,
+          uid,
+          { id: quoteId, lead_id: leadId },
+          "draft",
+          "sent",
+          { scheduleFrom }
+        );
+      } catch (e) {
+        throw new MarkSentError("schedule", e);
+      }
     },
     async getSchedule(quoteId) {
       const { data, error } = await supabase
@@ -182,10 +222,7 @@ export async function sendQuoteWithQuoteLoop(input: QuoteFields): Promise<QuoteF
   } catch (e) {
     // Only steps BEFORE the send can throw here, so nothing went out.
     console.error("[quotes] send flow stopped before sending:", e);
-    return {
-      ok: false,
-      error: "QuoteLoop couldn't send the quote just now, so nothing was sent. Please try again.",
-    };
+    return stoppedBeforeSending(e);
   }
 }
 
@@ -214,6 +251,27 @@ export async function sendDraftQuoteEmail(input: {
     if (!quote) return { ok: false, error: "Quote not found." };
     if (quote.status !== "draft") {
       return { ok: false, error: "This quote is already marked as sent." };
+    }
+
+    // Never send the same quote twice. While a quote is a draft, any email logged
+    // against it is an earlier attempt to send this quote.
+    const earlier = await earlierQuoteEmail(supabase, user.id, String(quote.id));
+    if (earlier === "sent") {
+      return {
+        ok: false,
+        locked: true,
+        error:
+          "This quote email was already sent from QuoteLoop, so it won't be sent again. Use “I already sent this” on the quote to start its follow-up reminders.",
+      };
+    }
+    if (earlier === "pending") {
+      return {
+        ok: false,
+        locked: true,
+        unconfirmed: true,
+        error:
+          "QuoteLoop couldn't confirm whether an earlier attempt to send this quote was delivered, so it may already have reached your customer. To avoid sending it twice, it won't be sent again from here. If they have it, use “I already sent this”; if not, copy the email and send it yourself.",
+      };
     }
 
     const { data: customer, error: leadError } = await supabase
@@ -255,10 +313,7 @@ export async function sendDraftQuoteEmail(input: {
     return outcome;
   } catch (e) {
     console.error("[quotes] draft send stopped before sending:", e);
-    return {
-      ok: false,
-      error: "QuoteLoop couldn't send the quote just now, so nothing was sent. Please try again.",
-    };
+    return stoppedBeforeSending(e);
   }
 }
 

@@ -10,6 +10,7 @@ import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { QuoteDonePanel } from "./QuoteDonePanel";
 import {
+  sendDraftQuoteEmail,
   sendQuoteWithQuoteLoop,
   trackQuoteAlreadySent,
 } from "@/app/(app)/quotes/new-quote-actions";
@@ -113,6 +114,9 @@ export function NewQuoteModal({
   const [error, setError] = useState<string | null>(null);
   // An unclear send outcome must not offer a second send.
   const [sendLocked, setSendLocked] = useState(false);
+  // Set once a failed send has saved the quote as a draft: retries send that
+  // draft instead of creating a second quote.
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [result, setResult] = useState<Success | null>(null);
   const [busy, startAction] = useTransition();
 
@@ -191,9 +195,11 @@ export function NewQuoteModal({
       let outcome: Outcome;
       try {
         outcome =
-          kind === "send"
-            ? await sendQuoteWithQuoteLoop(fields())
-            : await trackQuoteAlreadySent(fields());
+          kind === "track"
+            ? await trackQuoteAlreadySent(fields())
+            : savedDraftId
+              ? await sendDraftQuoteEmail({ quoteId: savedDraftId, subject, message: body })
+              : await sendQuoteWithQuoteLoop(fields());
       } catch (e) {
         unstable_rethrow(e); // e.g. the session expired: let Next redirect to login
         if (kind === "send") setSendLocked(true);
@@ -205,7 +211,8 @@ export function NewQuoteModal({
         return;
       }
       if (!outcome.ok) {
-        if (outcome.unconfirmed) setSendLocked(true);
+        if (outcome.quoteId) setSavedDraftId(outcome.quoteId);
+        if (outcome.unconfirmed || outcome.locked) setSendLocked(true);
         setError(outcome.error);
         return;
       }
@@ -226,6 +233,7 @@ export function NewQuoteModal({
     setResult(null);
     setError(null);
     setSendLocked(false);
+    setSavedDraftId(null);
     setCustomerMode("new");
     setLeadId("");
     setCustomerName("");
@@ -588,9 +596,16 @@ export function NewQuoteModal({
           {errorBox}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
-            <button type="button" className="btn-ghost" onClick={() => setStep("form")} disabled={busy}>
-              Back to details
-            </button>
+            {savedDraftId ? (
+              <p className="max-w-xs text-xs text-stone-500">
+                Your quote is saved as a draft. To change its details, close this and edit it on the Quotes
+                page.
+              </p>
+            ) : (
+              <button type="button" className="btn-ghost" onClick={() => setStep("form")} disabled={busy}>
+                Back to details
+              </button>
+            )}
             <button
               type="button"
               className="btn-accent"

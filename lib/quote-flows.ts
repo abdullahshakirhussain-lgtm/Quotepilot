@@ -75,8 +75,12 @@ export type QuoteFlowOutcome =
       error: string;
       /** The provider never answered clearly: the email may still go out. */
       unconfirmed?: boolean;
+      /** Sending again must not be offered (it went out, or may have). */
+      locked?: boolean;
       /** The quote was saved (as a draft) even though the email wasn't sent. */
       quoteSaved?: boolean;
+      /** That saved draft, so a retry sends it instead of creating another. */
+      quoteId?: string;
     }
   | {
       ok: true;
@@ -99,6 +103,24 @@ export function parseAmount(value: string | number | null | undefined): number |
   const n = typeof value === "number" ? value : Number(String(value ?? "").replace(/[, ]/g, ""));
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Thrown by markSent: "status" when the quote couldn't be marked as sent (it is
+ * still a draft), "schedule" when it was marked sent but its reminders weren't.
+ */
+export class MarkSentError extends Error {
+  constructor(
+    readonly stage: "status" | "schedule",
+    cause: unknown
+  ) {
+    super(`marking the quote sent failed at ${stage}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "MarkSentError";
+  }
+}
+
+function markSentStage(e: unknown): "status" | "schedule" {
+  return (e as { stage?: string } | null)?.stage === "schedule" ? "schedule" : "status";
 }
 
 /** True when any scheduled reminder has already come due. */
@@ -298,10 +320,14 @@ export async function sendQuoteCore(
       status: "pending",
     });
   } catch (e) {
-    if (!isEmailQuotaError(e)) throw e;
+    if (!isEmailQuotaError(e)) {
+      // Nothing was sent, but the draft exists: let the caller say so.
+      throw Object.assign(e instanceof Error ? e : new Error(String(e)), { savedQuoteId: quoteId });
+    }
     return {
       ok: false,
       quoteSaved: true,
+      quoteId,
       error: `${e.message} Your quote is saved as a draft and was not marked as sent.`,
     };
   }
@@ -322,6 +348,7 @@ export async function sendQuoteCore(
         ok: false,
         unconfirmed: true,
         quoteSaved: true,
+        quoteId,
         error: `We couldn't confirm the quote email was sent: ${result.reason}. It may still reach the customer, so sending it again could send it twice. The quote is saved as a draft and was not marked as sent.`,
       };
     }
@@ -329,6 +356,7 @@ export async function sendQuoteCore(
     return {
       ok: false,
       quoteSaved: true,
+      quoteId,
       error: `The quote email was not sent. Nothing was marked as sent. (${result.reason}.) Your quote is saved as a draft, so you can try again.`,
     };
   }
@@ -348,9 +376,11 @@ export async function sendQuoteCore(
   try {
     // The send just happened, so today is the day the customer got it.
     await deps.markSent(quoteId, customer.id, today);
-  } catch {
+  } catch (e) {
     warnings.push(
-      "The quote email was sent, but the quote is still saved as a draft and no follow-up reminders were scheduled."
+      markSentStage(e) === "schedule"
+        ? "The quote email was sent and the quote is marked as sent, but its follow-up reminders couldn't be scheduled."
+        : "The quote email was sent, but the quote couldn't be marked as sent, so no follow-up reminders were scheduled. QuoteLoop won't send it again: use “I already sent this” on the quote to start its reminders."
     );
   }
 

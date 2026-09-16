@@ -16,7 +16,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      effectiveDate="September 15, 2026"
+      effectiveDate="September 16, 2026"
       intro={
         <>
           <p>
@@ -50,7 +50,7 @@ export default function TermsPage() {
             "export CSV files",
           ]}
         />
-        <p>QuoteLoop never sends emails automatically. You click Send email each time.</p>
+        <p>QuoteLoop never sends emails automatically. You click Send quote email or Send email each time.</p>
       </LegalSection>
 
       <LegalSection title="Accounts">
@@ -143,8 +143,9 @@ export default function TermsPage() {
         <p>
           In Settings, you can export your quotes, follow-ups and customers as CSV files, and clear
           all your customers, quotes, follow-ups and messages. You can also delete individual
-          records at any time. To delete your whole account, email <ContactEmail />. See our Privacy
-          Policy for details.
+          records at any time. Records of emails you sent from QuoteLoop are kept until your account
+          is deleted. To delete your whole account, email <ContactEmail />. See our Privacy Policy
+          for details.
         </p>
       </LegalSection>
 

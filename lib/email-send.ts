@@ -5,6 +5,8 @@
 //
 // Order matters:
 //   1. validate + ownership (deps only ever return the caller's own rows)
+//   1b. one email per reminder: stop if this reminder was already emailed, or
+//       an earlier attempt was never confirmed
 //   2. rate limit (checked here for a fast answer, and enforced again by the
 //      log write, which claims a slot so two sends at once can't both pass)
 //   3. write a 'pending' audit log  -> if this fails, nothing is sent
@@ -52,6 +54,11 @@ export interface SendDeps {
   getBusiness(): Promise<{ business_name: string; email: string | null } | null>;
   countRecentEmails(): Promise<{ day: number; month: number }>;
   getPendingFollowUp(quoteId: string): Promise<{ id: string; follow_up_number: number } | null>;
+  /**
+   * An earlier email for this reminder: "sent" if one went out, "pending" if one
+   * was never confirmed, null if none (failed attempts don't count).
+   */
+  getEarlierAttempt(followUpId: string): Promise<"sent" | "pending" | null>;
   /** Writes the log AND claims a send slot; throws EmailQuotaError if at a limit. */
   insertLog(row: EmailLogInsert): Promise<string>;
   updateLog(id: string, patch: EmailLogPatch): Promise<void>;
@@ -68,6 +75,8 @@ export type SendOutcome =
       error: string;
       /** No clear answer from the provider: the email may have gone out anyway. */
       unconfirmed?: boolean;
+      /** Sending this reminder again must not be offered. */
+      locked?: boolean;
     }
   | {
       ok: true;
@@ -105,6 +114,28 @@ export async function sendFollowUpEmailCore(
     return { ok: false, error: "Add a valid email address to this customer to send from QuoteLoop." };
   }
 
+  const pending = await deps.getPendingFollowUp(quote.id);
+
+  // One email per reminder: never send one that already went out, or may have.
+  if (pending) {
+    const earlier = await deps.getEarlierAttempt(pending.id);
+    if (earlier === "sent") {
+      return {
+        ok: false,
+        locked: true,
+        error: `Follow-up #${pending.follow_up_number} was already emailed from QuoteLoop, so it won't be sent again. Use “Mark as followed up” to record it.`,
+      };
+    }
+    if (earlier === "pending") {
+      return {
+        ok: false,
+        locked: true,
+        unconfirmed: true,
+        error: `QuoteLoop couldn't confirm whether an earlier email for follow-up #${pending.follow_up_number} was delivered, so it may already have reached your customer. To avoid sending it twice, it won't be sent again. If they didn't get it, copy the message, send it yourself and use “Mark as followed up”.`,
+      };
+    }
+  }
+
   const limit = quotaError(await deps.countRecentEmails());
   if (limit) return { ok: false, error: limit };
 
@@ -113,7 +144,6 @@ export async function sendFollowUpEmailCore(
   const subject = cleanSubject(input.subject, quote.title);
   const text = composeEmailText(message, businessName);
   const replyTo = isValidEmail(business?.email) ? business!.email!.trim() : deps.config.replyToFallback;
-  const pending = await deps.getPendingFollowUp(quote.id);
 
   // Audit first: if the log can't be written, nothing is sent.
   let logId: string;

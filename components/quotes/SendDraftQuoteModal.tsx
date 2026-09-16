@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
 import { sendDraftQuoteEmail } from "@/app/(app)/quotes/new-quote-actions";
@@ -53,7 +54,7 @@ export function SendDraftQuoteModal({
       try {
         const outcome = await sendDraftQuoteEmail({ quoteId: quote.id, subject, message: body });
         if (!outcome.ok) {
-          if (outcome.unconfirmed) setLocked(true);
+          if (outcome.unconfirmed || outcome.locked) setLocked(true);
           setError(outcome.error);
           return;
         }
@@ -95,6 +96,11 @@ export function SendDraftQuoteModal({
         {error && (
           <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
             {error}
+            {locked && (
+              <div className="mt-2">
+                <CopyButton text={body} label="Copy email" className="btn-secondary" />
+              </div>
+            )}
           </div>
         )}
 

@@ -29,7 +29,7 @@ export default async function SettingsPage() {
           <h2 className="text-[15px] font-semibold text-stone-900">Business profile</h2>
           <p className="mb-5 mt-0.5 text-sm text-stone-500">
             Used to sign AI-drafted follow-ups. The reminder schedule applies to
-            quotes you mark as sent from now on.
+            quotes you send or track from now on.
           </p>
           <BusinessForm action={updateBusiness} initial={business} submitLabel="Save changes" />
         </section>

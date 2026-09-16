@@ -323,6 +323,15 @@ create policy "email_logs_update" on public.email_logs
     )
   );
 
+-- Only an attempt's outcome can be written through the API. Who an email went
+-- to, what it said and when it was logged are fixed once written, so neither
+-- the audit trail nor the send-limit window can be rewritten. (Deleting a quote
+-- or customer still clears the links: foreign-key actions aren't limited by
+-- these column grants.)
+revoke update on table public.email_logs from authenticated, anon;
+grant update (status, provider_message_id, sent_at, error_message)
+  on table public.email_logs to authenticated;
+
 -- ===========================================================================
 -- Upgrade for workspaces created before sent-email history was detachable.
 -- Re-running is safe: the column changes are no-ops once applied.
@@ -361,6 +370,7 @@ create or replace function public.insert_email_log_within_limits(
   p_month_limit integer
 ) returns uuid
 language plpgsql
+set search_path = ''
 as $$
 declare
   v_uid uuid := (select auth.uid());

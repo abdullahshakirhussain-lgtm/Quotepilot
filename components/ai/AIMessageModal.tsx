@@ -190,8 +190,9 @@ export function AIMessageModal({
         };
       }
       if (!r.ok) {
-        // After an unclear outcome, don't offer a resend that could duplicate it.
-        if (r.unconfirmed) {
+        // After an unclear outcome, or when this reminder was already emailed,
+        // don't offer a resend that could duplicate it.
+        if (r.unconfirmed || r.locked) {
           setSendLocked(true);
           loadHistory();
         }

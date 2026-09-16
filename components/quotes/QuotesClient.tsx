@@ -96,6 +96,7 @@ export function QuotesClient({
   defaultCurrency,
   business,
   emailEnabled,
+  earlierQuoteEmails = {},
   initialNewLeadId,
   openNew,
   today,
@@ -105,6 +106,8 @@ export function QuotesClient({
   defaultCurrency: string;
   business: { name: string; ownerName: string | null; email: string | null };
   emailEnabled: boolean;
+  /** Drafts whose quote email already went out ("sent") or was never confirmed. */
+  earlierQuoteEmails?: Record<string, "sent" | "pending">;
   initialNewLeadId?: string;
   /** Opened from "New quote" elsewhere in the app (?new=1). */
   openNew?: boolean;
@@ -258,12 +261,15 @@ export function QuotesClient({
                   quote={quote}
                   today={today}
                   emailEnabled={emailEnabled}
+                  earlierEmail={earlierQuoteEmails[quote.id] ?? null}
                   onEdit={() => setEditing(quote)}
                   onWrite={() => setAiFor(quote)}
                   onSendQuote={() => setSendDraft(quote)}
                   onAddEmail={() => setAddEmailFor(quote)}
                   onViewFollowUps={() => router.push("/follow-ups")}
-                  onTracked={() => setToast("Quote marked as sent. Follow-up reminders are scheduled.")}
+                  onTracked={() =>
+                    setToast("Follow-up tracking started. Reminders are counted from today.")
+                  }
                 />
               ))}
             </ul>
@@ -347,6 +353,7 @@ function QuoteRow({
   quote,
   today,
   emailEnabled,
+  earlierEmail,
   onEdit,
   onWrite,
   onSendQuote,
@@ -357,6 +364,7 @@ function QuoteRow({
   quote: QuoteWithLead;
   today: string;
   emailEnabled: boolean;
+  earlierEmail: "sent" | "pending" | null;
   onEdit: () => void;
   onWrite: () => void;
   onSendQuote: () => void;
@@ -371,17 +379,24 @@ function QuoteRow({
   // "Urgent" decides which action leads: chase the customer, or just look.
   const urgent = step.tone === "overdue" || step.tone === "today";
   const hasCustomerEmail = Boolean(quote.lead?.email?.trim());
-  const canEmailQuote = emailEnabled && hasCustomerEmail;
+  // An earlier attempt went out, or may have: sending again could duplicate it.
+  const alreadyAttempted = earlierEmail !== null;
+  const canEmailQuote = emailEnabled && hasCustomerEmail && !alreadyAttempted;
+  const offerAddEmail = emailEnabled && !hasCustomerEmail && !alreadyAttempted;
   const run = (fn: () => Promise<void>) => start(async () => await fn());
 
   // Why a draft can't be emailed, in the user's terms.
   const draftHint = !isDraft
     ? null
-    : !emailEnabled
-      ? "Email sending is not configured. You can still track a quote you sent elsewhere."
-      : !hasCustomerEmail
-        ? "Add an email address to send this quote from QuoteLoop, or mark it as already sent if you sent it elsewhere."
-        : null;
+    : earlierEmail === "sent"
+      ? "The quote email was already sent from QuoteLoop, so it won't be sent again. Use “I already sent this” to start its follow-ups."
+      : earlierEmail === "pending"
+        ? "QuoteLoop couldn't confirm an earlier quote email was delivered, so it won't send it again. If the customer has it, use “I already sent this”."
+        : !emailEnabled
+          ? "Email sending is not configured. You can still track a quote you sent elsewhere."
+          : !hasCustomerEmail
+            ? "Add an email address to send this quote from QuoteLoop, or mark it as already sent if you sent it elsewhere."
+            : null;
 
   return (
     <li className="relative flex flex-col gap-3 py-3.5 pl-5 pr-3 sm:flex-row sm:items-center">
@@ -433,13 +448,13 @@ function QuoteRow({
                 <Mail className="h-4 w-4" /> Send quote email
               </button>
             )}
-            {emailEnabled && !hasCustomerEmail && (
+            {offerAddEmail && (
               <button className="btn-primary" disabled={pending} onClick={onAddEmail}>
                 <Mail className="h-4 w-4" /> Add customer email
               </button>
             )}
             <button
-              className={canEmailQuote || (emailEnabled && !hasCustomerEmail) ? "btn-secondary" : "btn-primary"}
+              className={canEmailQuote || offerAddEmail ? "btn-secondary" : "btn-primary"}
               disabled={pending}
               title="Record that you sent this quote yourself"
               onClick={() =>

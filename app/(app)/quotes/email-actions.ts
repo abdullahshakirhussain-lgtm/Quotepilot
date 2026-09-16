@@ -74,6 +74,17 @@ export async function sendFollowUpEmail(input: {
           check(error, "reminder lookup");
           return data?.[0] ?? null;
         },
+        async getEarlierAttempt(followUpId) {
+          const { data, error } = await supabase
+            .from("email_logs")
+            .select("status")
+            .eq("follow_up_id", followUpId)
+            .eq("user_id", uid)
+            .in("status", ["pending", "sent"]);
+          check(error, "email history lookup");
+          const statuses = (data ?? []).map((r) => r.status);
+          return statuses.includes("sent") ? "sent" : statuses.includes("pending") ? "pending" : null;
+        },
         // Writes the audit log and claims a slot against the send limits.
         insertLog: insertLogWithinLimits(supabase, uid),
         async updateLog(id, patch) {
