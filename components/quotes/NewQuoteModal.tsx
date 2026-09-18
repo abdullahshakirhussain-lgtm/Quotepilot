@@ -11,6 +11,7 @@ import { cleanPasted, isValidEmail } from "@/lib/email-address";
 import { EARLIEST_SENT_DATE, LIMITS, MAX_AMOUNT } from "@/lib/quote-flows";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { QuoteDonePanel } from "./QuoteDonePanel";
+import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import {
   sendDraftQuoteEmail,
   sendQuoteWithQuoteLoop,
@@ -128,6 +129,9 @@ export function NewQuoteModal({
   // pressing the button again with the same details saves it anyway.
   const [duplicateBasis, setDuplicateBasis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The "add a business email first" refusal, so its way out shows only under it.
+  const [businessEmailError, setBusinessEmailError] = useState<string | null>(null);
+  const needsBusinessEmail = error !== null && error === businessEmailError;
   // An unclear send outcome must not offer a second send.
   const [sendLocked, setSendLocked] = useState(false);
   // Set once a failed send has saved the quote as a draft: retries send that
@@ -313,6 +317,7 @@ export function NewQuoteModal({
         if (outcome.unconfirmed || outcome.locked) setSendLocked(true);
         // Show where it would go now; pressing Send again confirms that address.
         if (outcome.recipientChanged) setOverride({ basis: recipientBasis, to: outcome.recipientChanged });
+        if (outcome.needsBusinessEmail) setBusinessEmailError(outcome.error);
         // Shown once; pressing the button again with the same details saves it anyway.
         if (outcome.duplicate) {
           setDuplicateBasis(
@@ -390,6 +395,26 @@ export function NewQuoteModal({
   const errorBox = error && (
     <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
       {error}
+      {needsBusinessEmail && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <AddBusinessEmailButton unsaved={savedDraftId ? bodyEdited : dirty} />
+          {/* Not once a draft is saved: tracking would add a second quote. */}
+          {!savedDraftId && (
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={busy}
+              onClick={() => {
+                setFlow("track");
+                setStep("form");
+                setError(null);
+              }}
+            >
+              Track this quote instead
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -422,11 +447,17 @@ export function NewQuoteModal({
             ) : (
               !canSendEmail && (
                 <span className="mt-2 block text-xs text-stone-500">
-                  Add your business email in Settings first, so your customer&apos;s replies come to you.
+                  Add your business email in Settings before sending from QuoteLoop.
                 </span>
               )
             )}
           </button>
+          {emailEnabled && !canSendEmail && (
+            <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <AddBusinessEmailButton unsaved={dirty} />
+              <span className="text-xs text-stone-500">Or track a quote you already sent:</span>
+            </div>
+          )}
 
           <button
             type="button"

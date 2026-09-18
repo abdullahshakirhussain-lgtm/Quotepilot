@@ -123,7 +123,7 @@ export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
 
 export const FOLLOW_UP_STATUS_LABELS: Record<FollowUpStatus, string> = {
   pending: "Pending",
-  completed: "Done",
+  completed: "Followed up",
   skipped: "Skipped",
 };
 

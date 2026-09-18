@@ -89,6 +89,8 @@ export type SendOutcome =
        * Nothing was sent; this is the address a new attempt would go to.
        */
       recipientChanged?: string;
+      /** Nothing was sent because the business has no working email to reply to. */
+      needsBusinessEmail?: boolean;
     }
   | {
       ok: true;
@@ -192,7 +194,7 @@ export async function sendFollowUpEmailCore(
   // Replies go to the business; without a real address they'd be lost.
   const business = await deps.getBusiness();
   const replyTo = business?.email?.trim() ?? "";
-  if (!isValidEmail(replyTo)) return { ok: false, error: NEEDS_BUSINESS_EMAIL };
+  if (!isValidEmail(replyTo)) return { ok: false, needsBusinessEmail: true, error: NEEDS_BUSINESS_EMAIL };
 
   const limit = quotaError(await deps.countRecentEmails());
   if (limit) return { ok: false, error: limit };
@@ -254,11 +256,11 @@ export async function sendFollowUpEmailCore(
       return {
         ok: false,
         unconfirmed: true,
-        error: `We couldn't confirm the email was sent: ${result.reason}. It may still reach the customer, so sending it again could duplicate it. Nothing was marked as done.`,
+        error: `We couldn't confirm the email was sent: ${result.reason}. It may still reach the customer, so sending it again could duplicate it. No follow-up was recorded.`,
       };
     }
     await deps.updateLog(logId, { status: "failed", error_message: result.reason }).catch(() => {});
-    return { ok: false, error: `The email wasn't sent: ${result.reason}. Nothing was marked as done.` };
+    return { ok: false, error: `The email wasn't sent: ${result.reason}. No follow-up was recorded.` };
   }
 
   // The email is out. From here on we must never report failure.
@@ -281,7 +283,7 @@ export async function sendFollowUpEmailCore(
     completed = await deps.completeFollowUp(pending.id, message, sentAt);
   } catch {
     warnings.push(
-      "The email was sent, but the reminder couldn't be marked as done. Use “Mark as followed up” to record it."
+      "The email was sent, but the follow-up couldn't be recorded. Use “Mark as followed up” to record it."
     );
     return { ...base, followUpLogged: false, followUpNumber: null, needsManualLog: true, warning: warning() };
   }
@@ -296,7 +298,7 @@ export async function sendFollowUpEmailCore(
   }
 
   if (!completed) {
-    warnings.push("This reminder had already been marked done.");
+    warnings.push("This follow-up had already been recorded.");
     return { ...base, followUpLogged: false, followUpNumber: null, nextFollowUpAt, warning: warning() };
   }
   return {

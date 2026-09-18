@@ -99,6 +99,8 @@ export type QuoteFlowOutcome =
       duplicate?: boolean;
       /** The customer's saved address differs from the one previewed. Nothing was sent or saved. */
       recipientChanged?: string;
+      /** Nothing was sent because the business has no working email to reply to. */
+      needsBusinessEmail?: boolean;
     }
   | {
       ok: true;
@@ -418,7 +420,7 @@ export async function sendQuoteCore(
   // land somewhere the business never sees, so don't send at all.
   const business = await deps.getBusiness();
   const replyTo = business?.email?.trim() ?? "";
-  if (!isValidEmail(replyTo)) return { ok: false, error: NEEDS_BUSINESS_EMAIL };
+  if (!isValidEmail(replyTo)) return { ok: false, needsBusinessEmail: true, error: NEEDS_BUSINESS_EMAIL };
 
   const limit = quotaError(await deps.countRecentEmails());
   if (limit) return { ok: false, error: limit };

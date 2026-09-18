@@ -37,7 +37,7 @@ export { cleanPasted, isValidEmail } from "./email-address";
 
 /** Shown when email sending is attempted without a business email to reply to. */
 export const NEEDS_BUSINESS_EMAIL =
-  "Add a working business email in Settings first, so your customer's replies come to you. Nothing was sent.";
+  "Add your business email in Settings before sending from QuoteLoop. Nothing was sent.";
 
 /** The same mailbox, ignoring case, spaces and invisible pasted characters. */
 export function sameAddress(a: string | null | undefined, b: string | null | undefined): boolean {

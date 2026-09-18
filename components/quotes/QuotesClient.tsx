@@ -25,6 +25,7 @@ import { SendDraftQuoteModal } from "./SendDraftQuoteModal";
 import { AddCustomerEmailModal } from "./AddCustomerEmailModal";
 import { HowItWorks } from "./HowItWorks";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
+import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import type { QuoteStatus } from "@/lib/constants";
 import type { ActionResult, Quote, QuoteWithLead } from "@/lib/types";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
@@ -401,6 +402,8 @@ function QuoteRow({
   const sendingReady = emailEnabled && businessEmailOk;
   const canEmailQuote = sendingReady && hasCustomerEmail && !alreadyAttempted;
   const offerAddEmail = sendingReady && !hasCustomerEmail && !alreadyAttempted;
+  // Sending is only blocked on the business email: a direct way to add it.
+  const offerBusinessEmail = emailEnabled && !businessEmailOk && !alreadyAttempted;
   const run = (fn: () => Promise<ActionResult>, onDone?: () => void) =>
     start(async () => {
       setRowError(null);
@@ -424,7 +427,7 @@ function QuoteRow({
         : !emailEnabled
           ? "Email sending is not configured. You can still track a quote you sent elsewhere."
           : !businessEmailOk
-            ? "Add your business email in Settings to send quotes from QuoteLoop, or mark this as already sent if you sent it elsewhere."
+            ? "Add your business email in Settings before sending from QuoteLoop, or use “I already sent this” if you sent it another way."
             : !hasCustomerEmail
             ? "Add an email address to send this quote from QuoteLoop, or mark it as already sent if you sent it elsewhere."
             : null;
@@ -491,8 +494,9 @@ function QuoteRow({
                 <Mail className="h-4 w-4" /> Add customer email
               </button>
             )}
+            {offerBusinessEmail && <AddBusinessEmailButton />}
             <button
-              className={canEmailQuote || offerAddEmail ? "btn-secondary" : "btn-primary"}
+              className={canEmailQuote || offerAddEmail || offerBusinessEmail ? "btn-secondary" : "btn-primary"}
               disabled={pending}
               title="Record that you sent this quote yourself"
               onClick={() => run(() => markQuoteSent(quote.id), onTracked)}

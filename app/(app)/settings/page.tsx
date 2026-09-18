@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ export?: string }>;
+  searchParams: Promise<{ export?: string; focus?: string }>;
 }) {
-  const { export: exportStatus } = await searchParams;
+  const { export: exportStatus, focus } = await searchParams;
   const user = await requireUser();
   const supabase = await createClient();
   const { data: business, error } = await supabase
@@ -36,7 +36,13 @@ export default async function SettingsPage({
             Used to sign AI-drafted follow-ups. The reminder schedule applies to
             quotes you send or track from now on.
           </p>
-          <BusinessForm action={updateBusiness} initial={business} submitLabel="Save changes" />
+          {/* ?focus=business-email: sent here from "Add business email". */}
+          <BusinessForm
+            action={updateBusiness}
+            initial={business}
+            submitLabel="Save changes"
+            highlightEmail={focus === "business-email"}
+          />
         </section>
 
         <section className="card p-5">

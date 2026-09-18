@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import {
   MESSAGE_TYPES,
   MESSAGE_TYPE_LABELS,
@@ -220,6 +221,8 @@ export function AIMessageModal({
         }
         // Show the address it would go to now; pressing Send again confirms it.
         if (r.recipientChanged) setRecipient(r.recipientChanged);
+        // The business email went missing meanwhile: offer the way to add it.
+        if (r.needsBusinessEmail) setReplyToReady(false);
         setBanner({ tone: r.unconfirmed || r.recipientChanged ? "warning" : "error", text: r.error });
         return;
       }
@@ -354,7 +357,7 @@ export function AIMessageModal({
               aria-expanded={adjusting}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              {adjusting ? "Done" : "Adjust"}
+              {adjusting ? "Hide options" : "Adjust"}
             </button>
           </div>
           {adjusting && (
@@ -510,28 +513,32 @@ export function AIMessageModal({
               </button>
             </div>
 
-            {!canEmail && (
-              <p className="text-xs text-stone-500">
-                {!emailEnabled ? (
-                  "Email sending isn't set up for this workspace, so copy the message and send it yourself."
-                ) : recipient && !replyToReady ? (
-                  <>
-                    Add a working business email in Settings to send from QuoteLoop, so your customer&apos;s replies
-                    come to you.{" "}
-                    <Link href="/settings" className="font-medium text-stone-700 underline-offset-2 hover:underline">
-                      Open Settings
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    Add an email address to this customer to send from QuoteLoop.{" "}
-                    <Link href="/leads" className="font-medium text-stone-700 underline-offset-2 hover:underline">
-                      Open Customers
-                    </Link>
-                  </>
-                )}
-              </p>
-            )}
+            {!canEmail &&
+              (!emailEnabled ? (
+                <p className="text-xs text-stone-500">
+                  Email sending isn&apos;t set up for this workspace, so copy the message and send it yourself.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {!replyToReady && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+                      <span>Add your business email in Settings before sending from QuoteLoop.</span>
+                      <AddBusinessEmailButton
+                        unsaved={edited && !emailSent && !followedUp}
+                        className="btn-secondary px-2.5 py-1 text-xs"
+                      />
+                    </div>
+                  )}
+                  {!recipient && (
+                    <p className="text-xs text-stone-500">
+                      Add an email address to this customer to send from QuoteLoop.{" "}
+                      <Link href="/leads" className="font-medium text-stone-700 underline-offset-2 hover:underline">
+                        Open Customers
+                      </Link>
+                    </p>
+                  )}
+                </div>
+              ))}
 
             {banner && (
               <div className={cn("rounded-md px-3 py-2 text-sm ring-1 ring-inset", bannerStyle[banner.tone])} role="status">
@@ -600,7 +607,7 @@ export function AIMessageModal({
                       </span>
                     ) : h.kind === "failed" ? (
                       <span className="truncate font-medium text-red-700">
-                        Email to {h.to} failed · nothing was marked done
+                        Email to {h.to} failed · no follow-up recorded
                       </span>
                     ) : (
                       <span className="font-medium text-stone-500">

@@ -5,6 +5,7 @@ import { unstable_rethrow } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
 import { sendDraftQuoteEmail } from "@/app/(app)/quotes/new-quote-actions";
@@ -44,6 +45,8 @@ export function SendDraftQuoteModal({
     })
   );
   const [error, setError] = useState<string | null>(null);
+  // The "add a business email first" refusal, so its way out shows only under it.
+  const [businessEmailError, setBusinessEmailError] = useState<string | null>(null);
   // Set once the email text or subject is changed, so closing by accident asks first.
   const [edited, setEdited] = useState(false);
   // An unclear outcome must not offer a second send.
@@ -65,6 +68,7 @@ export function SendDraftQuoteModal({
         if (!outcome.ok) {
           if (outcome.unconfirmed || outcome.locked) setLocked(true);
           if (outcome.recipientChanged) setRecipientOverride(outcome.recipientChanged);
+          if (outcome.needsBusinessEmail) setBusinessEmailError(outcome.error);
           setError(outcome.error);
           return;
         }
@@ -122,6 +126,11 @@ export function SendDraftQuoteModal({
             {locked && (
               <div className="mt-2">
                 <CopyButton text={body} label="Copy email" className="btn-secondary" />
+              </div>
+            )}
+            {error === businessEmailError && (
+              <div className="mt-2">
+                <AddBusinessEmailButton unsaved={edited} />
               </div>
             )}
           </div>

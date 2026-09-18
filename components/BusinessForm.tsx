@@ -11,18 +11,22 @@ import {
 import type { Business } from "@/lib/types";
 import type { ActionState } from "@/app/(app)/settings/actions";
 import { reportUnreachable } from "@/lib/form-action";
+import { cn } from "@/lib/utils";
 
 export function BusinessForm({
   action,
   initial,
   submitLabel,
   suggested,
+  highlightEmail = false,
 }: {
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   initial?: Business | null;
   submitLabel: string;
   /** Prefill for new workspaces (e.g. name and email from Google sign-in). */
   suggested?: { owner_name?: string; email?: string };
+  /** Arrived from "Add business email": pick out that field and put the cursor in it. */
+  highlightEmail?: boolean;
 }) {
   const save = useMemo(() => reportUnreachable(action), [action]);
   const [state, formAction, pending] = useActionState(save, {});
@@ -123,7 +127,10 @@ export function BusinessForm({
           />
         </div>
 
-        <div className="sm:col-span-2">
+        <div
+          id="business-email"
+          className={cn("sm:col-span-2", highlightEmail && "-m-3 rounded-lg bg-brand-50 p-3 ring-2 ring-brand-500")}
+        >
           <label htmlFor="email" className="label">
             Business email
           </label>
@@ -132,6 +139,7 @@ export function BusinessForm({
             name="email"
             type="email"
             className="input"
+            autoFocus={highlightEmail}
             defaultValue={initial?.email ?? suggested?.email ?? ""}
             placeholder="hello@yourbusiness.com"
           />

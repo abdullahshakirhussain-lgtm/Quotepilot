@@ -20,7 +20,7 @@ function revalidateViews() {
 /** Why a reminder can't move to `next` from where it already is. */
 function alreadyMessage(current: string): string {
   return current === "completed"
-    ? "This reminder was already marked done, maybe in another tab."
+    ? "This follow-up was already completed, maybe in another tab."
     : current === "skipped"
       ? "This reminder was already skipped: a follow-up you recorded covered it, or it was skipped in another tab."
       : "This reminder is still open.";

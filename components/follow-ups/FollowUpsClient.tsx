@@ -211,7 +211,7 @@ function FollowUpRow({
     shownError.current = message;
     setRowError(message);
   };
-  // A refused Done can refresh the page and move this reminder into the closed
+  // A refused "Mark followed up" can refresh the page and move this reminder into the closed
   // "Completed & skipped" list; its explanation then moves to the top.
   useEffect(
     () => () => {
@@ -220,7 +220,7 @@ function FollowUpRow({
     [onLostMessage]
   );
 
-  // A failed Done / Skip / Reopen is shown on this row, not as an error page.
+  // A failed "Mark followed up" / Skip / Reopen is shown on this row, not as an error page.
   const run = (fn: () => Promise<ActionResult>) =>
     start(async () => {
       showError(null);
@@ -290,7 +290,7 @@ function FollowUpRow({
               ? "Due today"
               : relativeDay(f.due_date, today).replace(/^./, (c) => c.toUpperCase())
             : f.completed_at
-              ? `Done ${formatDate(f.completed_at)}`
+              ? `Followed up ${formatDate(f.completed_at)}`
               : "Skipped"}
         </div>
         <div className="text-xs text-stone-400">{formatDate(f.due_date)}</div>
@@ -300,13 +300,18 @@ function FollowUpRow({
         {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
         {isPending ? (
           <>
+            {/* Records a follow-up the user made themselves; nothing is sent.
+                The shorter label keeps a phone's row of buttons on one line. */}
             <button
               className="btn-ghost text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
               disabled={pending}
               onClick={() => run(() => completeFollowUp(f.id))}
-              title="Mark as followed up without writing a message"
+              aria-label="Mark followed up"
+              title="Record that you followed up yourself. Nothing is sent."
             >
-              <Check className="h-4 w-4" /> Done
+              <Check className="h-4 w-4" />
+              <span className="sm:hidden">Followed up</span>
+              <span className="hidden sm:inline">Mark followed up</span>
             </button>
             <button className={urgent ? "btn-accent" : "btn-secondary"} disabled={pending} onClick={onWrite}>
               <Sparkles className="h-4 w-4" /> Write follow-up
