@@ -99,11 +99,11 @@ export function Sidebar({
             QuoteLoop
           </div>
           <div className="flex items-center gap-1">
-            <Link href="/quotes?new=1" className="btn-accent px-2.5 py-1 text-xs">
+            <Link href="/quotes?new=1" className="btn-accent tap px-2.5 py-1 text-xs">
               <Plus className="h-3.5 w-3.5" /> Quote
             </Link>
             <form action="/auth/signout" method="post">
-              <button className="rounded-md p-1.5 hover:bg-white/10" aria-label="Sign out">
+              <button className="tap inline-flex items-center justify-center rounded-md p-1.5 hover:bg-white/10" aria-label="Sign out">
                 <LogOut className="h-4 w-4" />
               </button>
             </form>
@@ -115,7 +115,7 @@ export function Sidebar({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+                "tap flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
                 isActive(item.href) ? "bg-white/10 text-white" : "hover:bg-white/5"
               )}
             >

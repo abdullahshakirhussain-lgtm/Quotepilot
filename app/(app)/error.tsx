@@ -24,8 +24,8 @@ export default function AppError({
           Something went wrong
         </h1>
         <p className="mt-1 text-sm text-stone-500">
-          We hit an unexpected error loading this page. Your data is safe — try
-          again.
+          If you were saving a change, it may not have gone through. Check your
+          connection, then try again.
         </p>
         <button onClick={reset} className="btn-primary mx-auto mt-6">
           <RotateCcw className="h-4 w-4" />

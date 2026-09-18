@@ -6,12 +6,13 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, requireUser } from "@/lib/supabase/server";
-import { emailConfig, isValidEmail, sendViaResend, type EmailConfig } from "@/lib/email";
-import { countRecentEmails, insertLogWithinLimits } from "@/lib/email-quota";
+import { cleanPasted, emailConfig, isValidEmail, sendViaResend, type EmailConfig } from "@/lib/email";
+import { countRecentEmails, emailLogWriter, sentRecently } from "@/lib/email-quota";
 import { applyQuoteStatusChange } from "@/lib/quote-state";
 import { requestToday } from "@/lib/request-time";
-import { resolveCustomerRecord } from "@/lib/quote-write";
+import { findSimilarQuote, isCustomerGoneError, resolveCustomerRecord } from "@/lib/quote-write";
 import {
+  LIMITS,
   MarkSentError,
   sendQuoteCore,
   trackQuoteCore,
@@ -36,8 +37,13 @@ function missingColumn(error: { message: string; code?: string }, column: string
   );
 }
 
+/** The customer picked in the form was deleted meanwhile (e.g. in another tab). */
+const CUSTOMER_GONE =
+  "The customer you picked no longer exists — they may have been deleted in another tab. Choose another customer, or add them as a new one.";
+
 /** A send that stopped before anything went out; says whether a draft was kept. */
 function stoppedBeforeSending(e: unknown): QuoteFlowOutcome {
+  if (isCustomerGoneError(e)) return { ok: false, error: `${CUSTOMER_GONE} Nothing was sent.` };
   const quoteId = (e as { savedQuoteId?: string } | null)?.savedQuoteId;
   return quoteId
     ? {
@@ -76,25 +82,36 @@ function revalidateViews() {
   }
 }
 
-/** Trim and cap everything that reaches the database. */
+/** Longest input read from the browser before validation looks at it. */
+const MAX_INPUT = 20_000;
+
+/**
+ * Bounds what the browser sends. Text is only capped far above the real
+ * limits, so anything too long is refused by validateQuote with a message
+ * instead of being quietly cut.
+ */
 function clean(input: QuoteFields, sentDate: string): QuoteFields {
   return {
     customerMode: input?.customerMode === "existing" ? "existing" : "new",
     leadId: input?.leadId ? String(input.leadId) : null,
-    customerName: clip(input?.customerName ?? "", 120),
-    email: clip(input?.email ?? "", 254),
-    phone: clip(input?.phone ?? "", 40),
-    companyName: clip(input?.companyName ?? "", 120),
-    title: clip(input?.title ?? "", 200),
+    customerName: clip(input?.customerName ?? "", MAX_INPUT),
+    // Pasted addresses and numbers often carry invisible characters.
+    email: clip(cleanPasted(input?.email), 320),
+    phone: clip(cleanPasted(input?.phone), MAX_INPUT),
+    companyName: clip(input?.companyName ?? "", MAX_INPUT),
+    title: clip(input?.title ?? "", MAX_INPUT),
     amount: input?.amount ?? "",
     currency: String(input?.currency ?? "USD"),
     sentDate,
-    validUntil: clip(input?.validUntil ?? "", 10) || null,
-    description: clip(input?.description ?? "", 1500) || null,
-    notes: clip(input?.notes ?? "", 500) || null,
+    validUntil: clip(input?.validUntil ?? "", 20) || null,
+    description: clip(input?.description ?? "", MAX_INPUT) || null,
+    notes: clip(input?.notes ?? "", MAX_INPUT) || null,
     sentMethod: clip(input?.sentMethod ?? "", 40) || null,
     subject: clip(input?.subject ?? "", 200),
-    message: clip(input?.message ?? "", 10_000),
+    message: clip(input?.message ?? "", MAX_INPUT),
+    // Compared with the saved address only; never used as the recipient.
+    expectedTo: clip(cleanPasted(input?.expectedTo), 320) || null,
+    allowDuplicate: input?.allowDuplicate === true,
   };
 }
 
@@ -149,6 +166,7 @@ function quoteDeps(supabase: SupabaseClient, uid: string): TrackQuoteDeps {
       check(error, "reading the follow-up schedule");
       return (data ?? []) as ScheduledFollowUp[];
     },
+    findExistingQuote: (f) => findSimilarQuote(supabase, uid, f),
   };
 }
 
@@ -157,6 +175,7 @@ function emailDeps(
   uid: string,
   config: EmailConfig | null
 ): Omit<SendQuoteDeps, keyof TrackQuoteDeps> {
+  const logs = emailLogWriter(supabase, uid);
   return {
     config,
     async getBusiness() {
@@ -169,11 +188,11 @@ function emailDeps(
       return data;
     },
     countRecentEmails: () => countRecentEmails(supabase, uid),
-    insertLog: insertLogWithinLimits(supabase, uid),
-    async updateLog(id, patch) {
-      const { error } = await supabase.from("email_logs").update(patch).eq("id", id).eq("user_id", uid);
-      check(error, "email log update");
-    },
+    sentRecently: (email) => sentRecently(supabase, uid, email),
+    // Writes the audit log and claims a slot; the outcome is recorded with the
+    // one-time token the database handed back, which stays on the server.
+    insertLog: (row) => logs.insert(row),
+    updateLog: (id, patch) => logs.update(id, patch),
     send: (email) => sendViaResend(config!, email),
     now: () => new Date(),
   };
@@ -189,11 +208,12 @@ export async function trackQuoteAlreadySent(input: QuoteFields): Promise<QuoteFl
   const today = await requestToday();
 
   try {
-    const fields = clean(input, String(input?.sentDate ?? "").slice(0, 10));
+    const fields = clean(input, String(input?.sentDate ?? "").slice(0, 20));
     const outcome = await trackQuoteCore(quoteDeps(supabase, user.id), fields, today);
-    if (outcome.ok) revalidateViews();
+    if (outcome.ok || (!outcome.ok && outcome.quoteSaved)) revalidateViews();
     return outcome;
   } catch (e) {
+    if (isCustomerGoneError(e)) return { ok: false, error: CUSTOMER_GONE };
     console.error("[quotes] tracking an existing quote failed:", e);
     return { ok: false, error: "The quote couldn't be saved just now. Please try again." };
   }
@@ -215,9 +235,20 @@ export async function sendQuoteWithQuoteLoop(input: QuoteFields): Promise<QuoteF
     const deps: SendQuoteDeps = {
       ...quoteDeps(supabase, user.id),
       ...emailDeps(supabase, user.id, config),
+      // Refused as a repeat after the draft was written: remove that new draft.
+      async discardDraft(quoteId) {
+        const { data, error } = await supabase
+          .from("quotes")
+          .delete()
+          .eq("id", quoteId)
+          .eq("user_id", user.id)
+          .eq("status", "draft")
+          .select("id");
+        return !error && Boolean(data?.length);
+      },
     };
     const outcome = await sendQuoteCore(deps, fields, today);
-    if (outcome.ok) revalidateViews();
+    if (outcome.ok || (!outcome.ok && outcome.quoteSaved)) revalidateViews();
     return outcome;
   } catch (e) {
     // Only steps BEFORE the send can throw here, so nothing went out.
@@ -234,6 +265,8 @@ export async function sendDraftQuoteEmail(input: {
   quoteId: string;
   subject: string;
   message: string;
+  /** The address the preview showed; if the saved one differs, nothing is sent. */
+  expectedTo?: string | null;
 }): Promise<QuoteFlowOutcome> {
   const user = await requireUser();
   const supabase = await createClient();
@@ -248,9 +281,11 @@ export async function sendDraftQuoteEmail(input: {
       .eq("user_id", user.id)
       .maybeSingle();
     check(error, "quote lookup");
-    if (!quote) return { ok: false, error: "Quote not found." };
+    if (!quote) {
+      return { ok: false, error: "This quote no longer exists (it may have been deleted in another tab), so nothing was sent." };
+    }
     if (quote.status !== "draft") {
-      return { ok: false, error: "This quote is already marked as sent." };
+      return { ok: false, locked: true, error: "This quote is already marked as sent, so the quote email wasn't sent again." };
     }
 
     // Never send the same quote twice. While a quote is a draft, any email logged
@@ -281,7 +316,14 @@ export async function sendDraftQuoteEmail(input: {
       .eq("user_id", user.id)
       .maybeSingle();
     check(leadError, "customer lookup");
-    if (!customer) return { ok: false, error: "Customer not found." };
+    if (!customer) return { ok: false, error: "This quote's customer no longer exists, so nothing was sent." };
+    if (!isValidEmail((customer as CustomerRecord).email)) {
+      return {
+        ok: false,
+        error:
+          "This customer doesn't have a valid email address any more, so the quote can't be sent. Add one on the Customers page, or use “I already sent this” if you sent it another way.",
+      };
+    }
 
     const deps: SendQuoteDeps = {
       ...quoteDeps(supabase, user.id),
@@ -297,19 +339,22 @@ export async function sendDraftQuoteEmail(input: {
       customerMode: "existing",
       leadId: quote.lead_id,
       email: (customer as CustomerRecord).email ?? "",
-      title: String(quote.title),
+      // Saved details aren't being edited here, so older, longer text on the
+      // quote must not block sending it.
+      title: String(quote.title).slice(0, LIMITS.title),
       amount: quote.amount as number,
       currency: String(quote.currency),
       sentDate: today,
       validUntil,
-      description: quote.description as string | null,
-      notes: quote.notes as string | null,
+      description: null,
+      notes: null,
       subject: clip(input?.subject ?? "", 200),
-      message: clip(input?.message ?? "", 10_000),
+      message: clip(input?.message ?? "", MAX_INPUT),
+      expectedTo: clip(cleanPasted(input?.expectedTo), 320) || null,
     };
 
     const outcome = await sendQuoteCore(deps, fields, today);
-    if (outcome.ok) revalidateViews();
+    if (outcome.ok || (!outcome.ok && outcome.quoteSaved)) revalidateViews();
     return outcome;
   } catch (e) {
     console.error("[quotes] draft send stopped before sending:", e);
@@ -327,7 +372,8 @@ export async function addCustomerEmail(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireUser();
   const supabase = await createClient();
-  const address = clip(email ?? "", 254).trim();
+  // Pasted addresses often carry invisible characters.
+  const address = cleanPasted(clip(email ?? "", 320));
   if (!isValidEmail(address)) {
     return { ok: false, error: "That email address doesn't look right. Check it and try again." };
   }

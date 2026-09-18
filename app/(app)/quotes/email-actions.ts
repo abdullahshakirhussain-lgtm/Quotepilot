@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { emailConfig, sendViaResend, MAX_BODY_LENGTH } from "@/lib/email";
-import { countRecentEmails, insertLogWithinLimits } from "@/lib/email-quota";
+import { countRecentEmails, emailLogWriter, sentRecently } from "@/lib/email-quota";
 import { sendFollowUpEmailCore, type SendOutcome } from "@/lib/email-send";
-import { recomputeQuoteFollowUpState } from "@/lib/quote-state";
+import { recomputeQuoteFollowUpState, skipRemindersCoveredBy } from "@/lib/quote-state";
+import { requestToday } from "@/lib/request-time";
 import { clip } from "@/lib/utils";
 
 function check(error: { message: string } | null, context: string) {
@@ -22,11 +23,16 @@ export async function sendFollowUpEmail(input: {
   quoteId: string;
   subject: string;
   message: string;
+  /** The address shown to the user; if the saved one differs, nothing is sent. */
+  expectedTo?: string | null;
+  /** The reminder that was due when the message was opened (null: none was). */
+  expectedFollowUpId?: string | null;
 }): Promise<SendOutcome> {
   const user = await requireUser();
   const supabase = await createClient();
   const uid = user.id;
   const config = emailConfig();
+  const logs = emailLogWriter(supabase, uid);
 
   try {
     const outcome = await sendFollowUpEmailCore(
@@ -62,6 +68,7 @@ export async function sendFollowUpEmail(input: {
           return data;
         },
         countRecentEmails: () => countRecentEmails(supabase, uid),
+        sentRecently: (email) => sentRecently(supabase, uid, email),
         async getPendingFollowUp(quoteId) {
           const { data, error } = await supabase
             .from("follow_ups")
@@ -85,16 +92,10 @@ export async function sendFollowUpEmail(input: {
           const statuses = (data ?? []).map((r) => r.status);
           return statuses.includes("sent") ? "sent" : statuses.includes("pending") ? "pending" : null;
         },
-        // Writes the audit log and claims a slot against the send limits.
-        insertLog: insertLogWithinLimits(supabase, uid),
-        async updateLog(id, patch) {
-          const { error } = await supabase
-            .from("email_logs")
-            .update(patch)
-            .eq("id", id)
-            .eq("user_id", uid);
-          check(error, "email log update");
-        },
+        // Writes the audit log and claims a slot against the send limits; the
+        // outcome is recorded with the token the database handed back.
+        insertLog: (row) => logs.insert(row),
+        updateLog: (id, patch) => logs.update(id, patch),
         async completeFollowUp(followUpId, finalText, at) {
           const { data, error } = await supabase
             .from("follow_ups")
@@ -106,9 +107,14 @@ export async function sendFollowUpEmail(input: {
             .eq("id", followUpId)
             .eq("user_id", uid)
             .eq("status", "pending")
-            .select("id");
+            .select("id, quote_id");
           check(error, "reminder update");
-          return (data?.length ?? 0) > 0;
+          const done = data?.[0];
+          if (done) {
+            // The email also covers the quote's other reminders already due.
+            await skipRemindersCoveredBy(supabase, uid, done.quote_id, followUpId, await requestToday());
+          }
+          return Boolean(done);
         },
         async recompute(quoteId) {
           const state = await recomputeQuoteFollowUpState(supabase, uid, quoteId);
@@ -121,6 +127,12 @@ export async function sendFollowUpEmail(input: {
         quoteId: String(input?.quoteId ?? ""),
         subject: String(input?.subject ?? ""),
         message: String(input?.message ?? ""),
+        expectedTo: typeof input?.expectedTo === "string" ? clip(input.expectedTo, 320) : null,
+        // Only a real id is an expectation; anything else means "none was shown".
+        expectedFollowUpId:
+          typeof input?.expectedFollowUpId === "string" && input.expectedFollowUpId
+            ? clip(input.expectedFollowUpId, 64)
+            : null,
       }
     );
 

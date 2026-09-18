@@ -2,13 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { BellRing, Check, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
-import type { FollowUpWithContext } from "@/lib/types";
+import type { ActionResult, FollowUpWithContext } from "@/lib/types";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { classifyFollowUp, type FollowUpBucket } from "@/lib/follow-up-state";
 import {
@@ -16,6 +17,10 @@ import {
   reopenFollowUp,
   skipFollowUp,
 } from "@/app/(app)/follow-ups/actions";
+
+/** A request that never reached the server: usually a dropped connection, or a session that ended in another tab. */
+const OFFLINE_OR_SIGNED_OUT =
+  "That didn't go through, so nothing changed. You may have lost your connection, or been signed out in another tab — refresh the page and try again.";
 
 const SECTIONS: { key: Exclude<FollowUpBucket, "done">; title: string; accent: string }[] = [
   { key: "overdue", title: "Overdue", accent: "text-red-700" },
@@ -27,12 +32,15 @@ export function FollowUpsClient({
   followUps,
   today,
   emailEnabled,
+  moreDone = false,
 }: {
   followUps: FollowUpWithContext[];
   /** Server-computed date so grouping matches the dashboard and SSR. */
   today: string;
   /** Whether this workspace can send email at all. */
   emailEnabled: boolean;
+  /** Older finished reminders exist beyond the ones listed. */
+  moreDone?: boolean;
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -109,7 +117,7 @@ export function FollowUpsClient({
           {groups.done.length > 0 && (
             <section>
               <button
-                className="mb-2 flex items-center gap-1 text-sm font-semibold text-stone-500 hover:text-stone-900"
+                className="tap mb-2 flex items-center gap-1 text-sm font-semibold text-stone-500 hover:text-stone-900"
                 onClick={() => setShowDone((v) => !v)}
                 aria-expanded={showDone}
               >
@@ -117,6 +125,11 @@ export function FollowUpsClient({
                 Completed & skipped
                 <span className="num rounded bg-stone-900/5 px-1.5 text-xs">{groups.done.length}</span>
               </button>
+              {showDone && moreDone && (
+                <p className="mb-2 text-xs text-stone-500">
+                  Showing the latest {groups.done.length}. Export follow-ups in Settings for the full history.
+                </p>
+              )}
               {showDone && (
                 <ul className="card divide-y divide-stone-100">
                   {groups.done.map((f) => (
@@ -167,13 +180,27 @@ function FollowUpRow({
   onWrite: () => void;
 }) {
   const [pending, start] = useTransition();
+  const [rowError, setRowError] = useState<string | null>(null);
   const bucket = classifyFollowUp(f, today);
+  // A failed Done / Skip / Reopen is shown on this row, not as an error page.
+  const run = (fn: () => Promise<ActionResult>) =>
+    start(async () => {
+      setRowError(null);
+      try {
+        const result = await fn();
+        if (!result.ok) setRowError(result.error);
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setRowError(OFFLINE_OR_SIGNED_OUT);
+      }
+    });
   const isPending = f.status === "pending";
   const canEmail = emailEnabled && Boolean(f.lead?.email?.trim());
   const urgent = bucket === "overdue" || bucket === "today";
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+    // Side by side from laptop width; below that the sidebar leaves too little room.
+    <li className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-medium text-stone-900">
@@ -193,6 +220,11 @@ function FollowUpRow({
             Add an email address to send from QuoteLoop, or copy the message.
           </p>
         )}
+        {rowError && (
+          <p role="alert" className="mt-1 text-sm text-red-700">
+            {rowError}
+          </p>
+        )}
         {f.status === "completed" && f.message_snapshot && (
           <p className="mt-1 line-clamp-1 border-l-2 border-emerald-400 pl-2 text-xs italic text-stone-500">
             Final text used: {f.message_snapshot}
@@ -200,7 +232,7 @@ function FollowUpRow({
         )}
       </div>
 
-      <div className="text-sm sm:w-36 sm:text-right">
+      <div className="text-sm lg:w-36 lg:text-right">
         <div
           className={cn(
             bucket === "overdue"
@@ -221,14 +253,14 @@ function FollowUpRow({
         <div className="text-xs text-stone-400">{formatDate(f.due_date)}</div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 sm:justify-end">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 lg:justify-end">
         {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
         {isPending ? (
           <>
             <button
               className="btn-ghost text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
               disabled={pending}
-              onClick={() => start(async () => await completeFollowUp(f.id))}
+              onClick={() => run(() => completeFollowUp(f.id))}
               title="Mark as followed up without writing a message"
             >
               <Check className="h-4 w-4" /> Done
@@ -237,7 +269,7 @@ function FollowUpRow({
               <Sparkles className="h-4 w-4" /> Write follow-up
             </button>
             <Menu>
-              <MenuItem onClick={() => start(async () => await skipFollowUp(f.id))}>
+              <MenuItem onClick={() => run(() => skipFollowUp(f.id))}>
                 Skip this reminder
               </MenuItem>
             </Menu>
@@ -248,7 +280,7 @@ function FollowUpRow({
               View messages
             </button>
             <Menu>
-              <MenuItem onClick={() => start(async () => await reopenFollowUp(f.id))}>
+              <MenuItem onClick={() => run(() => reopenFollowUp(f.id))}>
                 Reopen reminder
               </MenuItem>
             </Menu>

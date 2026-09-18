@@ -23,6 +23,11 @@ const OPENAI_BASE_URL = "https://api.openai.com/v1";
 // Never let a slow provider hang the request; fall back to a template instead.
 const AI_TIMEOUT_MS = 25_000;
 
+/** Whether a real AI provider is set up (without one, drafts come from templates). */
+export function aiProviderConfigured(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY);
+}
+
 /**
  * Generates a follow-up message. Picks a provider from whichever key is set
  * (Anthropic > DeepSeek > OpenAI-compatible) and always returns usable content,

@@ -6,14 +6,162 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isValidEmail } from "./email";
 import type { CustomerRecord, QuoteFields } from "./quote-flows";
+import { fetchAllRows } from "./supabase/fetch-all";
 import { clip } from "./utils";
 
 const digitsOnly = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
 
+/** Thrown when the customer picked in the form no longer exists (e.g. deleted in another tab). */
+export class CustomerGoneError extends Error {
+  readonly customerGone = true;
+  constructor() {
+    super("The selected customer was not found.");
+    this.name = "CustomerGoneError";
+  }
+}
+
+export function isCustomerGoneError(e: unknown): e is CustomerGoneError {
+  return typeof e === "object" && e !== null && (e as { customerGone?: unknown }).customerGone === true;
+}
+
+/**
+ * Whether two phone numbers are the same line. Spaces, dashes and brackets
+ * don't matter, and a number written with its country code ("+94 77 123 4567",
+ * "0094…") matches the same number written the local way ("077 123 4567").
+ *
+ * Deliberately strict, because a match reuses an existing customer: numbers
+ * need 7+ digits, and the local-vs-international match only applies when one
+ * of them really was written internationally, and what's left over is a 1–3
+ * digit country code. Two local numbers must match digit for digit.
+ */
+export function samePhone(a: string | null | undefined, b: string | null | undefined): boolean {
+  const da = digitsOnly(a);
+  const db = digitsOnly(b);
+  if (da.length < 7 || db.length < 7) return false;
+  if (da === db) return true;
+  return localMatchesInternational(a!, b!) || localMatchesInternational(b!, a!);
+}
+
+function localMatchesInternational(local: string, international: string): boolean {
+  const written = international.trim();
+  if (!written.startsWith("+") && !written.startsWith("00")) return false;
+  const full = digitsOnly(written).replace(/^00/, "");
+  // The local form, minus the one leading trunk zero many countries use.
+  const national = digitsOnly(local).replace(/^0/, "");
+  if (national.length < 7 || !full.endsWith(national)) return false;
+  const countryCode = full.length - national.length;
+  return countryCode >= 1 && countryCode <= 3;
+}
+
+type LeadRow = { id: string; customer_name: string; email: string | null; phone: string | null };
+
+/** Every one of the user's customers, not just the first page the API returns. */
+function listCustomers(supabase: SupabaseClient, userId: string): Promise<LeadRow[]> {
+  return fetchAllRows<LeadRow>((from, to) =>
+    supabase
+      .from("leads")
+      .select("id, customer_name, email, phone")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+}
+
+/**
+ * The saved customer a "new customer" entry refers to, found by email or phone,
+ * without changing anything. Matched in code, so user input never becomes a
+ * query filter.
+ */
+export async function findCustomerMatch(
+  supabase: SupabaseClient,
+  userId: string,
+  f: Pick<QuoteFields, "email" | "phone">,
+  customers?: LeadRow[]
+): Promise<LeadRow | null> {
+  const typedEmail = f.email?.trim() || null;
+  const phone = f.phone?.trim() || null;
+  if (!typedEmail && !phone) return null;
+
+  const rows = customers ?? (await listCustomers(supabase, userId));
+
+  const emailKey = typedEmail?.toLowerCase();
+  const byEmail = emailKey ? rows.find((l) => l.email?.trim().toLowerCase() === emailKey) : undefined;
+  // A shared phone number (an office line, a family phone) must never send the
+  // email somewhere other than the address that was typed and previewed, so a
+  // phone match only counts when that customer has no email yet or the same one.
+  const byPhone = phone
+    ? rows.find(
+        (l) =>
+          samePhone(l.phone, phone) &&
+          (!emailKey || !l.email?.trim() || l.email.trim().toLowerCase() === emailKey)
+      )
+    : undefined;
+  return byEmail ?? byPhone ?? null;
+}
+
+/**
+ * A saved quote that looks like the one being added: same title (ignoring
+ * case), amount and sent date, for the customer this entry would use — or, for
+ * a new customer with no email or phone to match on, one with the same name.
+ * Only used to warn; it never blocks and never creates anything.
+ */
+export async function findSimilarQuote(
+  supabase: SupabaseClient,
+  userId: string,
+  f: QuoteFields
+): Promise<{ title: string; customerName: string; sentDate: string } | null> {
+  let candidates: { id: string; customer_name: string }[];
+  if (f.customerMode === "existing") {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("id, customer_name")
+      .eq("id", String(f.leadId ?? ""))
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    candidates = data ? [data] : [];
+  } else {
+    const customers = await listCustomers(supabase, userId);
+    const match = await findCustomerMatch(supabase, userId, f, customers);
+    const name = f.customerName?.trim().toLowerCase() ?? "";
+    const nothingToMatchOn = !f.email?.trim() && !f.phone?.trim();
+    candidates = match
+      ? [match]
+      : nothingToMatchOn
+        ? customers.filter((c) => c.customer_name.trim().toLowerCase() === name)
+        : [];
+  }
+  if (!candidates.length) return null;
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("title, amount, quote_date, lead_id")
+    .eq("user_id", userId)
+    .eq("quote_date", f.sentDate)
+    .in(
+      "lead_id",
+      candidates.slice(0, 50).map((c) => c.id)
+    )
+    .limit(100);
+  if (error) throw new Error(error.message);
+
+  const title = f.title.trim().toLowerCase();
+  const amount = Math.round(Number(String(f.amount).replace(/[, ]/g, "")) * 100);
+  const hit = (data ?? []).find(
+    (q) => String(q.title).trim().toLowerCase() === title && Math.round(Number(q.amount) * 100) === amount
+  );
+  if (!hit) return null;
+  return {
+    title: String(hit.title),
+    customerName: candidates.find((c) => c.id === hit.lead_id)?.customer_name ?? "this customer",
+    sentDate: String(hit.quote_date),
+  };
+}
+
 /**
  * The chosen existing customer, or a new one created from the typed details.
- * A customer with the same email or phone is reused instead of duplicated
- * (matched in code, so user input never becomes a query filter).
+ * A customer with the same email or phone is reused instead of duplicated.
  */
 export async function resolveCustomerRecord(
   supabase: SupabaseClient,
@@ -30,7 +178,7 @@ export async function resolveCustomerRecord(
       .eq("user_id", userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    if (!data) throw new Error("The selected customer was not found.");
+    if (!data) throw new CustomerGoneError();
 
     // Fill in a missing email when the user supplied one to send the quote.
     if (typedEmail && !data.email?.trim() && isValidEmail(typedEmail)) {
@@ -48,41 +196,19 @@ export async function resolveCustomerRecord(
   const name = clip(f.customerName?.trim() ?? "", 120);
   const phone = f.phone?.trim() || null;
 
-  if (typedEmail || phone) {
-    const { data: existing, error } = await supabase
-      .from("leads")
-      .select("id, customer_name, email, phone")
-      .eq("user_id", userId);
-    if (error) throw new Error(error.message);
-    const emailKey = typedEmail?.toLowerCase();
-    const phoneKey = digitsOnly(phone);
-    const rows = existing ?? [];
-    const byEmail = emailKey ? rows.find((l) => l.email?.trim().toLowerCase() === emailKey) : undefined;
-    // A shared phone number (an office line, a family phone) must never send the
-    // email somewhere other than the address that was typed and previewed, so a
-    // phone match only counts when that customer has no email yet or the same one.
-    const byPhone =
-      phoneKey.length >= 7
-        ? rows.find(
-            (l) =>
-              digitsOnly(l.phone) === phoneKey &&
-              (!emailKey || !l.email?.trim() || l.email.trim().toLowerCase() === emailKey)
-          )
-        : undefined;
-    const match = byEmail ?? byPhone;
-    if (match) {
-      // Same customer, new quote. Add the email if we now have one.
-      if (typedEmail && !match.email?.trim()) {
-        const { error: updateError } = await supabase
-          .from("leads")
-          .update({ email: typedEmail })
-          .eq("id", match.id)
-          .eq("user_id", userId);
-        if (updateError) throw new Error(updateError.message);
-        return { id: match.id, customer_name: match.customer_name, email: typedEmail };
-      }
-      return { id: match.id, customer_name: match.customer_name, email: match.email ?? null };
+  const match = await findCustomerMatch(supabase, userId, f);
+  if (match) {
+    // Same customer, new quote. Add the email if we now have one.
+    if (typedEmail && !match.email?.trim()) {
+      const { error: updateError } = await supabase
+        .from("leads")
+        .update({ email: typedEmail })
+        .eq("id", match.id)
+        .eq("user_id", userId);
+      if (updateError) throw new Error(updateError.message);
+      return { id: match.id, customer_name: match.customer_name, email: typedEmail };
     }
+    return { id: match.id, customer_name: match.customer_name, email: match.email ?? null };
   }
 
   const { data: created, error: insertError } = await supabase

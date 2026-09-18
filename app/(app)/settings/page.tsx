@@ -9,7 +9,12 @@ import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ export?: string }>;
+}) {
+  const { export: exportStatus } = await searchParams;
   const user = await requireUser();
   const supabase = await createClient();
   const { data: business, error } = await supabase
@@ -39,6 +44,14 @@ export default async function SettingsPage() {
           <p className="mb-4 mt-0.5 text-sm text-stone-500">
             Download your records as CSV. Opens in Excel or Google Sheets.
           </p>
+          {exportStatus === "failed" && (
+            <div
+              role="alert"
+              className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200"
+            >
+              That export couldn&apos;t be created just now, so nothing was downloaded. Please try again.
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <a href="/api/export/quotes" className="btn-secondary">
               <Download className="h-4 w-4" /> Quotes
@@ -61,12 +74,12 @@ export default async function SettingsPage() {
           <DataControls />
         </section>
 
-        <p className="text-center text-xs text-stone-500">
-          <Link href="/privacy" className="hover:text-stone-800">
+        <p className="flex justify-center gap-3 text-center text-xs text-stone-500">
+          <Link href="/privacy" className="tap inline-flex items-center hover:text-stone-800">
             Privacy Policy
           </Link>
-          {" · "}
-          <Link href="/terms" className="hover:text-stone-800">
+          <span aria-hidden="true" className="self-center">·</span>
+          <Link href="/terms" className="tap inline-flex items-center hover:text-stone-800">
             Terms of Service
           </Link>
         </p>

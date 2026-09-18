@@ -252,6 +252,11 @@ create table if not exists public.email_logs (
   sent_at timestamptz
 );
 
+-- Added after the first release; safe to re-run. Hash of the one-time token
+-- that start_email_send hands to the server: only finish_email_send, given that
+-- token, can record how the send went (see below).
+alter table public.email_logs add column if not exists send_token_hash text;
+
 create index if not exists idx_email_logs_user_created on public.email_logs (user_id, created_at);
 create index if not exists idx_email_logs_quote on public.email_logs (quote_id);
 create index if not exists idx_email_logs_follow_up on public.email_logs (follow_up_id);
@@ -294,10 +299,13 @@ create policy "email_logs_insert" on public.email_logs
   );
 
 -- Only a 'pending' attempt can be resolved; finished entries are read-only.
+-- Attempts started by start_email_send carry a token hash and can only be
+-- resolved through finish_email_send, so this direct route is left open just
+-- for entries written before that function existed.
 drop policy if exists "email_logs_update" on public.email_logs;
 create policy "email_logs_update" on public.email_logs
   for update to authenticated
-  using ((select auth.uid()) = user_id and status = 'pending')
+  using ((select auth.uid()) = user_id and status = 'pending' and send_token_hash is null)
   with check (
     (select auth.uid()) = user_id
     and (
@@ -419,3 +427,163 @@ $$;
 grant execute on function public.insert_email_log_within_limits(
   uuid, uuid, uuid, text, text, text, integer, integer
 ) to authenticated;
+
+-- ===========================================================================
+-- Starting and finishing a send (replaces the function above for new code;
+-- that one stays so a build deployed before this schema keeps working).
+--
+-- start_email_send does everything that must not race, in ONE transaction
+-- behind the same per-user lock:
+--   * a reminder gets one email, and a draft quote gets one quote email;
+--   * the same email to the same person within p_repeat_minutes isn't sent
+--     again (a second tab, a repeated submit);
+--   * the send limits;
+--   * the 'pending' log itself, stamped with the hash of a one-time token.
+-- It returns {outcome: 'ok', id, token}, or {outcome: 'already_sent' |
+-- 'repeat' | 'limit'} with nothing written.
+--
+-- The token goes to the server that called it and never to the browser. Only
+-- finish_email_send, given that token, can record the outcome, so nobody can
+-- mark an email that really went out as failed through the API (to free up
+-- their send limit or rewrite the record).
+--
+-- start_email_send is security invoker: row-level security still applies, so
+-- it can only count and insert the caller's own rows. finish_email_send is
+-- security definer because direct updates of token-stamped rows are blocked;
+-- it checks the caller, the pending status and the token itself.
+-- ===========================================================================
+create or replace function public.start_email_send(
+  p_quote_id uuid,
+  p_lead_id uuid,
+  p_follow_up_id uuid,
+  p_recipient_email text,
+  p_subject text,
+  p_body text,
+  p_day_limit integer,
+  p_month_limit integer,
+  p_repeat_minutes integer,
+  p_quote_email boolean
+) returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_token text;
+  v_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  -- Held until this transaction ends, so this user's concurrent sends queue up.
+  perform pg_advisory_xact_lock(hashtext('quoteloop:email:' || v_uid::text)::bigint);
+
+  if p_follow_up_id is not null and exists (
+    select 1 from public.email_logs
+    where user_id = v_uid
+      and follow_up_id = p_follow_up_id
+      and status in ('pending', 'sent')
+  ) then
+    return jsonb_build_object('outcome', 'already_sent');
+  end if;
+
+  if coalesce(p_quote_email, false) and exists (
+    select 1 from public.email_logs
+    where user_id = v_uid
+      and quote_id = p_quote_id
+      and follow_up_id is null
+      and status in ('pending', 'sent')
+  ) then
+    return jsonb_build_object('outcome', 'already_sent');
+  end if;
+
+  if coalesce(p_repeat_minutes, 0) > 0 and exists (
+    select 1 from public.email_logs
+    where user_id = v_uid
+      and status in ('pending', 'sent')
+      and created_at >= now() - make_interval(mins => p_repeat_minutes)
+      and recipient_email = p_recipient_email
+      and subject = p_subject
+      and body = p_body
+  ) then
+    return jsonb_build_object('outcome', 'repeat');
+  end if;
+
+  if (
+    select count(*) from public.email_logs
+    where user_id = v_uid
+      and status in ('pending', 'sent')
+      and created_at >= now() - interval '24 hours'
+  ) >= p_day_limit or (
+    select count(*) from public.email_logs
+    where user_id = v_uid
+      and status in ('pending', 'sent')
+      and created_at >= now() - interval '30 days'
+  ) >= p_month_limit then
+    return jsonb_build_object('outcome', 'limit');
+  end if;
+
+  v_token := gen_random_uuid()::text;
+  insert into public.email_logs (
+    user_id, quote_id, lead_id, follow_up_id,
+    recipient_email, subject, body, provider, status, send_token_hash
+  )
+  values (
+    v_uid, p_quote_id, p_lead_id, p_follow_up_id,
+    p_recipient_email, p_subject, p_body, 'resend', 'pending',
+    encode(sha256(convert_to(v_token, 'UTF8')), 'hex')
+  )
+  returning id into v_id;
+
+  return jsonb_build_object('outcome', 'ok', 'id', v_id, 'token', v_token);
+end;
+$$;
+
+create or replace function public.finish_email_send(
+  p_log_id uuid,
+  p_token text,
+  p_status text,
+  p_provider_message_id text,
+  p_error_message text
+) returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_count integer;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+  -- 'pending' records an unclear outcome (e.g. a timeout) without closing it.
+  if p_status is null or p_status not in ('sent', 'failed', 'pending') then
+    raise exception 'invalid status';
+  end if;
+
+  update public.email_logs
+  set status = p_status,
+      provider_message_id = case when p_status = 'sent' then left(p_provider_message_id, 200) else provider_message_id end,
+      sent_at = case when p_status = 'sent' then now() else sent_at end,
+      error_message = case when p_status = 'sent' then error_message else left(p_error_message, 500) end
+  where id = p_log_id
+    and user_id = v_uid
+    and status = 'pending'
+    and send_token_hash is not null
+    and send_token_hash = encode(sha256(convert_to(coalesce(p_token, ''), 'UTF8')), 'hex');
+  get diagnostics v_count = row_count;
+  return v_count > 0;
+end;
+$$;
+
+revoke all on function public.start_email_send(
+  uuid, uuid, uuid, text, text, text, integer, integer, integer, boolean
+) from public, anon;
+grant execute on function public.start_email_send(
+  uuid, uuid, uuid, text, text, text, integer, integer, integer, boolean
+) to authenticated;
+
+revoke all on function public.finish_email_send(uuid, text, text, text, text) from public, anon;
+grant execute on function public.finish_email_send(uuid, text, text, text, text) to authenticated;

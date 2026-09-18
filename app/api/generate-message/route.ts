@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { generateMessage } from "@/lib/ai/provider";
+import { aiProviderConfigured, generateMessage } from "@/lib/ai/provider";
 import {
   MESSAGE_TYPES,
   TONES,
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "quoteId is required" }, { status: 400 });
 
   const supabase = await createClient();
-  const [drafts, logged, emails, quote] = await Promise.all([
+  const [drafts, logged, emails, quote, pending, business] = await Promise.all([
     supabase
       .from("messages")
       .select("*")
@@ -57,9 +57,22 @@ export async function GET(request: Request) {
       .eq("id", quoteId)
       .eq("user_id", user.id)
       .maybeSingle(),
+    // The reminder a follow-up would count as right now. Sent back with the
+    // follow-up, so a reminder recorded meanwhile (another tab) isn't
+    // silently replaced by the next one.
+    supabase
+      .from("follow_ups")
+      .select("id")
+      .eq("quote_id", quoteId)
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .order("due_date", { ascending: true })
+      .limit(1),
+    // Replies go to the business email; without a working one nothing is sent.
+    supabase.from("businesses").select("email").eq("user_id", user.id).maybeSingle(),
   ]);
 
-  const error = drafts.error ?? logged.error ?? quote.error;
+  const error = drafts.error ?? logged.error ?? quote.error ?? pending.error ?? business.error;
   if (error) {
     console.error("[ai] history load failed:", error);
     return NextResponse.json({ error: "Could not load message history." }, { status: 500 });
@@ -76,6 +89,8 @@ export async function GET(request: Request) {
     emails: emails.error ? [] : (emails.data ?? []),
     recipientEmail: isValidEmail(leadEmail) ? leadEmail.trim() : null,
     emailEnabled: emailConfig() !== null && !emails.error,
+    replyToReady: isValidEmail(business.data?.email),
+    pendingFollowUpId: pending.data?.[0]?.id ?? null,
   });
 }
 
@@ -113,19 +128,22 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
 
-  // Cost control: cap AI drafts per user per rolling 24 hours.
-  const { count: recentDrafts, error: countError } = await supabase
-    .from("messages")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
-  if (!countError && (recentDrafts ?? 0) >= AI_DAILY_LIMIT) {
-    return NextResponse.json(
-      {
-        error: `You've reached the limit of ${AI_DAILY_LIMIT} AI drafts in 24 hours. You can still write or edit a message yourself.`,
-      },
-      { status: 429 }
-    );
+  // Cost control: cap AI drafts per user per rolling 24 hours. Only when an
+  // AI provider is set up — without one, drafts are free built-in templates.
+  if (aiProviderConfigured()) {
+    const { count: recentDrafts, error: countError } = await supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
+    if (!countError && (recentDrafts ?? 0) >= AI_DAILY_LIMIT) {
+      return NextResponse.json(
+        {
+          error: `You've reached the limit of ${AI_DAILY_LIMIT} AI drafts in 24 hours. You can still write or edit a message yourself.`,
+        },
+        { status: 429 }
+      );
+    }
   }
 
   // Fetch the quote + its lead, scoped to the current user (RLS also enforces this).
@@ -139,7 +157,10 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (quoteErr || !quote) {
-    return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "This quote no longer exists. It may have been deleted in another tab." },
+      { status: 404 }
+    );
   }
 
   const { data: business } = await supabase

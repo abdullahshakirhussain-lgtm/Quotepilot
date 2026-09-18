@@ -100,6 +100,10 @@ export function AIMessageModal({
   const [emails, setEmails] = useState<EmailLogEntry[]>([]);
   const [recipient, setRecipient] = useState<string | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
+  // Replies go to the business email, so sending needs a working one.
+  const [replyToReady, setReplyToReady] = useState(true);
+  // The reminder this follow-up counts as, as of the last history load.
+  const [pendingFollowUpId, setPendingFollowUpId] = useState<string | null>(null);
   const [busy, startAction] = useTransition();
   const [action, setAction] = useState<"send" | "log" | null>(null);
   // Tracked separately: an email can go out while its reminder still needs logging.
@@ -114,7 +118,7 @@ export function AIMessageModal({
 
   const firstName = quote.customerName.split(" ")[0] || quote.customerName;
   const edited = content.trim() !== "" && content.trim() !== draft.trim();
-  const canEmail = emailEnabled && Boolean(recipient);
+  const canEmail = emailEnabled && Boolean(recipient) && replyToReady;
 
   const loadHistory = useCallback(async () => {
     try {
@@ -126,6 +130,8 @@ export function AIMessageModal({
       setEmails(data.emails ?? []);
       setRecipient(data.recipientEmail ?? null);
       setEmailEnabled(Boolean(data.emailEnabled));
+      setReplyToReady(data.replyToReady !== false);
+      setPendingFollowUpId(typeof data.pendingFollowUpId === "string" ? data.pendingFollowUpId : null);
     } catch {
       /* history is optional; the assistant still works without it */
     }
@@ -145,8 +151,11 @@ export function AIMessageModal({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ quoteId: quote.id, messageType, tone, objection: context }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Couldn't write a message. Please try again.");
+      // A proxy error page isn't JSON; never show the parser's complaint.
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || typeof data.content !== "string") {
+        throw new Error(data.error || "QuoteLoop couldn't write a message just now. Please try again, or write one yourself.");
+      }
       setContent(data.content);
       setDraft(data.content);
       if (data.fellBack) {
@@ -161,7 +170,13 @@ export function AIMessageModal({
       }
       loadHistory();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setError(
+        e instanceof TypeError
+          ? "QuoteLoop couldn't be reached. Check your connection and try again."
+          : e instanceof Error
+            ? e.message
+            : "Something went wrong."
+      );
     } finally {
       setLoading(false);
     }
@@ -178,9 +193,16 @@ export function AIMessageModal({
       let r: SendOutcome;
       try {
         // Sends the text exactly as it is now — including any edits.
-        r = await sendFollowUpEmail({ quoteId: quote.id, subject, message: content });
+        r = await sendFollowUpEmail({
+          quoteId: quote.id,
+          subject,
+          message: content,
+          // Only used to refuse if things changed since this was shown.
+          expectedTo: recipient,
+          expectedFollowUpId: pendingFollowUpId,
+        });
       } catch (e) {
-        unstable_rethrow(e); // e.g. the session expired: let Next redirect to login
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         // The request itself broke (connection lost, app restarting), so the
         // email may or may not have gone out.
         r = {
@@ -196,7 +218,9 @@ export function AIMessageModal({
           setSendLocked(true);
           loadHistory();
         }
-        setBanner({ tone: r.unconfirmed ? "warning" : "error", text: r.error });
+        // Show the address it would go to now; pressing Send again confirms it.
+        if (r.recipientChanged) setRecipient(r.recipientChanged);
+        setBanner({ tone: r.unconfirmed || r.recipientChanged ? "warning" : "error", text: r.error });
         return;
       }
       // Never allow a second send. Logging by hand stays open only when this
@@ -222,7 +246,17 @@ export function AIMessageModal({
     setAction("log");
     startAction(async () => {
       // Logs the text as it is now — including any edits — not the AI draft.
-      const result = await logFollowUpSent(quote.id, content || null);
+      let result: Awaited<ReturnType<typeof logFollowUpSent>>;
+      try {
+        result = await logFollowUpSent(quote.id, content || null, pendingFollowUpId);
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setBanner({
+          tone: "error",
+          text: "That didn't go through, so nothing was logged. You may have lost your connection, or been signed out in another tab — refresh the page and try again.",
+        });
+        return;
+      }
       if (result.logged) {
         setFollowedUp(true);
         setBanner({
@@ -233,7 +267,8 @@ export function AIMessageModal({
         });
         loadHistory();
       } else {
-        setBanner({ tone: "info", text: result.message ?? "Nothing was logged." });
+        setBanner({ tone: result.failed ? "error" : "info", text: result.message ?? "Nothing was logged." });
+        loadHistory();
       }
     });
   }
@@ -282,7 +317,12 @@ export function AIMessageModal({
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={() => {
+        // Closing mid-send would hide whether the email went out.
+        if (busy || loading) return;
+        if (edited && !emailSent && !followedUp && !window.confirm("Close without using your edited message?")) return;
+        onClose();
+      }}
       size="lg"
       title={`Follow up with ${firstName}`}
       description={
@@ -309,7 +349,7 @@ export function AIMessageModal({
             </span>
             <button
               type="button"
-              className="btn-ghost px-2 py-1 text-xs"
+              className="btn-ghost tap px-2 py-1 text-xs"
               onClick={() => setAdjusting((a) => !a)}
               aria-expanded={adjusting}
             >
@@ -473,6 +513,14 @@ export function AIMessageModal({
               <p className="text-xs text-stone-500">
                 {!emailEnabled ? (
                   "Email sending isn't set up for this workspace, so copy the message and send it yourself."
+                ) : recipient && !replyToReady ? (
+                  <>
+                    Add a working business email in Settings to send from QuoteLoop, so your customer&apos;s replies
+                    come to you.{" "}
+                    <Link href="/settings" className="font-medium text-stone-700 underline-offset-2 hover:underline">
+                      Open Settings
+                    </Link>
+                  </>
                 ) : (
                   <>
                     Add an email address to this customer to send from QuoteLoop.{" "}
@@ -509,7 +557,7 @@ export function AIMessageModal({
           <div className="mb-2 flex items-center justify-between">
             <span className="eyebrow">History</span>
             {history.length > 3 && (
-              <button className="text-xs font-medium text-stone-500 hover:text-stone-900" onClick={() => setShowAll((s) => !s)}>
+              <button className="tap inline-flex items-center justify-end text-xs font-medium text-stone-500 hover:text-stone-900" onClick={() => setShowAll((s) => !s)}>
                 {showAll ? "Show less" : `Show all ${history.length}`}
               </button>
             )}
@@ -570,7 +618,7 @@ export function AIMessageModal({
                       >
                         {h.text}
                       </p>
-                      <CopyButton text={h.text} label="Copy" className="btn-ghost -ml-2 mt-0.5 px-2 py-0.5 text-xs" />
+                      <CopyButton text={h.text} label="Copy" className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-xs" />
                     </>
                   )}
                 </li>

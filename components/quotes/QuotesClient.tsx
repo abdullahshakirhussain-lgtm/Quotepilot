@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import {
   BellRing,
   CalendarCheck,
@@ -26,12 +26,19 @@ import { AddCustomerEmailModal } from "./AddCustomerEmailModal";
 import { HowItWorks } from "./HowItWorks";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import type { QuoteStatus } from "@/lib/constants";
-import type { Quote, QuoteWithLead } from "@/lib/types";
+import type { ActionResult, Quote, QuoteWithLead } from "@/lib/types";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { followUpUrgency } from "@/lib/follow-up-state";
+import { formatMoney, sumByCurrency } from "@/lib/metrics";
+import { isValidEmail } from "@/lib/email-address";
 import { deleteQuote, markQuoteSent, setQuoteStatus } from "@/app/(app)/quotes/actions";
 
 const OPEN: QuoteStatus[] = ["sent", "follow_up_due", "negotiating"];
+
+/** A request that never reached the server: usually a dropped connection, or a session that ended in another tab. */
+const OFFLINE_OR_SIGNED_OUT =
+  "That didn't go through, so nothing changed. You may have lost your connection, or been signed out in another tab — refresh the page and try again.";
+
 
 type Tab = "open" | "draft" | "won" | "lost" | "all";
 const TABS: { key: Tab; label: string; match: (s: QuoteStatus) => boolean }[] = [
@@ -162,9 +169,14 @@ export function QuotesClient({
     if (window.location.search) window.history.replaceState(null, "", "/quotes");
   }
 
-  const openValue = quotes
-    .filter((q) => OPEN.includes(q.status))
-    .reduce((s, q) => s + Number(q.amount), 0);
+  // Per currency: amounts in different currencies are never added together.
+  const openValue = formatMoney(
+    sumByCurrency(
+      quotes.filter((q) => OPEN.includes(q.status)),
+      defaultCurrency
+    ),
+    defaultCurrency
+  );
 
   return (
     <div>
@@ -173,9 +185,7 @@ export function QuotesClient({
         subtitle={
           hasOpen ? (
             <>
-              <span className="num font-medium text-stone-700">
-                {formatCurrency(openValue, defaultCurrency)}
-              </span>{" "}
+              <span className="num font-medium text-stone-700">{openValue}</span>{" "}
               waiting on {counts.open} open {counts.open === 1 ? "quote" : "quotes"}
             </>
           ) : (
@@ -217,7 +227,8 @@ export function QuotesClient({
       ) : (
         <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1 overflow-x-auto" role="tablist">
+            {/* Wraps on narrow phones so every tab stays visible. */}
+            <div className="flex flex-wrap gap-1" role="tablist">
               {TABS.map((t) => (
                 <button
                   key={t.key}
@@ -225,7 +236,7 @@ export function QuotesClient({
                   aria-selected={tab === t.key}
                   onClick={() => setTab(t.key)}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    "tap inline-flex items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                     tab === t.key
                       ? "bg-stone-900 text-white"
                       : "text-stone-600 hover:bg-stone-900/5 hover:text-stone-900"
@@ -261,6 +272,7 @@ export function QuotesClient({
                   quote={quote}
                   today={today}
                   emailEnabled={emailEnabled}
+                  businessEmailOk={isValidEmail(business.email)}
                   earlierEmail={earlierQuoteEmails[quote.id] ?? null}
                   onEdit={() => setEditing(quote)}
                   onWrite={() => setAiFor(quote)}
@@ -353,6 +365,7 @@ function QuoteRow({
   quote,
   today,
   emailEnabled,
+  businessEmailOk,
   earlierEmail,
   onEdit,
   onWrite,
@@ -364,6 +377,8 @@ function QuoteRow({
   quote: QuoteWithLead;
   today: string;
   emailEnabled: boolean;
+  /** Replies need somewhere to go before QuoteLoop can send anything. */
+  businessEmailOk: boolean;
   earlierEmail: "sent" | "pending" | null;
   onEdit: () => void;
   onWrite: () => void;
@@ -373,6 +388,8 @@ function QuoteRow({
   onTracked: () => void;
 }) {
   const [pending, start] = useTransition();
+  // A failed Won / Lost / Delete / … stays next to the quote it was about.
+  const [rowError, setRowError] = useState<string | null>(null);
   const step = nextStep(quote, today);
   const isOpen = OPEN.includes(quote.status);
   const isDraft = quote.status === "draft";
@@ -381,9 +398,21 @@ function QuoteRow({
   const hasCustomerEmail = Boolean(quote.lead?.email?.trim());
   // An earlier attempt went out, or may have: sending again could duplicate it.
   const alreadyAttempted = earlierEmail !== null;
-  const canEmailQuote = emailEnabled && hasCustomerEmail && !alreadyAttempted;
-  const offerAddEmail = emailEnabled && !hasCustomerEmail && !alreadyAttempted;
-  const run = (fn: () => Promise<void>) => start(async () => await fn());
+  const sendingReady = emailEnabled && businessEmailOk;
+  const canEmailQuote = sendingReady && hasCustomerEmail && !alreadyAttempted;
+  const offerAddEmail = sendingReady && !hasCustomerEmail && !alreadyAttempted;
+  const run = (fn: () => Promise<ActionResult>, onDone?: () => void) =>
+    start(async () => {
+      setRowError(null);
+      try {
+        const result = await fn();
+        if (!result.ok) return setRowError(result.error);
+        onDone?.();
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setRowError(OFFLINE_OR_SIGNED_OUT);
+      }
+    });
 
   // Why a draft can't be emailed, in the user's terms.
   const draftHint = !isDraft
@@ -394,12 +423,16 @@ function QuoteRow({
         ? "QuoteLoop couldn't confirm an earlier quote email was delivered, so it won't send it again. If the customer has it, use “I already sent this”."
         : !emailEnabled
           ? "Email sending is not configured. You can still track a quote you sent elsewhere."
-          : !hasCustomerEmail
+          : !businessEmailOk
+            ? "Add your business email in Settings to send quotes from QuoteLoop, or mark this as already sent if you sent it elsewhere."
+            : !hasCustomerEmail
             ? "Add an email address to send this quote from QuoteLoop, or mark it as already sent if you sent it elsewhere."
             : null;
 
   return (
-    <li className="relative flex flex-col gap-3 py-3.5 pl-5 pr-3 sm:flex-row sm:items-center">
+    // Side by side only on wide screens: with the sidebar showing, the buttons
+    // don't fit next to the title and amount until about 1280px.
+    <li className="relative flex flex-col gap-3 py-3.5 pl-5 pr-3 xl:flex-row xl:items-center">
       <span className={cn("absolute inset-y-3 left-0 w-1 rounded-r", BAR[step.tone])} />
 
       <div className="min-w-0 flex-1">
@@ -425,6 +458,11 @@ function QuoteRow({
           {quote.sent_method && <span className="text-stone-400">· sent by {quote.sent_method}</span>}
         </div>
         {draftHint && <p className="mt-0.5 text-xs text-stone-500">{draftHint}</p>}
+        {rowError && (
+          <p role="alert" className="mt-1 text-sm text-red-700">
+            {rowError}
+          </p>
+        )}
         {isOpen && !urgent && quote.next_follow_up_at && (
           <p className="mt-0.5 text-xs text-stone-500">
             Next follow-up: {formatDate(quote.next_follow_up_at)} ·{" "}
@@ -433,11 +471,11 @@ function QuoteRow({
         )}
       </div>
 
-      <div className="num text-right text-[15px] font-semibold text-stone-900 sm:w-32">
+      <div className="num text-right text-[15px] font-semibold text-stone-900 [overflow-wrap:anywhere] xl:w-32">
         {formatCurrency(Number(quote.amount), quote.currency)}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-1 sm:flex-nowrap sm:justify-end">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 xl:flex-nowrap xl:justify-end">
         {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
 
         {/* Drafts: one obvious way forward, whether or not we can email it. */}
@@ -457,12 +495,7 @@ function QuoteRow({
               className={canEmailQuote || offerAddEmail ? "btn-secondary" : "btn-primary"}
               disabled={pending}
               title="Record that you sent this quote yourself"
-              onClick={() =>
-                run(async () => {
-                  await markQuoteSent(quote.id);
-                  onTracked();
-                })
-              }
+              onClick={() => run(() => markQuoteSent(quote.id), onTracked)}
             >
               <CalendarCheck className="h-4 w-4" /> I already sent this
             </button>

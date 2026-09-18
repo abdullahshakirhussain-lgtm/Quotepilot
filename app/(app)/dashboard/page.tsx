@@ -4,6 +4,7 @@ import { currentHour, todayISO } from "@/lib/utils";
 import { computeDashboardMetrics } from "@/lib/metrics";
 import { classifyFollowUp } from "@/lib/follow-up-state";
 import { getRequestTimeZone } from "@/lib/request-time";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { Business, FollowUpWithContext } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -18,46 +19,50 @@ export default async function DashboardPage() {
   const timeZone = await getRequestTimeZone();
   const today = todayISO(timeZone);
 
-  const [businessRes, leadsRes, quotesRes, followUpsRes] = await Promise.all([
+  // Every row, not just the API's first page: these feed totals and counts.
+  // A failed query throws, and is never rendered as zeros — that would read as
+  // "you lost your data".
+  const [businessRes, leads, quotes, followUps] = await Promise.all([
     supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
-    supabase.from("leads").select("status").eq("user_id", user.id),
-    supabase.from("quotes").select("status, amount").eq("user_id", user.id),
-    supabase
-      .from("follow_ups")
-      .select(FOLLOW_UP_SELECT)
-      .eq("user_id", user.id)
-      .eq("status", "pending")
-      .order("due_date", { ascending: true }),
+    fetchAllRows<{ status: string }>((from, to) =>
+      supabase.from("leads").select("status").eq("user_id", user.id).order("id").range(from, to)
+    ),
+    fetchAllRows<{ status: string; amount: number; currency: string }>((from, to) =>
+      supabase.from("quotes").select("status, amount, currency").eq("user_id", user.id).order("id").range(from, to)
+    ),
+    fetchAllRows<FollowUpWithContext>((from, to) =>
+      supabase
+        .from("follow_ups")
+        .select(FOLLOW_UP_SELECT)
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .order("due_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    ),
   ]);
-
-  // Never render a failed query as zeros — that reads as "you lost your data".
-  const failed = [businessRes, leadsRes, quotesRes, followUpsRes].find((r) => r.error);
-  if (failed?.error) throw new Error(`Could not load dashboard: ${failed.error.message}`);
+  if (businessRes.error) throw new Error(`Could not load dashboard: ${businessRes.error.message}`);
 
   const business = businessRes.data;
-  const pending: FollowUpWithContext[] = (followUpsRes.data ?? []).map((f) => ({
-    ...(f as FollowUpWithContext),
+  const currency = business?.currency ?? "USD";
+  const pending: FollowUpWithContext[] = followUps.map((f) => ({
+    ...f,
     quote: Array.isArray(f.quote) ? (f.quote[0] ?? null) : (f.quote ?? null),
     lead: Array.isArray(f.lead) ? (f.lead[0] ?? null) : (f.lead ?? null),
   }));
 
-  const m = computeDashboardMetrics({
-    leads: leadsRes.data ?? [],
-    quotes: quotesRes.data ?? [],
-    followUps: pending,
-    today,
-  });
+  const m = computeDashboardMetrics({ leads, quotes, followUps: pending, today, currency });
 
   return (
     <DashboardView
       m={m}
-      currency={business?.currency ?? "USD"}
+      currency={currency}
       today={today}
       greeting={greeting(currentHour(timeZone))}
       firstName={(business?.owner_name || "").split(" ")[0]}
       attention={pending.filter((f) => classifyFollowUp(f, today) !== "upcoming")}
       upcoming={pending.filter((f) => classifyFollowUp(f, today) === "upcoming").slice(0, 5)}
-      hasData={(leadsRes.data ?? []).length > 0 || (quotesRes.data ?? []).length > 0}
+      hasData={leads.length > 0 || quotes.length > 0}
     />
   );
 }

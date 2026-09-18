@@ -17,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effectiveDate="September 16, 2026"
+      effectiveDate="September 18, 2026"
       intro={
         <>
           <p>
@@ -128,8 +128,8 @@ export default function PrivacyPage() {
         <p>
           Emails are delivered by Resend to the email address saved for that customer. Each email
           shows your business name and a short note that the person is receiving it because they
-          asked your business for a quote. Replies go to the business email set in QuoteLoop, or to
-          our configured fallback reply-to address.
+          asked your business for a quote. Replies go to the business email set in QuoteLoop, and
+          QuoteLoop won’t send an email until a business email is set.
         </p>
         <p>
           If you receive an email sent through QuoteLoop and do not want more emails from that
@@ -206,7 +206,7 @@ export default function PrivacyPage() {
             "to sign you in, including with Google if you choose it",
             "to write AI drafts when you ask for one",
             "to send a quote or follow-up email when you click to send it",
-            "to send account emails, such as sign-up confirmation",
+            "to send account emails, such as sign-up confirmations and password reset links",
             "to keep QuoteLoop secure, prevent abuse (for example, with sending limits) and fix problems",
             "to answer your questions and requests",
             "to comply with the law",

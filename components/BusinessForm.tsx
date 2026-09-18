@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   CURRENCIES,
@@ -27,8 +27,18 @@ export function BusinessForm({
   const selectedDays = initial?.default_follow_up_days ?? DEFAULT_FOLLOW_UP_DAYS;
 
   return (
-    // flex+gap, not space-y: React injects hidden action inputs first.
-    <form action={formAction} className="flex flex-col gap-5">
+    // Submitted by hand rather than with <form action>: React resets a form
+    // after its action runs, which would wipe everything typed whenever the
+    // server answers with a problem to fix (e.g. a mistyped business email).
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (pending) return;
+        const data = new FormData(e.currentTarget);
+        startTransition(() => formAction(data));
+      }}
+      className="flex flex-col gap-5"
+    >
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label htmlFor="business_name" className="label">
@@ -38,6 +48,7 @@ export function BusinessForm({
             id="business_name"
             name="business_name"
             required
+            maxLength={120}
             className="input"
             defaultValue={initial?.business_name ?? ""}
             placeholder="e.g. CoolAir HVAC Services"
@@ -52,6 +63,7 @@ export function BusinessForm({
             id="owner_name"
             name="owner_name"
             required
+            maxLength={120}
             className="input"
             defaultValue={initial?.owner_name ?? suggested?.owner_name ?? ""}
             placeholder="e.g. Sam Carter"
@@ -101,6 +113,8 @@ export function BusinessForm({
           <input
             id="phone"
             name="phone"
+            type="tel"
+            maxLength={40}
             className="input"
             defaultValue={initial?.phone ?? ""}
             placeholder="Include country code"
@@ -109,7 +123,7 @@ export function BusinessForm({
 
         <div className="sm:col-span-2">
           <label htmlFor="email" className="label">
-            Business email (optional)
+            Business email
           </label>
           <input
             id="email"
@@ -119,6 +133,9 @@ export function BusinessForm({
             defaultValue={initial?.email ?? suggested?.email ?? ""}
             placeholder="hello@yourbusiness.com"
           />
+          <p className="mt-1 text-xs text-stone-500">
+            Needed to send emails from QuoteLoop: your customers&apos; replies come here.
+          </p>
         </div>
       </div>
 
@@ -148,7 +165,7 @@ export function BusinessForm({
       </div>
 
       {state.error && (
-        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {state.error}
         </div>
       )}

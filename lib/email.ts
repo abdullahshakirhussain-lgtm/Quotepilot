@@ -4,6 +4,8 @@
 // Manual 1-to-1 follow-ups only — nothing here schedules or bulk-sends.
 // ---------------------------------------------------------------------------
 
+import { cleanPasted, isValidEmail } from "./email-address";
+
 /** Per user, rolling 24 hours. */
 export const EMAIL_DAILY_LIMIT = 25;
 /** Per user, rolling 30 days. */
@@ -18,21 +20,28 @@ export interface EmailConfig {
   apiKey: string;
   /** e.g. "QuoteLoop <followups@your-verified-domain.com>" */
   from: string;
-  replyToFallback: string | null;
 }
 
-/** Null when email sending isn't configured (the UI then offers copy only). */
+/**
+ * Null when email sending isn't configured (the UI then offers copy only).
+ * Replies always go to the business email in Settings; there is no fallback.
+ */
 export function emailConfig(env: Record<string, string | undefined> = process.env): EmailConfig | null {
   const apiKey = env.RESEND_API_KEY?.trim();
   const from = env.EMAIL_FROM?.trim();
   if (!apiKey || !from) return null;
-  return { apiKey, from, replyToFallback: env.EMAIL_REPLY_TO?.trim() || null };
+  return { apiKey, from };
 }
 
-const EMAIL_PATTERN = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[A-Za-z]{2,}$/;
+export { cleanPasted, isValidEmail } from "./email-address";
 
-export function isValidEmail(value: string | null | undefined): value is string {
-  return Boolean(value) && value!.length <= 254 && EMAIL_PATTERN.test(value!.trim());
+/** Shown when email sending is attempted without a business email to reply to. */
+export const NEEDS_BUSINESS_EMAIL =
+  "Add a working business email in Settings first, so your customer's replies come to you. Nothing was sent.";
+
+/** The same mailbox, ignoring case, spaces and invisible pasted characters. */
+export function sameAddress(a: string | null | undefined, b: string | null | undefined): boolean {
+  return cleanPasted(a).toLowerCase() === cleanPasted(b).toLowerCase();
 }
 
 export function defaultSubject(quoteTitle: string): string {
@@ -40,13 +49,18 @@ export function defaultSubject(quoteTitle: string): string {
 }
 
 /** One line, trimmed and capped — CR/LF removed so it can't inject headers. */
-export function cleanSubject(raw: string | null | undefined, quoteTitle: string): string {
+export function cleanSubject(
+  raw: string | null | undefined,
+  quoteTitle: string,
+  /** Used when the subject is left blank. Defaults to the follow-up subject. */
+  fallback: string = defaultSubject(quoteTitle)
+): string {
   const s = (raw ?? "")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim()
     .slice(0, MAX_SUBJECT_LENGTH);
-  return s || defaultSubject(quoteTitle);
+  return s || fallback.slice(0, MAX_SUBJECT_LENGTH);
 }
 
 /** `"Business via QuoteLoop" <address>` using the verified EMAIL_FROM address. */
@@ -80,6 +94,24 @@ export class EmailQuotaError extends Error {
 
 export function isEmailQuotaError(e: unknown): e is EmailQuotaError {
   return typeof e === "object" && e !== null && (e as { quota?: unknown }).quota === true;
+}
+
+/**
+ * Refusal found by the database while starting a send, inside the same lock
+ * as the limits: "repeat" (this exact email went to this person moments ago)
+ * or "already_sent" (this reminder, or this draft quote, already has an email).
+ * Nothing was written or sent.
+ */
+export class EmailRefusedError extends Error {
+  readonly refused = true;
+  constructor(readonly reason: "repeat" | "already_sent") {
+    super(`send refused: ${reason}`);
+    this.name = "EmailRefusedError";
+  }
+}
+
+export function isEmailRefusedError(e: unknown): e is EmailRefusedError {
+  return typeof e === "object" && e !== null && (e as { refused?: unknown }).refused === true;
 }
 
 /**
@@ -165,9 +197,19 @@ export async function sendViaResend(
   }
 }
 
+/**
+ * What went wrong, in words a business owner can act on. Account and domain
+ * problems are QuoteLoop's to fix, so they say so rather than naming settings
+ * the user can't see.
+ */
 function describeStatus(status: number): string {
-  if (status === 401 || status === 403) return "the email service rejected the sender configuration";
-  if (status === 422) return "the email service rejected this message (is the sending domain verified?)";
-  if (status === 429) return "the email service is busy — try again in a minute";
-  return `the email service returned an error (${status})`;
+  if (status === 401 || status === 403) {
+    return "QuoteLoop's email sending isn't working right now because of a setup problem on our side, not anything you did. Please try again later";
+  }
+  if (status === 422) {
+    return "the email service couldn't accept this email. Check the customer's email address; if it's right, the problem is on QuoteLoop's side, so please try again later";
+  }
+  if (status === 429) return "the email service is busy. Please wait a minute and try again";
+  if (status >= 500) return "the email service had a problem";
+  return `the email service couldn't send it (error ${status}). Please try again later`;
 }

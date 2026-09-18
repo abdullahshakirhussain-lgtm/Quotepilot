@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui/Modal";
 import { CURRENCIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
+import { cleanPasted, isValidEmail } from "@/lib/email-address";
+import { EARLIEST_SENT_DATE, LIMITS, MAX_AMOUNT } from "@/lib/quote-flows";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { QuoteDonePanel } from "./QuoteDonePanel";
 import {
@@ -27,10 +29,13 @@ export interface QuoteCustomer {
 
 const SENT_METHODS = ["Email", "WhatsApp", "Phone", "Text message", "In person", "Other"];
 
+/** Same limit the server enforces for an email body. */
+const MAX_EMAIL_LENGTH = 10_000;
+
 function Disclosure({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <details className="group">
-      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-stone-500 hover:text-stone-900 [&::-webkit-details-marker]:hidden">
+      <summary className="tap inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-stone-500 hover:text-stone-900 [&::-webkit-details-marker]:hidden">
         <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
         {label}
       </summary>
@@ -111,6 +116,17 @@ export function NewQuoteModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [bodyEdited, setBodyEdited] = useState(false);
+  const [subjectEdited, setSubjectEdited] = useState(false);
+  // The quote details the email text was written from, to notice later edits.
+  const [bodyBasis, setBodyBasis] = useState("");
+  // Details the user was warned about and chose to send the edited text anyway.
+  const [staleAcknowledged, setStaleAcknowledged] = useState("");
+  // The customer's saved address changed after the preview was shown, for the
+  // customer and typed address it was found for.
+  const [override, setOverride] = useState<{ basis: string; to: string } | null>(null);
+  // The details a "looks like a quote you already added" warning was shown for:
+  // pressing the button again with the same details saves it anyway.
+  const [duplicateBasis, setDuplicateBasis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // An unclear send outcome must not offer a second send.
   const [sendLocked, setSendLocked] = useState(false);
@@ -124,14 +140,30 @@ export function NewQuoteModal({
   const customerLabel =
     customerMode === "existing" ? (selected?.customer_name ?? "") : customerName.trim();
   const savedEmail = customerMode === "existing" ? (selected?.email?.trim() ?? "") : "";
-  const effectiveEmail = savedEmail || email.trim();
+  const typedEmail = cleanPasted(email);
+  const recipientBasis = JSON.stringify([customerMode, leadId, typedEmail]);
+  const recipientOverride = override?.basis === recipientBasis ? override.to : null;
+  const effectiveEmail = recipientOverride ?? (savedEmail || typedEmail);
+
+  // What the quote email is written from. If it changes after the user edited
+  // the text, the text may still mention the old title or amount.
+  const detailsBasis = JSON.stringify([customerLabel, title.trim(), amount, currency, description.trim(), validUntil]);
+  const staleEmail = step === "preview" && bodyEdited && bodyBasis !== "" && bodyBasis !== detailsBasis;
+  const duplicateWarned =
+    duplicateBasis ===
+    JSON.stringify([recipientBasis, customerName.trim(), phone.trim(), title.trim(), amount, currency, sentDate]);
 
   function fields() {
     return {
       customerMode,
       leadId: customerMode === "existing" ? leadId : null,
       customerName: customerName.trim(),
-      email: effectiveEmail,
+      // Only an address the user typed. A saved customer's address stays on
+      // the server, so a stale copy here can never be written back.
+      email: customerMode === "existing" && savedEmail ? "" : typedEmail,
+      // The address the preview shows: the server refuses if it has changed.
+      expectedTo: flow === "send" ? effectiveEmail : null,
+      allowDuplicate: flow === "track" && duplicateWarned,
       phone: phone.trim(),
       companyName: companyName.trim(),
       title: title.trim(),
@@ -154,33 +186,87 @@ export function NewQuoteModal({
     if (flow === "send" && !effectiveEmail) {
       return "Enter the customer's email address so QuoteLoop can send the quote.";
     }
+    if (typedEmail && !(customerMode === "existing" && savedEmail) && !isValidEmail(typedEmail)) {
+      return flow === "send"
+        ? "That email address doesn't look right. Check it and try again."
+        : "That email address doesn't look right. Leave it empty if you don't have one.";
+    }
     if (!title.trim()) return "Add a short title for the quote, like “Service 3 AC units”.";
-    const value = Number(amount);
+    const value = Number(String(amount).replace(/[, ]/g, ""));
     if (!String(amount).trim() || !Number.isFinite(value) || value <= 0) {
       return "Enter the quote amount as a number greater than zero.";
     }
+    if (value > MAX_AMOUNT) return "That amount is too large. Check the number and try again.";
     if (flow === "track" && !sentDate) return "Enter the date you sent this quote.";
+    if (flow === "track" && sentDate > today) return "The sent date can't be in the future.";
+    if (flow === "track" && sentDate < EARLIEST_SENT_DATE) {
+      return "That sent date looks too far in the past. Check the year.";
+    }
+    if (validUntil && validUntil < (flow === "send" ? today : sentDate)) {
+      return flow === "send"
+        ? "The valid-until date can't be before today."
+        : "The valid-until date can't be before the sent date.";
+    }
+    if (description.trim().length > LIMITS.description) {
+      return `The description is too long. Keep it under ${LIMITS.description.toLocaleString("en-US")} characters.`;
+    }
+    if (notes.trim().length > LIMITS.notes) {
+      return `The notes are too long. Keep them under ${LIMITS.notes.toLocaleString("en-US")} characters.`;
+    }
     return null;
+  }
+
+  // Anything typed that closing the window would throw away.
+  const dirty =
+    step !== "done" &&
+    [customerName, email, phone, companyName, title, amount, description, notes, validUntil].some((v) => v.trim() !== "");
+
+  /** Never close mid-send (the result would be lost), and ask before discarding typing. */
+  function requestClose() {
+    if (busy) return;
+    if (savedDraftId) {
+      // The quote itself is safe as a draft; only edited email text would go.
+      if (bodyEdited && !window.confirm("Close this window? Your quote is saved as a draft, but the email text you edited won't be kept.")) {
+        return;
+      }
+    } else if (dirty && !window.confirm("Close without saving this quote? What you typed will be lost.")) {
+      return;
+    }
+    onClose();
+  }
+
+  // Replies to a quote email go to the business email, so sending needs one.
+  const canSendEmail = emailEnabled && isValidEmail(business.email);
+
+  /** The email as QuoteLoop would write it from the details as they are now. */
+  function writeEmail(options: { keepEditedSubject: boolean }) {
+    if (!options.keepEditedSubject) {
+      setSubject(defaultQuoteSubject(business.name, title.trim()));
+      setSubjectEdited(false);
+    }
+    setBody(
+      defaultQuoteBody({
+        customerName: customerLabel,
+        businessName: business.name,
+        ownerName: business.ownerName,
+        title: title.trim(),
+        amount: Number(amount),
+        currency,
+        description: description.trim() || null,
+        validUntil: validUntil || null,
+      })
+    );
+    setBodyEdited(false);
+    setBodyBasis(detailsBasis);
   }
 
   function goToPreview() {
     const problem = clientProblem();
     if (problem) return setError(problem);
-    if (!bodyEdited) {
-      setSubject(defaultQuoteSubject(business.name, title.trim()));
-      setBody(
-        defaultQuoteBody({
-          customerName: customerLabel,
-          businessName: business.name,
-          ownerName: business.ownerName,
-          title: title.trim(),
-          amount: Number(amount),
-          currency,
-          description: description.trim() || null,
-          validUntil: validUntil || null,
-        })
-      );
-    }
+    // Text the user hasn't touched always follows the details. Edited text is
+    // kept (see the notice on the preview if the details changed since).
+    if (!bodyEdited) writeEmail({ keepEditedSubject: subjectEdited });
+    else if (!subjectEdited) setSubject(defaultQuoteSubject(business.name, title.trim()));
     setError(null);
     setStep("preview");
   }
@@ -188,6 +274,18 @@ export function NewQuoteModal({
   function submit(kind: "send" | "track") {
     // A second press must never start a second send.
     if (busy || (kind === "send" && sendLocked)) return;
+    if (kind === "send" && staleEmail && staleAcknowledged !== detailsBasis) {
+      // Asked once: pressing Send again sends the text as it is.
+      setStaleAcknowledged(detailsBasis);
+      return setError(
+        "You changed the quote details after editing this email, so it may still mention the old ones. Check the text and press Send quote email again, or use “Rewrite with the new details”."
+      );
+    }
+    if (kind === "send" && body.trim().length > MAX_EMAIL_LENGTH) {
+      return setError(
+        `This email is too long to send. Keep it under ${MAX_EMAIL_LENGTH.toLocaleString("en-US")} characters.`
+      );
+    }
     const problem = clientProblem();
     if (problem) return setError(problem);
     setError(null);
@@ -198,10 +296,10 @@ export function NewQuoteModal({
           kind === "track"
             ? await trackQuoteAlreadySent(fields())
             : savedDraftId
-              ? await sendDraftQuoteEmail({ quoteId: savedDraftId, subject, message: body })
+              ? await sendDraftQuoteEmail({ quoteId: savedDraftId, subject, message: body, expectedTo: effectiveEmail })
               : await sendQuoteWithQuoteLoop(fields());
       } catch (e) {
-        unstable_rethrow(e); // e.g. the session expired: let Next redirect to login
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         if (kind === "send") setSendLocked(true);
         setError(
           kind === "send"
@@ -213,6 +311,14 @@ export function NewQuoteModal({
       if (!outcome.ok) {
         if (outcome.quoteId) setSavedDraftId(outcome.quoteId);
         if (outcome.unconfirmed || outcome.locked) setSendLocked(true);
+        // Show where it would go now; pressing Send again confirms that address.
+        if (outcome.recipientChanged) setOverride({ basis: recipientBasis, to: outcome.recipientChanged });
+        // Shown once; pressing the button again with the same details saves it anyway.
+        if (outcome.duplicate) {
+          setDuplicateBasis(
+            JSON.stringify([recipientBasis, customerName.trim(), phone.trim(), title.trim(), amount, currency, sentDate])
+          );
+        }
         setError(outcome.error);
         return;
       }
@@ -250,6 +356,11 @@ export function NewQuoteModal({
     setSubject("");
     setBody("");
     setBodyEdited(false);
+    setSubjectEdited(false);
+    setBodyBasis("");
+    setStaleAcknowledged("");
+    setOverride(null);
+    setDuplicateBasis(null);
   }
 
   const heading =
@@ -283,12 +394,12 @@ export function NewQuoteModal({
   );
 
   return (
-    <Modal open onClose={onClose} size="lg" title={heading.title} description={heading.description}>
+    <Modal open onClose={requestClose} size="lg" title={heading.title} description={heading.description}>
       {step === "choose" && (
         <div className="flex flex-col gap-3">
           <button
             type="button"
-            disabled={!emailEnabled}
+            disabled={!canSendEmail}
             onClick={() => {
               setFlow("send");
               setError(null);
@@ -304,10 +415,16 @@ export function NewQuoteModal({
             <span className="mt-1 block text-sm text-stone-500">
               Create a quote email, send it to the customer, and schedule follow-up reminders.
             </span>
-            {!emailEnabled && (
+            {!emailEnabled ? (
               <span className="mt-2 block text-xs text-stone-500">
                 Email sending isn&apos;t set up for this workspace yet.
               </span>
+            ) : (
+              !canSendEmail && (
+                <span className="mt-2 block text-xs text-stone-500">
+                  Add your business email in Settings first, so your customer&apos;s replies come to you.
+                </span>
+              )
             )}
           </button>
 
@@ -346,7 +463,7 @@ export function NewQuoteModal({
                       type="button"
                       onClick={() => setCustomerMode(m)}
                       className={cn(
-                        "rounded px-2.5 py-1 transition-colors",
+                        "tap rounded px-2.5 py-1 transition-colors",
                         customerMode === m ? "bg-stone-900 text-white" : "text-stone-600 hover:text-stone-900"
                       )}
                     >
@@ -400,6 +517,7 @@ export function NewQuoteModal({
                   <input
                     id="q-name"
                     autoFocus
+                    maxLength={LIMITS.customerName}
                     className="input"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
@@ -427,6 +545,7 @@ export function NewQuoteModal({
             <Field label="What did you quote for?" htmlFor="q-title">
               <input
                 id="q-title"
+                maxLength={LIMITS.title}
                 className="input"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -519,13 +638,21 @@ export function NewQuoteModal({
                 <Field label="Company" htmlFor="q-company">
                   <input
                     id="q-company"
+                    maxLength={LIMITS.companyName}
                     className="input"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                   />
                 </Field>
                 <Field label="Phone" htmlFor="q-phone">
-                  <input id="q-phone" className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <input
+                    id="q-phone"
+                    type="tel"
+                    maxLength={LIMITS.phone}
+                    className="input"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
                 </Field>
               </div>
             )}
@@ -549,7 +676,13 @@ export function NewQuoteModal({
                 />
               </Field>
               <Field label="Internal notes" htmlFor="q-notes" hint="Only you see these.">
-                <input id="q-notes" className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <textarea
+                  id="q-notes"
+                  rows={2}
+                  className="input"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </Field>
             </div>
           </Disclosure>
@@ -567,7 +700,7 @@ export function NewQuoteModal({
             ) : (
               <button type="button" className="btn-primary" onClick={() => submit("track")} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                Start follow-up tracking
+                {duplicateWarned ? "Add it anyway" : "Start follow-up tracking"}
               </button>
             )}
           </div>
@@ -576,10 +709,35 @@ export function NewQuoteModal({
 
       {step === "preview" && (
         <div className="flex flex-col gap-4">
+          {staleEmail && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+              <span>You changed the quote details after editing this email. Check it still matches.</span>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy}
+                onClick={() => {
+                  writeEmail({ keepEditedSubject: false });
+                  setError(null);
+                }}
+              >
+                Rewrite with the new details
+              </button>
+            </div>
+          )}
+          {recipientOverride && (
+            <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+              This customer&apos;s saved email address is now <span className="font-medium">{recipientOverride}</span>.
+              Check it before sending.
+            </div>
+          )}
           <QuoteEmailPreview
             to={effectiveEmail}
             subject={subject}
-            onSubjectChange={setSubject}
+            onSubjectChange={(value) => {
+              setSubject(value);
+              setSubjectEdited(true);
+            }}
             body={body}
             onBodyChange={(value) => {
               setBody(value);

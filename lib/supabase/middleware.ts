@@ -10,6 +10,7 @@ const PROTECTED_PREFIXES = [
   "/pipeline",
   "/settings",
   "/onboarding",
+  "/reset-password",
 ];
 
 /**

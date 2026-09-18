@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { startTransition, useActionState, useEffect, useRef } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { CURRENCIES } from "@/lib/constants";
@@ -20,7 +20,7 @@ function Disclosure({
 }) {
   return (
     <details className="group" open={defaultOpen}>
-      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-stone-500 hover:text-stone-900 [&::-webkit-details-marker]:hidden">
+      <summary className="tap inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-stone-500 hover:text-stone-900 [&::-webkit-details-marker]:hidden">
         <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
         {label}
       </summary>
@@ -48,6 +48,8 @@ export function QuoteFormModal({
 }) {
   const [state, formAction, pending] = useActionState<QuoteActionState, FormData>(updateQuote, {});
   const done = useRef(false);
+  // Set once anything is changed, so closing by accident asks first.
+  const dirty = useRef(false);
 
   useEffect(() => {
     if (state.ok && !done.current) {
@@ -57,18 +59,37 @@ export function QuoteFormModal({
     }
   }, [state.ok, state.message, onSaved, onClose]);
 
+  function requestClose() {
+    if (pending) return;
+    if (dirty.current && !window.confirm("Close without saving your changes to this quote?")) return;
+    onClose();
+  }
+
   const hasMoreDetails = Boolean(quote.description || quote.valid_until || quote.notes);
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       size="lg"
       title="Edit quote"
       description="Won, lost and follow-ups are handled from the quote card."
     >
-      {/* flex+gap, not space-y: React injects hidden action inputs first. */}
-      <form action={formAction} className="flex flex-col gap-6">
+      {/* Submitted by hand rather than with <form action>: React resets a form
+          after its action runs, which would wipe the user's edits whenever the
+          server answers with a problem to fix. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pending) return;
+          const data = new FormData(e.currentTarget);
+          startTransition(() => formAction(data));
+        }}
+        onInput={() => {
+          dirty.current = true;
+        }}
+        className="flex flex-col gap-6"
+      >
         <section>
           <span className="eyebrow">Customer</span>
           <select
@@ -96,7 +117,7 @@ export function QuoteFormModal({
             <label className="label" htmlFor="title">
               What did you quote for?
             </label>
-            <input id="title" name="title" required className="input" defaultValue={quote.title} />
+            <input id="title" name="title" required maxLength={200} className="input" defaultValue={quote.title} />
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_7rem_10rem]">
             <div>
@@ -135,11 +156,17 @@ export function QuoteFormModal({
                 id="quote_date"
                 name="quote_date"
                 type="date"
+                max={quote.status === "draft" ? undefined : today}
                 className="input"
                 defaultValue={quote.quote_date ?? today}
               />
             </div>
           </div>
+          {quote.status !== "draft" && quote.status !== "accepted" && quote.status !== "rejected" && quote.status !== "expired" && (
+            <p className="text-xs text-stone-500">
+              Changing the sent date moves this quote&apos;s upcoming follow-up reminders with it.
+            </p>
+          )}
 
           <Disclosure label="More details (optional)" defaultOpen={hasMoreDetails}>
             <div className="space-y-3">
@@ -173,9 +200,11 @@ export function QuoteFormModal({
                   <label className="label" htmlFor="notes">
                     Internal notes
                   </label>
-                  <input
+                  {/* A textarea, so line breaks in the notes survive an edit. */}
+                  <textarea
                     id="notes"
                     name="notes"
+                    rows={2}
                     className="input"
                     defaultValue={quote.notes ?? ""}
                     placeholder="Only you see these"
@@ -187,13 +216,13 @@ export function QuoteFormModal({
         </section>
 
         {state.error && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+          <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
             {state.error}
           </div>
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-stone-200 pt-4">
-          <button type="button" className="btn-ghost" onClick={onClose}>
+          <button type="button" className="btn-ghost" onClick={requestClose} disabled={pending}>
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={pending}>

@@ -109,12 +109,38 @@ export async function scheduleFollowUps(
   check(insertError, "Could not schedule reminders");
 }
 
+/**
+ * Once the user follows up on a quote, any other reminder for it that is
+ * already due is covered by that same follow-up. Those are marked skipped so
+ * the quote stops showing as overdue; reminders still ahead are left alone.
+ * Best effort: the follow-up itself is already recorded.
+ */
+export async function skipRemindersCoveredBy(
+  supabase: SupabaseClient,
+  userId: string,
+  quoteId: string,
+  completedId: string,
+  today: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("follow_ups")
+    .update({ status: "skipped" })
+    .eq("quote_id", quoteId)
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .lte("due_date", today)
+    .neq("id", completedId);
+  if (error) console.error("[follow-ups] couldn't clear earlier due reminders:", error.message);
+}
+
 /** Keeps the lead's pipeline stage in line with its quote's outcome. */
 async function syncLeadForQuoteStatus(
   supabase: SupabaseClient,
   userId: string,
   leadId: string,
-  next: QuoteStatus
+  next: QuoteStatus,
+  prev: QuoteStatus,
+  quoteId: string
 ): Promise<void> {
   if (next === "sent") {
     // Only advance early-stage leads; never drag a later stage backwards.
@@ -125,6 +151,27 @@ async function syncLeadForQuoteStatus(
       .eq("user_id", userId)
       .in("status", ["new", "contacted"]);
     check(error, "Could not update lead");
+
+    // A decided quote reopened as sent puts its customer back in play — unless
+    // they have another quote they already accepted.
+    if (CLOSED_QUOTE_STATUSES.includes(prev)) {
+      const { data: accepted, error: acceptedError } = await supabase
+        .from("quotes")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("user_id", userId)
+        .eq("status", "accepted")
+        .neq("id", quoteId)
+        .limit(1);
+      check(acceptedError, "Could not read lead quotes");
+      const { error: reopenError } = await supabase
+        .from("leads")
+        .update({ status: "quote_sent" })
+        .eq("id", leadId)
+        .eq("user_id", userId)
+        .in("status", accepted?.length ? ["lost", "cold"] : ["won", "lost", "cold"]);
+      check(reopenError, "Could not update lead");
+    }
   } else if (next === "accepted") {
     const { error } = await supabase
       .from("leads")
@@ -183,6 +230,6 @@ export async function applyQuoteStatusChange(
     check(error, "Could not close reminders");
   }
 
-  await syncLeadForQuoteStatus(supabase, userId, quote.lead_id, next);
+  await syncLeadForQuoteStatus(supabase, userId, quote.lead_id, next, prev, quote.id);
   await recomputeQuoteFollowUpState(supabase, userId, quote.id);
 }

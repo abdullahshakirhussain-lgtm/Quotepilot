@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/constants";
@@ -25,19 +25,45 @@ export function LeadFormModal({
     {}
   );
 
+  // Set once anything is typed, so closing by accident asks first.
+  const dirty = useRef(false);
+
   useEffect(() => {
     if (state.ok) onClose();
   }, [state.ok, onClose]);
 
+  function requestClose() {
+    if (pending) return;
+    if (dirty.current && !window.confirm("Close without saving? What you typed will be lost.")) return;
+    onClose();
+  }
+
   return (
     <Modal
       open
-      onClose={onClose}
-      title={isEdit ? "Edit lead" : "Add lead"}
-      description="Track a potential customer and their details."
+      onClose={requestClose}
+      title={isEdit ? "Edit customer" : "Add customer"}
+      description={
+        isEdit
+          ? "Quotes and follow-up emails use these details."
+          : "Customers are also added automatically when you add a quote."
+      }
     >
-      {/* flex+gap, not space-y: React injects hidden action inputs first. */}
-      <form action={formAction} className="flex flex-col gap-4">
+      {/* Submitted by hand rather than with <form action>: React resets a form
+          after its action runs, which would wipe what was typed whenever the
+          server answers with a problem to fix. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pending) return;
+          const data = new FormData(e.currentTarget);
+          startTransition(() => formAction(data));
+        }}
+        onInput={() => {
+          dirty.current = true;
+        }}
+        className="flex flex-col gap-4"
+      >
         {isEdit && <input type="hidden" name="id" value={lead!.id} />}
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -49,6 +75,7 @@ export function LeadFormModal({
               id="customer_name"
               name="customer_name"
               required
+              maxLength={120}
               className="input"
               defaultValue={lead?.customer_name ?? ""}
               placeholder="e.g. Marcus Reed"
@@ -61,6 +88,7 @@ export function LeadFormModal({
             <input
               id="company_name"
               name="company_name"
+              maxLength={120}
               className="input"
               defaultValue={lead?.company_name ?? ""}
             />
@@ -72,6 +100,7 @@ export function LeadFormModal({
             <input
               id="source"
               name="source"
+              maxLength={120}
               className="input"
               defaultValue={lead?.source ?? ""}
               placeholder="Referral, Google, walk-in…"
@@ -84,6 +113,8 @@ export function LeadFormModal({
             <input
               id="phone"
               name="phone"
+              type="tel"
+              maxLength={40}
               className="input"
               defaultValue={lead?.phone ?? ""}
             />
@@ -133,18 +164,18 @@ export function LeadFormModal({
         </div>
 
         {state.error && (
-          <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {state.error}
           </div>
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>
+          <button type="button" className="btn-secondary" onClick={requestClose}>
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={pending}>
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isEdit ? "Save changes" : "Add lead"}
+            {isEdit ? "Save changes" : "Add customer"}
           </button>
         </div>
       </form>

@@ -40,7 +40,7 @@ export function Menu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="btn-ghost px-1.5"
+        className="btn-ghost tap px-1.5"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -75,7 +75,7 @@ export function MenuItem({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-40",
+        "tap flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm disabled:opacity-40",
         danger ? "text-red-700 hover:bg-red-50" : "text-stone-700 hover:bg-stone-100"
       )}
     >

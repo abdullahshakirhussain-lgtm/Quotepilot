@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultQuoteSubject } from "@/lib/quote-email";
 import { formatCurrency } from "@/lib/utils";
 
 /** The quote email exactly as it will go out, with subject and body editable. */
@@ -45,6 +46,7 @@ export function QuoteEmailPreview({
             className="w-full bg-transparent py-0.5 text-stone-800 focus:outline-none"
             value={subject}
             maxLength={200}
+            placeholder={defaultQuoteSubject(businessName, title)}
             onChange={(e) => onSubjectChange(e.target.value)}
           />
         </div>

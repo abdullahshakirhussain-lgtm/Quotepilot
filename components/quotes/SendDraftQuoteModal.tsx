@@ -25,7 +25,9 @@ export function SendDraftQuoteModal({
   onClose: () => void;
   onSent: (message: string) => void;
 }) {
-  const to = quote.lead?.email?.trim() ?? "";
+  // The customer's saved address, or the newer one the server reported.
+  const [recipientOverride, setRecipientOverride] = useState<string | null>(null);
+  const to = recipientOverride ?? quote.lead?.email?.trim() ?? "";
   const validUntil = quote.valid_until && quote.valid_until >= today ? quote.valid_until : null;
 
   const [subject, setSubject] = useState(() => defaultQuoteSubject(business.name, quote.title));
@@ -42,6 +44,8 @@ export function SendDraftQuoteModal({
     })
   );
   const [error, setError] = useState<string | null>(null);
+  // Set once the email text or subject is changed, so closing by accident asks first.
+  const [edited, setEdited] = useState(false);
   // An unclear outcome must not offer a second send.
   const [locked, setLocked] = useState(false);
   const [busy, startAction] = useTransition();
@@ -49,19 +53,25 @@ export function SendDraftQuoteModal({
   function send() {
     // A second press must never start a second send.
     if (busy || locked) return;
+    if (body.trim().length > 10_000) {
+      return setError("This email is too long to send. Keep it under 10,000 characters.");
+    }
     setError(null);
     startAction(async () => {
       try {
-        const outcome = await sendDraftQuoteEmail({ quoteId: quote.id, subject, message: body });
+        // The address shown is only used to refuse if it changed; the server
+        // always sends to the customer's saved address.
+        const outcome = await sendDraftQuoteEmail({ quoteId: quote.id, subject, message: body, expectedTo: to });
         if (!outcome.ok) {
           if (outcome.unconfirmed || outcome.locked) setLocked(true);
+          if (outcome.recipientChanged) setRecipientOverride(outcome.recipientChanged);
           setError(outcome.error);
           return;
         }
         onSent("Quote email sent. Follow-up reminders are scheduled.");
         onClose();
       } catch (e) {
-        unstable_rethrow(e); // e.g. the session expired: let Next redirect to login
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         setLocked(true);
         setError(
           "We couldn't confirm whether the quote email was sent. Check this quote before trying again."
@@ -73,7 +83,12 @@ export function SendDraftQuoteModal({
   return (
     <Modal
       open
-      onClose={onClose}
+      // Closing mid-send would hide whether the email went out.
+      onClose={() => {
+        if (busy) return;
+        if (edited && !locked && !window.confirm("Close without sending? Your changes to the email won't be kept.")) return;
+        onClose();
+      }}
       size="lg"
       title="Send quote email"
       description={`To ${quote.lead?.customer_name ?? "your customer"}. Reminders start once it's sent.`}
@@ -82,9 +97,15 @@ export function SendDraftQuoteModal({
         <QuoteEmailPreview
           to={to}
           subject={subject}
-          onSubjectChange={setSubject}
+          onSubjectChange={(value) => {
+            setSubject(value);
+            setEdited(true);
+          }}
           body={body}
-          onBodyChange={setBody}
+          onBodyChange={(value) => {
+            setBody(value);
+            setEdited(true);
+          }}
           title={quote.title}
           amount={Number(quote.amount)}
           currency={quote.currency}

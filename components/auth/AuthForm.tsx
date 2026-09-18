@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import { Loader2 } from "lucide-react";
 import { safeRedirectPath } from "@/lib/utils";
+import { authErrorMessage } from "@/lib/auth-errors";
 
 function GoogleLogo() {
   return (
@@ -51,7 +52,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState<string | null>(
     // Set by /auth/callback: Google was cancelled, or a sign-in link failed.
     params.get("error") === "oauth"
-      ? "Sign-in didn't complete. Please try again — or, if you were confirming your email, log in with your password."
+      ? "Sign-in didn't complete. Please try again. If you were confirming your email, log in with your password. If you were resetting your password, the link may have expired or been opened in a different browser: request a new one."
       : null
   );
   const [checkEmail, setCheckEmail] = useState(false);
@@ -129,7 +130,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
         router.refresh();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(authErrorMessage(err, isSignup ? "signup" : "login"));
       setLoading(false);
     }
   }
@@ -138,7 +139,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   return (
     <div className="w-full max-w-sm">
-      <Link href="/" className="mb-8 flex items-center justify-center gap-2.5 text-[15px] font-semibold tracking-tight">
+      <Link href="/" className="tap mb-8 flex items-center justify-center gap-2.5 text-[15px] font-semibold tracking-tight">
         QuoteLoop
       </Link>
 
@@ -148,6 +149,14 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           <p className="mt-2 text-sm text-stone-600">
             We sent a confirmation link to <strong>{email}</strong>. Click it to
             activate your account. Open it in this browser to be signed in straight away.
+          </p>
+          <p className="mt-2 text-sm text-stone-500">
+            No email after a few minutes? Check your spam folder. If you already have an account with
+            this address, log in instead, or use{" "}
+            <Link href="/forgot-password" className="font-medium text-stone-800 underline-offset-2 hover:underline">
+              Forgot password
+            </Link>
+            .
           </p>
           <Link href="/login" className="btn-secondary mt-6 w-full">
             Back to log in
@@ -197,9 +206,19 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
               />
             </div>
             <div>
-              <label htmlFor="password" className="label">
-                Password
-              </label>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor="password" className="label">
+                  Password
+                </label>
+                {!isSignup && (
+                  <Link
+                    href="/forgot-password"
+                    className="tap -my-2 inline-flex items-center text-xs font-medium text-stone-500 underline-offset-2 hover:text-stone-900 hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                )}
+              </div>
               <input
                 id="password"
                 type="password"

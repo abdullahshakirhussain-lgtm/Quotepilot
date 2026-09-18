@@ -66,13 +66,14 @@ export function AttentionList({
               )}
               {f.quote && (
                 <button
-                  className={
+                  className={cn(
+                    "tap shrink-0",
                     compact
                       ? "btn-ghost px-2 py-1 text-xs"
                       : urgent
                         ? "btn-accent px-2.5 py-1 text-xs"
                         : "btn-secondary px-2.5 py-1 text-xs"
-                  }
+                  )}
                   onClick={() => setAiFor(f)}
                   title={`Write a follow-up to ${f.lead?.customer_name ?? "this customer"}`}
                 >

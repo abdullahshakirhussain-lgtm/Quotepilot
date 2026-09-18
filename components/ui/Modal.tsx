@@ -56,7 +56,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="btn-ghost -mr-1.5 px-1.5"
+            className="btn-ghost tap -mr-1.5 px-1.5"
             aria-label="Close"
           >
             <X className="h-4 w-4" />

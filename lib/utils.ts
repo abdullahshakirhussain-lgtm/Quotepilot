@@ -179,14 +179,22 @@ export function toCSV(rows: Record<string, unknown>[], columns: string[]): strin
   return header + "\r\n" + body + "\r\n";
 }
 
+/**
+ * Form text, trimmed. Browsers send every line break in a textarea as CRLF, so
+ * they are put back to plain newlines: text saved from a form then matches the
+ * same text saved anywhere else, byte for byte.
+ */
+function formText(value: FormDataEntryValue | null): string {
+  return typeof value === "string" ? value.replace(/\r\n?/g, "\n").trim() : "";
+}
+
 /** Basic non-empty string validation helper for server actions. */
 export function requireString(value: FormDataEntryValue | null, field: string): string {
-  const s = typeof value === "string" ? value.trim() : "";
+  const s = formText(value);
   if (!s) throw new Error(`${field} is required.`);
   return s;
 }
 
 export function optionalString(value: FormDataEntryValue | null): string | null {
-  const s = typeof value === "string" ? value.trim() : "";
-  return s ? s : null;
+  return formText(value) || null;
 }

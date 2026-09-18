@@ -92,16 +92,17 @@ npm run dev
 
 ### Production build
 
-> **Re-run `supabase/schema.sql` before deploying this quote-flow update.**
+> **Re-run `supabase/schema.sql` when deploying this release.**
 > Open Supabase → SQL Editor, paste the file, Run. It is idempotent and safe to
-> re-run on a live database. This release depends on it: it adds
-> `quotes.sent_method`, makes `email_logs.quote_id` / `lead_id` nullable so
-> sent-email history survives a deleted quote, installs the
-> `insert_email_log_within_limits` function that stops two simultaneous sends
-> from passing the same limit, and locks each email log's recipient, subject,
-> body and timestamp once written. Deploy the code **after** the schema has been
-> applied. Already ran it for an earlier build of this update? Run it again —
-> the email-log column lock was added afterwards.
+> re-run on a live database. This release adds `email_logs.send_token_hash` and
+> the `start_email_send` / `finish_email_send` functions: the database checks
+> the send limits, repeats and "one email per reminder / draft quote" under one
+> lock, and only the server that started a send can record its outcome. Earlier
+> releases added `quotes.sent_method`, detachable email history, the
+> `insert_email_log_within_limits` function and the email-log column lock; the
+> file still contains all of it. Either order is safe — code deployed first falls
+> back to the older function until the schema is applied — but apply the schema
+> first so the stronger checks are live from the start.
 
 ```bash
 npm run build && npm start
@@ -140,7 +141,7 @@ All configured in `.env.local` (see `.env.local.example`).
 | `APP_TIMEZONE` | ⬜ | **Deployment fallback** time zone, used only until a viewer's browser time zone is known. Not a business setting. Defaults to `UTC`. |
 | `RESEND_API_KEY` | ⬜ | Turns on **Send email** in the AI assistant (Resend). Server-only. |
 | `EMAIL_FROM` | ⬜ | Sender address on your **verified** Resend domain, e.g. `QuoteLoop <followups@yourdomain.com>`. Required together with `RESEND_API_KEY`. |
-| `EMAIL_REPLY_TO` | ⬜ | Reply-To used when the business profile has no email address. |
+| `EMAIL_REPLY_TO` | ⬜ | No longer used. Sending needs a business email in Settings, and replies go there. |
 
 Provider priority when several keys are set: **Anthropic → DeepSeek → OpenAI → templates**.
 
@@ -192,6 +193,25 @@ straight in (keep Supabase's default "Confirm signup" email template). Until Goo
 is enabled in Supabase, the button says Google sign-in isn't set up yet instead of
 opening Google.
 
+### Password reset
+
+"Forgot password?" on the login page asks Supabase Auth to email a reset link
+(`/forgot-password`). The link comes back through the same `/auth/callback`,
+which signs the person in and continues to `/reset-password` to choose a new
+password. It needs **no app environment variables**, but check in Supabase:
+
+- **Redirect URLs** include `https://<your-domain>/auth/callback**` (the same
+  entry Google sign-in needs).
+- Keep the default **"Reset password"** email template (it links to the redirect
+  URL above).
+- Supabase's built-in email sender only allows a few emails an hour for the whole
+  project. Set up custom SMTP (for example Resend's SMTP) under Authentication →
+  Emails before real users rely on sign-up confirmations or password resets.
+
+The page always says a link was sent, whether or not the address has an account.
+The link must be opened in the same browser it was requested from; otherwise
+the login page explains that it expired or was opened elsewhere.
+
 ### Email sending (manual, 1-to-1)
 
 From the AI assistant, users can email the reviewed follow-up to the customer's
@@ -200,23 +220,40 @@ and every email needs an explicit click.
 
 - **Provider:** Resend, called server-side with `fetch`. The key never reaches
   the browser.
-- **Variables:** `RESEND_API_KEY`, `EMAIL_FROM` (an address on a **verified**
-  Resend domain), and optionally `EMAIL_REPLY_TO`.
+- **Variables:** `RESEND_API_KEY` and `EMAIL_FROM` (an address on a **verified**
+  Resend domain).
 - **Sender and replies:** the sender shows as "*Business name* via QuoteLoop".
-  Replies go to the business email in Settings, or `EMAIL_REPLY_TO`. With
-  neither set, replies go to the `EMAIL_FROM` address.
+  Replies go to the business email in Settings. Nothing is sent without a valid
+  one: otherwise a customer's reply would bounce or reach someone else's inbox.
 - **Audit and logging:** every attempt is written to `email_logs` **before**
   sending, then marked `sent` or `failed`. The reminder is marked done only after
   the provider accepts the email, and it stores the final (edited) text. Users can
   read their log but can't delete entries or change who an email went to, what it
-  said or when it was logged (only an unfinished attempt's outcome columns can be
-  written), and deleting a quote or customer detaches its entries rather than
-  removing them.
+  said or when it was logged, and deleting a quote or customer detaches its
+  entries rather than removing them. The outcome can only be recorded by
+  `finish_email_send` with a one-time token that `start_email_send` handed to the
+  server, so a user can't mark an email that went out as failed through the API
+  to free up their limit.
+- **Recipient checks:** the email always goes to the customer's saved address.
+  The screen also sends the address it showed; if the saved one has changed since
+  (for example in another tab), nothing is sent and the new address is shown for
+  the user to confirm.
 - **Unclear outcomes:** if Resend doesn't answer clearly (a timeout or dropped
   connection), the attempt stays `pending` and shows as "delivery not confirmed".
+- **No repeats.** An email identical to one sent to the same person in the last
+  10 minutes (same subject and text) isn't sent again — this catches a second
+  browser tab or a repeated submit. Failed attempts don't count. It is checked
+  early (so no quote is saved for a repeat) and again inside `start_email_send`,
+  so two tabs pressing Send at the same moment can't both send.
+- **One follow-up covers what's due.** Following up on a quote (by email, by
+  logging it, or with Done) marks that quote's other reminders that were already
+  due as skipped, so a quote tracked from an old sent date doesn't stay overdue
+  after the user has followed up. Reminders still ahead are untouched.
 - **One email per quote and per reminder.** The server refuses to email a draft
   quote again once a quote email for it was sent or left unconfirmed, and refuses
-  to email a reminder again once an email for it was. The user is told to use
+  to email a reminder again once an email for it was (checked again inside the
+  database lock). A follow-up opened for a reminder that another tab has since
+  recorded isn't sent or logged either, so it can't quietly use up the next one. The user is told to use
   “I already sent this” / “Mark as followed up”, or to copy the text and send it
   themselves. Check the Resend dashboard (Emails) to see whether an unconfirmed
   one went out.
@@ -224,32 +261,30 @@ and every email needs an explicit click.
   unconfirmed attempts count; rejected ones don't). AI drafts are limited to 50
   per user in any 24 hours.
 - **Limits are enforced in the database.** A send writes its audit row through
-  `insert_email_log_within_limits`, which counts and inserts inside one
-  transaction behind a per-user advisory lock, so two sends started at the same
-  moment can't both pass. If the code is deployed before the schema is applied,
-  the app falls back to inserting first and then checking its position in the
-  window — a safety net for that gap, not a configuration to run on.
-- **Schema (required):** `supabase/schema.sql` must be re-run before this
-  release is deployed. It adds `email_logs`, the send-limit function and
-  `quotes.sent_method`, stops sent-email records from being deleted along with
-  their quote, and locks email logs' audit columns. Deploying without it degrades
-  quietly rather than crashing —
-  how a quote was sent isn't recorded, email history still disappears with its
-  quote, and send limits fall back to the weaker check — so treat it as part of
-  the deploy, not a follow-up task.
+  `start_email_send`, which checks and inserts inside one transaction behind a
+  per-user advisory lock, so two sends started at the same moment can't both
+  pass. If the code runs against a database without it, the app falls back to
+  `insert_email_log_within_limits` (limits only), and before that to inserting
+  first and then checking its position in the window — safety nets for a deploy
+  gap, not configurations to run on.
+- **Schema (required):** `supabase/schema.sql` must be re-run for this release.
+  Deploying without it degrades quietly rather than crashing — repeats and
+  "one email per reminder" are only checked before the lock, and an unfinished
+  send's outcome can still be written directly — so treat it as part of the
+  deploy, not a follow-up task.
 
 **Setup:**
 1. In Resend, add your domain and verify its DNS records (add DMARC too).
 2. Create an API key.
 3. Set the variables in Railway and redeploy.
-4. Put a monitored address in Settings → Business email, since replies go there.
+4. Put a monitored address in Settings → Business email. Sending is blocked
+   without one, since customer replies go there.
 
 **Limitations:**
 - Manual 1-to-1 follow-ups only: no sequences, bulk or scheduled sending.
 - No unsubscribe or suppression handling yet.
 - Emails are plain text.
-- Rate limits are basic per-user counts: deleting a quote also deletes its email
-  log (freeing that part of the limit), and two simultaneous sends can both pass.
+- Limits are per user only: there is no global cap across all users yet.
 - Bounces and delivery status aren't surfaced.
 - Anyone who can sign up can email the addresses they save as customers (within
   the limits) from your domain, so keep sign-ups controlled until abuse controls
@@ -317,14 +352,16 @@ Enforced by `CHECK` constraints and mirrored in `lib/constants.ts`:
 
 ### Follow-up scheduling logic
 
-Every quote status change — Mark sent, Won/Lost, the status dropdown, or the edit
-form — goes through one function (`applyQuoteStatusChange` in
+Every quote status change — sending a quote, "I already sent this", Won/Lost,
+"Reopen as sent" or the status menu — goes through one function (`applyQuoteStatusChange` in
 `lib/quote-state.ts`), so all paths behave identically:
 
 - **→ Sent:** reads the business's `default_follow_up_days` (e.g. `{1,3,7,14}`),
-  replaces any *pending* reminders with one per interval dated `today + N days`
-  (numbering continues after existing history), and moves a `new`/`contacted`
-  lead to `quote_sent`. Marking an already-sent quote as sent is a no-op.
+  replaces any *pending* reminders with one per interval, counted from the day
+  the quote went out (numbering continues after existing history), and moves a
+  `new`/`contacted` lead to `quote_sent`. Marking an already-sent quote as sent
+  is a no-op. Correcting a sent quote's date in the edit form moves its pending
+  reminders by the same number of days.
 - **→ Accepted / Rejected / Expired:** pending reminders are marked `skipped`, so a
   decided quote is never shown as due. Accepted moves the lead to `won`; Rejected
   moves it to `lost` only if the lead has no other open or won quote.
@@ -409,7 +446,7 @@ one code path; only the base URL, model and key differ. All calls are plain
 
 **Quotes**
 - [ ] Create a quote for a lead (New quote is disabled until a lead exists).
-- [ ] "Mark sent" creates follow-up reminders and sets the next follow-up date.
+- [ ] "I already sent this" on a draft creates follow-up reminders and sets the next follow-up date.
 - [ ] Won/Lost buttons and the status dropdown update the quote.
 - [ ] Edit and delete (with confirm) work.
 
@@ -444,13 +481,16 @@ one code path; only the base URL, model and key differ. All calls are plain
   sending, no SMS or chat, and no unsubscribe/suppression handling yet.
 - **No automated reminders.** Follow-up due dates are shown in-app; there are no
   push/email notifications yet (would need a cron job / edge function).
-- **Single currency per business for totals.** Each quote stores its own currency,
-  but dashboard/pipeline totals are summed and displayed in the business currency
-  without FX conversion.
+- **No currency conversion.** Each quote stores its own currency. Totals on the
+  dashboard, Quotes page and pipeline are added up per currency (e.g.
+  "$1,200.00 + €300.00") and never converted.
 - **One workspace per user.** No teams, roles or shared workspaces.
-- **Client-side search/filter.** Lists load all of a user's rows and filter in the
-  browser — perfect for typical small-business volumes, not for tens of thousands
-  of rows.
+- **Client-side search/filter.** Lists load all of a user's rows (page by page,
+  so Supabase's 1,000-row API limit doesn't cut them short — keep the project's
+  *Max rows* setting at 1,000 or more) and filter in the browser — fine for
+  typical small-business volumes, not for tens of thousands of rows. The
+  Follow-ups page lists every open reminder but only the latest 200 finished
+  ones; the CSV export has them all.
 - **Email confirmation** is on by default in Supabase; disable it for a frictionless
   demo (see setup).
 - **AI output is model-dependent** and should always be reviewed before sending.

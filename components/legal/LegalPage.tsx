@@ -22,7 +22,7 @@ export function LegalPage({
   return (
     <main className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <Link href="/" className="text-[15px] font-semibold tracking-tight">
+        <Link href="/" className="tap inline-flex items-center text-[15px] font-semibold tracking-tight">
           QuoteLoop
         </Link>
         <nav className="flex items-center gap-2">

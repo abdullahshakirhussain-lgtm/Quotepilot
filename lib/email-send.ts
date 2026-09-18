@@ -20,9 +20,12 @@ import {
   composeEmailText,
   formatFrom,
   isEmailQuotaError,
+  isEmailRefusedError,
   isValidEmail,
   MAX_BODY_LENGTH,
+  NEEDS_BUSINESS_EMAIL,
   quotaError,
+  sameAddress,
   type EmailConfig,
   type OutgoingEmail,
   type SendResult,
@@ -36,6 +39,8 @@ export interface EmailLogInsert {
   subject: string;
   body: string;
   status: "pending";
+  /** The email that sends a draft quote (not a follow-up): one per quote. Not a column. */
+  quote_email?: boolean;
 }
 
 export interface EmailLogPatch {
@@ -53,6 +58,8 @@ export interface SendDeps {
   getLead(leadId: string): Promise<{ id: string; email: string | null } | null>;
   getBusiness(): Promise<{ business_name: string; email: string | null } | null>;
   countRecentEmails(): Promise<{ day: number; month: number }>;
+  /** True when this exact email went to this recipient in the last few minutes. */
+  sentRecently(email: { to: string; subject: string; text: string }): Promise<boolean>;
   getPendingFollowUp(quoteId: string): Promise<{ id: string; follow_up_number: number } | null>;
   /**
    * An earlier email for this reminder: "sent" if one went out, "pending" if one
@@ -77,6 +84,11 @@ export type SendOutcome =
       unconfirmed?: boolean;
       /** Sending this reminder again must not be offered. */
       locked?: boolean;
+      /**
+       * The customer's saved address changed since the user reviewed the email.
+       * Nothing was sent; this is the address a new attempt would go to.
+       */
+      recipientChanged?: string;
     }
   | {
       ok: true;
@@ -93,7 +105,21 @@ export type SendOutcome =
 
 export async function sendFollowUpEmailCore(
   deps: SendDeps,
-  input: { quoteId: string; subject?: string | null; message: string }
+  input: {
+    quoteId: string;
+    subject?: string | null;
+    message: string;
+    /**
+     * The address the user saw on screen. Only ever used to refuse: the email
+     * still goes to the saved address, and only if it is this one.
+     */
+    expectedTo?: string | null;
+    /**
+     * The reminder that was due when the user opened the message. If it has
+     * since been recorded (another tab), nothing is sent.
+     */
+    expectedFollowUpId?: string | null;
+  }
 ): Promise<SendOutcome> {
   if (!deps.config) {
     return { ok: false, error: "Email sending isn't set up yet. You can still copy the message and send it yourself." };
@@ -101,20 +127,47 @@ export async function sendFollowUpEmailCore(
 
   const message = (input.message ?? "").trim();
   if (!message) return { ok: false, error: "Write or generate a message before sending." };
-  if (message.length > MAX_BODY_LENGTH) return { ok: false, error: "This message is too long to send." };
+  if (message.length > MAX_BODY_LENGTH) {
+    return {
+      ok: false,
+      error: `This message is too long to send. Keep it under ${MAX_BODY_LENGTH.toLocaleString("en-US")} characters.`,
+    };
+  }
 
   const quote = await deps.getQuote(input.quoteId);
-  if (!quote) return { ok: false, error: "Quote not found." };
+  if (!quote) {
+    return { ok: false, error: "This quote no longer exists (it may have been deleted in another tab), so nothing was sent." };
+  }
   const lead = await deps.getLead(quote.lead_id);
-  if (!lead) return { ok: false, error: "Customer not found." };
+  if (!lead) {
+    return { ok: false, error: "This quote's customer no longer exists, so nothing was sent." };
+  }
 
   // The recipient always comes from the saved customer, never from the client.
   const to = lead.email?.trim() ?? "";
   if (!isValidEmail(to)) {
     return { ok: false, error: "Add a valid email address to this customer to send from QuoteLoop." };
   }
+  if (input.expectedTo?.trim() && !sameAddress(input.expectedTo, to)) {
+    return {
+      ok: false,
+      recipientChanged: to,
+      error: `This customer's email address was changed to ${to} after you opened this, so nothing was sent. Check the address, then press Send email again if it's right.`,
+    };
+  }
 
   const pending = await deps.getPendingFollowUp(quote.id);
+
+  // Opened for a reminder that has since been recorded (e.g. in another tab):
+  // sending now would count as the next follow-up, a second email in minutes.
+  if (typeof input.expectedFollowUpId === "string" && pending?.id !== input.expectedFollowUpId) {
+    return {
+      ok: false,
+      locked: true,
+      error:
+        "This follow-up was already recorded, maybe in another tab, so nothing was sent. Close this window and check the quote before following up again.",
+    };
+  }
 
   // One email per reminder: never send one that already went out, or may have.
   if (pending) {
@@ -136,14 +189,26 @@ export async function sendFollowUpEmailCore(
     }
   }
 
+  // Replies go to the business; without a real address they'd be lost.
+  const business = await deps.getBusiness();
+  const replyTo = business?.email?.trim() ?? "";
+  if (!isValidEmail(replyTo)) return { ok: false, error: NEEDS_BUSINESS_EMAIL };
+
   const limit = quotaError(await deps.countRecentEmails());
   if (limit) return { ok: false, error: limit };
 
-  const business = await deps.getBusiness();
   const businessName = business?.business_name ?? "";
   const subject = cleanSubject(input.subject, quote.title);
   const text = composeEmailText(message, businessName);
-  const replyTo = isValidEmail(business?.email) ? business!.email!.trim() : deps.config.replyToFallback;
+
+  // The same email to the same person moments ago (another tab): don't repeat it.
+  if (await deps.sentRecently({ to, subject, text })) {
+    return {
+      ok: false,
+      locked: true,
+      error: `You sent this exact email to ${to} a few minutes ago, so it wasn't sent again.`,
+    };
+  }
 
   // Audit first: if the log can't be written, nothing is sent.
   let logId: string;
@@ -158,8 +223,19 @@ export async function sendFollowUpEmailCore(
       status: "pending",
     });
   } catch (e) {
-    if (!isEmailQuotaError(e)) throw e;
-    return { ok: false, error: e.message };
+    if (isEmailQuotaError(e)) return { ok: false, error: e.message };
+    if (isEmailRefusedError(e)) {
+      // Found by the database inside its lock: another tab got there first.
+      return {
+        ok: false,
+        locked: true,
+        error:
+          e.reason === "repeat"
+            ? `You sent this exact email to ${to} a few minutes ago, so it wasn't sent again.`
+            : `An email for follow-up #${pending?.follow_up_number ?? ""} was already sent from QuoteLoop, maybe in another tab, so this one wasn't sent. Use “Mark as followed up” if it still needs recording.`,
+      };
+    }
+    throw e;
   }
 
   const result = await deps.send({

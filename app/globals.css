@@ -57,3 +57,25 @@ body {
     @apply text-[22px] font-semibold tracking-tight text-stone-900;
   }
 }
+
+/* Buttons and small controls (icon buttons, "View all" links, toggles) keep
+   their compact look with a mouse, but get a finger-sized target (40px) on
+   touch screens and phones. A .tap element must be flex or inline-flex for the
+   height to apply. */
+@layer components {
+  @media (pointer: coarse), (max-width: 639px) {
+    .btn,
+    .btn-primary,
+    .btn-accent,
+    .btn-secondary,
+    .btn-danger,
+    .btn-ghost,
+    .input {
+      min-height: 40px;
+    }
+    .tap {
+      min-height: 40px;
+      min-width: 40px;
+    }
+  }
+}

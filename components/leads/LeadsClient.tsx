@@ -17,6 +17,7 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [editing, setEditing] = useState<Lead | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -70,7 +71,7 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
               />
             </div>
             <select
-              className="input w-auto py-1.5"
+              className="input tap w-auto py-1.5"
               aria-label="Filter by stage"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "all")}
@@ -83,6 +84,15 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
               ))}
             </select>
           </div>
+
+          {deleteError && (
+            <div
+              role="alert"
+              className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200"
+            >
+              {deleteError}
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <p className="card px-4 py-8 text-center text-sm text-stone-500">
@@ -130,13 +140,13 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                           <div className="flex items-center justify-end gap-0.5">
                             <Link
                               href={`/quotes?lead=${lead.id}`}
-                              className="btn-ghost px-2 py-1 text-xs"
+                              className="btn-ghost tap px-2 py-1 text-xs"
                               title="New quote for this customer"
                             >
                               <FilePlus2 className="h-4 w-4" /> Quote
                             </Link>
                             <button
-                              className="btn-ghost px-2 py-1"
+                              className="btn-ghost tap px-2 py-1"
                               title="Edit customer"
                               aria-label="Edit customer"
                               onClick={() => setEditing(lead)}
@@ -144,10 +154,11 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                               <Pencil className="h-4 w-4" />
                             </button>
                             <ConfirmButton
-                              className="btn-ghost px-2 py-1 text-stone-400 hover:bg-red-50 hover:text-red-700"
+                              className="btn-ghost tap px-2 py-1 text-stone-400 hover:bg-red-50 hover:text-red-700"
                               title="Delete customer"
                               confirmMessage={`Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too. Records of emails QuoteLoop already sent are kept.`}
-                              action={deleteLead.bind(null, lead.id)}
+                              action={() => deleteLead(lead.id)}
+                              onError={setDeleteError}
                             >
                               <Trash2 className="h-4 w-4" />
                             </ConfirmButton>

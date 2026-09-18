@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
-import { CURRENCIES } from "@/lib/constants";
-import { optionalString, requireString } from "@/lib/utils";
+import { CURRENCIES, FOLLOW_UP_DAY_OPTIONS } from "@/lib/constants";
+import { optionalString } from "@/lib/utils";
+import { cleanPasted, isValidEmail } from "@/lib/email-address";
 import { requestToday } from "@/lib/request-time";
 import { buildDemoSeed } from "@/lib/demo-seed";
 import { sanitizeFollowUpDays } from "@/lib/quote-state";
@@ -21,20 +22,56 @@ function revalidateAll() {
   }
 }
 
+/** A problem with what the user typed: its message is safe to show as-is. */
+class InputError extends Error {}
+
+/** Longest business name, owner name and industry kept. */
+const NAME_LIMIT = 120;
+const PHONE_LIMIT = 40;
+
+function required(formData: FormData, field: string, missing: string, label: string): string {
+  const value = optionalString(formData.get(field));
+  if (!value) throw new InputError(missing);
+  if (value.length > NAME_LIMIT) {
+    throw new InputError(`${label} is too long. Keep it under ${NAME_LIMIT} characters.`);
+  }
+  return value;
+}
+
 function readBusinessForm(formData: FormData) {
-  const currency = requireString(formData.get("currency"), "Currency").toUpperCase();
+  const currency = String(formData.get("currency") ?? "").trim().toUpperCase();
   if (!(CURRENCIES as readonly string[]).includes(currency)) {
-    throw new Error("Unsupported currency.");
+    throw new InputError("Choose a currency.");
+  }
+  // Customer replies to emails sent from QuoteLoop go here, so it must be real.
+  const email = cleanPasted(optionalString(formData.get("email"))) || null;
+  if (email && !isValidEmail(email)) {
+    throw new InputError("That business email doesn't look right. Check it, or leave it empty.");
+  }
+  const phone = cleanPasted(optionalString(formData.get("phone"))) || null;
+  if (phone && phone.length > PHONE_LIMIT) {
+    throw new InputError(`The phone number is too long. Keep it under ${PHONE_LIMIT} characters.`);
+  }
+  // Only the offered days count: a tampered form can't sneak in day 0 or 900.
+  const days = formData.getAll("default_follow_up_days").map(Number);
+  if (!days.some((d) => (FOLLOW_UP_DAY_OPTIONS as readonly number[]).includes(d))) {
+    throw new InputError("Choose at least one follow-up day.");
   }
   return {
-    business_name: requireString(formData.get("business_name"), "Business name"),
-    industry: requireString(formData.get("industry"), "Industry"),
+    business_name: required(formData, "business_name", "Enter your business name.", "The business name"),
+    industry: required(formData, "industry", "Choose your industry.", "The industry"),
     currency,
-    owner_name: requireString(formData.get("owner_name"), "Your name"),
-    phone: optionalString(formData.get("phone")),
-    email: optionalString(formData.get("email")),
-    default_follow_up_days: sanitizeFollowUpDays(formData.getAll("default_follow_up_days")),
+    owner_name: required(formData, "owner_name", "Enter your name.", "Your name"),
+    phone,
+    email,
+    default_follow_up_days: sanitizeFollowUpDays(
+      days.filter((d) => (FOLLOW_UP_DAY_OPTIONS as readonly number[]).includes(d))
+    ),
   };
+}
+
+function inputProblem(e: unknown): string {
+  return e instanceof InputError ? e.message : "Check the details and try again.";
 }
 
 export async function createBusiness(
@@ -47,14 +84,17 @@ export async function createBusiness(
   try {
     payload = { ...readBusinessForm(formData), user_id: user.id };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Invalid input." };
+    return { error: inputProblem(e) };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.from("businesses").insert(payload);
   // 23505 = unique violation: the workspace already exists (e.g. a double
   // submit or a second tab). That's success, not an error.
-  if (error && error.code !== "23505") return { error: error.message };
+  if (error && error.code !== "23505") {
+    console.error("[settings] creating a workspace failed:", error.message);
+    return { error: "Your workspace couldn't be created just now. Please try again." };
+  }
 
   redirect("/dashboard");
 }
@@ -69,15 +109,20 @@ export async function updateBusiness(
   try {
     payload = readBusinessForm(formData);
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Invalid input." };
+    return { error: inputProblem(e) };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("businesses")
     .update(payload)
-    .eq("user_id", user.id);
-  if (error) return { error: error.message };
+    .eq("user_id", user.id)
+    .select("id");
+  if (error) {
+    console.error("[settings] saving settings failed:", error.message);
+    return { error: "Your settings couldn't be saved just now. Please try again." };
+  }
+  if (!data?.length) return { error: "Your workspace wasn't found. Refresh the page and try again." };
 
   revalidatePath("/settings");
   revalidatePath("/dashboard");
@@ -98,7 +143,10 @@ export async function seedDemoData(): Promise<ActionState> {
     .from("leads")
     .select("id", { count: "exact", head: true })
     .eq("user_id", uid);
-  if (countError) return { error: countError.message };
+  if (countError) {
+    console.error("[settings] demo data check failed:", countError.message);
+    return { error: "Demo data couldn't be loaded just now. Please try again." };
+  }
   if ((count ?? 0) > 0) {
     return {
       error:
@@ -160,9 +208,10 @@ export async function seedDemoData(): Promise<ActionState> {
     });
     if (msgError) throw new Error(msgError.message);
   } catch (e) {
+    console.error("[settings] loading demo data failed part way:", e instanceof Error ? e.message : e);
     revalidateAll();
     return {
-      error: `Demo data only partly loaded (${e instanceof Error ? e.message : "unknown error"}). Use “Delete all data” and try again.`,
+      error: "Demo data only partly loaded. Use “Delete all data” to clear it, then try again.",
     };
   }
 
