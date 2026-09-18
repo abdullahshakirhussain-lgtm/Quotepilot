@@ -61,7 +61,8 @@ body {
 /* Buttons and small controls (icon buttons, "View all" links, toggles) keep
    their compact look with a mouse, but get a finger-sized target (40px) on
    touch screens and phones. A .tap element must be flex or inline-flex for the
-   height to apply. */
+   height to apply. Its 40px minimum width replaces a flex item's usual minimum
+   (its content), so a .tap item in a row that must not squeeze needs shrink-0. */
 @layer components {
   @media (pointer: coarse), (max-width: 639px) {
     .btn,

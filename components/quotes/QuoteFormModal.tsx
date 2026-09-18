@@ -6,6 +6,9 @@ import { Modal } from "@/components/ui/Modal";
 import { CURRENCIES } from "@/lib/constants";
 import type { Lead, Quote } from "@/lib/types";
 import { updateQuote, type QuoteActionState } from "@/app/(app)/quotes/actions";
+import { reportUnreachable } from "@/lib/form-action";
+
+const saveQuote = reportUnreachable(updateQuote);
 
 type CustomerOption = Pick<Lead, "id" | "customer_name" | "company_name">;
 
@@ -46,7 +49,7 @@ export function QuoteFormModal({
   onClose: () => void;
   onSaved?: (message: string) => void;
 }) {
-  const [state, formAction, pending] = useActionState<QuoteActionState, FormData>(updateQuote, {});
+  const [state, formAction, pending] = useActionState<QuoteActionState, FormData>(saveQuote, {});
   const done = useRef(false);
   // Set once anything is changed, so closing by accident asks first.
   const dirty = useRef(false);

@@ -36,7 +36,14 @@ export function Modal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/50 p-4 sm:p-8"
-      onMouseDown={onClose}
+      onMouseDown={(e) => {
+        // Only a press on the dimmed backdrop itself closes the dialog — not
+        // one on this layer's scrollbar, which a tall dialog scrolls with.
+        const layer = e.currentTarget;
+        if (e.target !== layer) return;
+        if (e.clientX >= layer.clientWidth || e.clientY >= layer.clientHeight) return;
+        onClose();
+      }}
     >
       <div
         role="dialog"

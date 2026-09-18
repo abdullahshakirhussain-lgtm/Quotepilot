@@ -1,15 +1,27 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/constants";
 import type { Lead } from "@/lib/types";
+import { reportUnreachable } from "@/lib/form-action";
 import {
   createLead,
   updateLead,
   type LeadActionState,
 } from "@/app/(app)/leads/actions";
+
+const saveNew = reportUnreachable(createLead);
+const saveEdit = reportUnreachable(updateLead);
+
+/** The details a "you already have this customer" warning is about. */
+function contactOf(data: FormData): string {
+  return JSON.stringify([
+    String(data.get("email") ?? "").trim().toLowerCase(),
+    String(data.get("phone") ?? "").trim(),
+  ]);
+}
 
 export function LeadFormModal({
   lead,
@@ -19,11 +31,15 @@ export function LeadFormModal({
   onClose: () => void;
 }) {
   const isEdit = Boolean(lead);
-  const action = isEdit ? updateLead : createLead;
   const [state, formAction, pending] = useActionState<LeadActionState, FormData>(
-    action,
+    isEdit ? saveEdit : saveNew,
     {}
   );
+  // The email and phone as last submitted, and as they are now: after a
+  // duplicate warning, submitting them unchanged saves anyway.
+  const [submitted, setSubmitted] = useState<string | null>(null);
+  const [contactNow, setContactNow] = useState<string | null>(null);
+  const warned = Boolean(state.duplicate) && submitted !== null && submitted === contactNow;
 
   // Set once anything is typed, so closing by accident asks first.
   const dirty = useRef(false);
@@ -57,10 +73,15 @@ export function LeadFormModal({
           e.preventDefault();
           if (pending) return;
           const data = new FormData(e.currentTarget);
+          const contact = contactOf(data);
+          if (warned && contact === submitted) data.set("allow_duplicate", "1");
+          setSubmitted(contact);
+          setContactNow(contact);
           startTransition(() => formAction(data));
         }}
-        onInput={() => {
+        onInput={(e) => {
           dirty.current = true;
+          setContactNow(contactOf(new FormData(e.currentTarget)));
         }}
         className="flex flex-col gap-4"
       >
@@ -163,8 +184,17 @@ export function LeadFormModal({
           </div>
         </div>
 
-        {state.error && (
+        {state.error && !state.duplicate && (
           <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {state.error}
+          </div>
+        )}
+        {/* A warning, not an error: nothing is merged, and the user decides. */}
+        {warned && (
+          <div
+            role="alert"
+            className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200"
+          >
             {state.error}
           </div>
         )}
@@ -175,7 +205,7 @@ export function LeadFormModal({
           </button>
           <button type="submit" className="btn-primary" disabled={pending}>
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isEdit ? "Save changes" : "Add customer"}
+            {warned ? (isEdit ? "Save anyway" : "Add anyway") : isEdit ? "Save changes" : "Add customer"}
           </button>
         </div>
       </form>

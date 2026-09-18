@@ -91,18 +91,20 @@ function fallback(ctx: MessageContext, provider: string, err: unknown): Generate
   };
 }
 
-/** Turns a provider failure into a short reason that is safe to show users. */
+/**
+ * Turns a provider failure into a short reason that is safe to show users, in
+ * their terms: key and billing problems are QuoteLoop's to fix, not theirs.
+ */
 function describeError(err: unknown): string {
   if (err instanceof Error) {
-    if (err.name === "TimeoutError" || err.name === "AbortError") return "request timed out";
+    if (err.name === "TimeoutError" || err.name === "AbortError") return "it took too long to answer";
     const status = /API (\d{3})/.exec(err.message)?.[1];
-    if (status === "401" || status === "403") return "API key was rejected";
-    if (status === "402") return "account has insufficient balance";
-    if (status === "429") return "rate limit reached";
-    if (status) return `provider returned HTTP ${status}`;
-    if (/empty message/i.test(err.message)) return "provider returned an empty message";
+    if (status === "401" || status === "403" || status === "402") return "a setup problem on QuoteLoop's side";
+    if (status === "429") return "it's busy right now";
+    if (status) return "it had a problem";
+    if (/empty message/i.test(err.message)) return "it sent back an empty message";
   }
-  return "request failed";
+  return "it couldn't be reached";
 }
 
 async function callAnthropic(system: string, user: string): Promise<string> {

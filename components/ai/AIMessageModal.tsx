@@ -160,7 +160,7 @@ export function AIMessageModal({
       setDraft(data.content);
       if (data.fellBack) {
         setNotice(
-          `The AI provider couldn't be reached${data.error ? ` (${data.error})` : ""}, so this is a template you can edit.`
+          `QuoteLoop's AI writer isn't available right now${data.error ? ` (${data.error})` : ""}, so this is a template you can edit.`
         );
       } else if (data.provider === "template") {
         setNotice("No AI key is configured, so this is a template you can edit.");
@@ -434,9 +434,10 @@ export function AIMessageModal({
           <div className="space-y-3">
             {canEmail && (
               <div className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
-                <div className="flex items-center gap-3 px-3 py-2">
+                <div className="flex items-start gap-3 px-3 py-2">
                   <span className="w-14 shrink-0 text-stone-500">To</span>
-                  <span className="truncate font-medium text-stone-800">{recipient}</span>
+                  {/* Wraps rather than truncates: the whole address must be checkable. */}
+                  <span className="min-w-0 font-medium text-stone-800 [overflow-wrap:anywhere]">{recipient}</span>
                 </div>
                 <div className="flex items-center gap-3 px-3 py-1.5">
                   <label htmlFor="ai-subject" className="w-14 shrink-0 text-stone-500">Subject</label>
@@ -618,7 +619,13 @@ export function AIMessageModal({
                       >
                         {h.text}
                       </p>
-                      <CopyButton text={h.text} label="Copy" className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-xs" />
+                      {/* The entry above is cut to four lines, so a failed copy shows all of it. */}
+                      <CopyButton
+                        text={h.text}
+                        label="Copy"
+                        showTextOnFail
+                        className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-xs"
+                      />
                     </>
                   )}
                 </li>

@@ -50,9 +50,10 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(
-    // Set by /auth/callback: Google was cancelled, or a sign-in link failed.
+    // Set by /auth/callback: Google was cancelled, or a confirmation link failed.
+    // (A reset link that fails goes to /forgot-password instead.)
     params.get("error") === "oauth"
-      ? "Sign-in didn't complete. Please try again. If you were confirming your email, log in with your password. If you were resetting your password, the link may have expired or been opened in a different browser: request a new one."
+      ? "Sign-in didn't complete. Please try again. If you were confirming your email, log in with your password."
       : null
   );
   const [checkEmail, setCheckEmail] = useState(false);

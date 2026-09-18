@@ -10,7 +10,7 @@ import { cleanPasted, emailConfig, isValidEmail, sendViaResend, type EmailConfig
 import { countRecentEmails, emailLogWriter, sentRecently } from "@/lib/email-quota";
 import { applyQuoteStatusChange } from "@/lib/quote-state";
 import { requestToday } from "@/lib/request-time";
-import { findSimilarQuote, isCustomerGoneError, resolveCustomerRecord } from "@/lib/quote-write";
+import { findEarlierTwin, findSimilarQuote, isCustomerGoneError, resolveCustomerRecord } from "@/lib/quote-write";
 import {
   LIMITS,
   MarkSentError,
@@ -167,6 +167,17 @@ function quoteDeps(supabase: SupabaseClient, uid: string): TrackQuoteDeps {
       return (data ?? []) as ScheduledFollowUp[];
     },
     findExistingQuote: (f) => findSimilarQuote(supabase, uid, f),
+    findEarlierTwin: (quoteId, f, customer) => findEarlierTwin(supabase, uid, quoteId, f, customer),
+    async discardQuote(quoteId) {
+      // Only ever the quote this request just saved, before it has reminders.
+      const { data, error } = await supabase
+        .from("quotes")
+        .delete()
+        .eq("id", quoteId)
+        .eq("user_id", uid)
+        .select("id");
+      return !error && Boolean(data?.length);
+    },
   };
 }
 

@@ -8,6 +8,9 @@ import type { ActionResult } from "@/lib/types";
 
 type ReminderStatus = "pending" | "completed" | "skipped";
 
+/** Quote statuses whose reminders are closed for good, as the user sees them. */
+const CLOSED_LABELS: Record<string, string> = { accepted: "won", rejected: "lost", expired: "expired" };
+
 function revalidateViews() {
   revalidatePath("/follow-ups");
   revalidatePath("/quotes");
@@ -30,7 +33,7 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
   try {
     const { data: fu, error } = await supabase
       .from("follow_ups")
-      .select("id, quote_id, status")
+      .select("id, quote_id, status, quote:quotes(status)")
       .eq("id", String(id ?? ""))
       .eq("user_id", user.id)
       .maybeSingle();
@@ -38,8 +41,23 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
     if (!fu) {
       return { ok: false, error: "This reminder no longer exists. Its quote may have been deleted." };
     }
-    // Already in that state (e.g. a double click): don't reset completed_at.
-    if (fu.status === status) return { ok: true };
+    // Already in that state before this press (done in another tab, a page
+    // left open): say so, don't reset completed_at, and refresh the stale page.
+    if (fu.status === status) {
+      revalidateViews();
+      return { ok: false, error: alreadyMessage(fu.status) };
+    }
+
+    // A won, lost or expired quote has no open reminders; reopening one would
+    // show a closed quote as due on the dashboard and Follow-ups page.
+    const quote = (Array.isArray(fu.quote) ? fu.quote[0] : fu.quote) as { status?: string } | null;
+    const closedAs = CLOSED_LABELS[quote?.status ?? ""];
+    if (status === "pending" && closedAs) {
+      return {
+        ok: false,
+        error: `This quote is marked ${closedAs}, so its reminders stay closed. To follow up again, use “Reopen as sent” on the quote.`,
+      };
+    }
 
     // Done and Skip only apply to a reminder that is still open, and Reopen to
     // one that isn't. A stale page must not turn a reminder that a follow-up

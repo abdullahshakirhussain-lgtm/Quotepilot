@@ -80,15 +80,17 @@ export function SendDraftQuoteModal({
     });
   }
 
+  // Closing mid-send would hide whether the email went out; edits ask first.
+  function requestClose() {
+    if (busy) return;
+    if (edited && !locked && !window.confirm("Close without sending? Your changes to the email won't be kept.")) return;
+    onClose();
+  }
+
   return (
     <Modal
       open
-      // Closing mid-send would hide whether the email went out.
-      onClose={() => {
-        if (busy) return;
-        if (edited && !locked && !window.confirm("Close without sending? Your changes to the email won't be kept.")) return;
-        onClose();
-      }}
+      onClose={requestClose}
       size="lg"
       title="Send quote email"
       description={`To ${quote.lead?.customer_name ?? "your customer"}. Reminders start once it's sent.`}
@@ -126,7 +128,7 @@ export function SendDraftQuoteModal({
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
-          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>
+          <button type="button" className="btn-ghost" onClick={requestClose} disabled={busy}>
             Cancel
           </button>
           <button

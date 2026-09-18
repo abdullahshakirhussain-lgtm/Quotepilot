@@ -62,7 +62,7 @@ export async function GET(
         supabase
           .from("quotes")
           .select(
-            "title, amount, currency, status, quote_date, valid_until, follow_up_count, last_follow_up_at, next_follow_up_at, notes, created_at, lead:leads(customer_name, company_name)"
+            "title, description, amount, currency, status, quote_date, sent_method, valid_until, follow_up_count, last_follow_up_at, next_follow_up_at, notes, created_at, lead:leads(customer_name, company_name)"
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
@@ -81,10 +81,12 @@ export async function GET(
         "title",
         "customer_name",
         "company_name",
+        "description",
         "amount",
         "currency",
         "status",
         "quote_date",
+        "sent_method",
         "valid_until",
         "follow_up_count",
         "last_follow_up_at",

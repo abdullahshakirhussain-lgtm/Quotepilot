@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { Loader2, Mail } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { addCustomerEmail } from "@/app/(app)/quotes/new-quote-actions";
@@ -26,11 +27,20 @@ export function AddCustomerEmailModal({
   const [busy, start] = useTransition();
 
   function save() {
+    // Enter pressed again while saving must not save twice.
+    if (busy) return;
     setError(null);
     start(async () => {
-      const outcome = await addCustomerEmail(customerId, email.trim());
-      if (!outcome.ok) return setError(outcome.error);
-      onSaved();
+      try {
+        const outcome = await addCustomerEmail(customerId, email.trim());
+        if (!outcome.ok) return setError(outcome.error);
+        onSaved();
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setError(
+          "QuoteLoop couldn't be reached, so the email address may not have been saved. You may have lost your connection, or been signed out in another tab — refresh the page and try again."
+        );
+      }
     });
   }
 

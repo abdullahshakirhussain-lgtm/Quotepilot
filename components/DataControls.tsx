@@ -1,9 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { Database, Loader2, Trash2 } from "lucide-react";
 import { clearAllData, seedDemoData } from "@/app/(app)/settings/actions";
 import type { ActionState } from "@/app/(app)/settings/actions";
+
+/** Runs a settings action; a request that never got an answer is said so, not a crash. */
+async function attempt(action: () => Promise<ActionState>, unreachable: string): Promise<ActionState> {
+  try {
+    return await action();
+  } catch (e) {
+    unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+    return { error: unreachable };
+  }
+}
 
 export function DataControls() {
   const [seeding, startSeed] = useTransition();
@@ -19,7 +30,14 @@ export function DataControls() {
           disabled={seeding || clearing}
           onClick={() => {
             setResult(null);
-            startSeed(async () => setResult(await seedDemoData()));
+            startSeed(async () =>
+              setResult(
+                await attempt(
+                  seedDemoData,
+                  "QuoteLoop couldn't be reached, so the demo data may not have loaded. Refresh the page to check, then try again."
+                )
+              )
+            );
           }}
         >
           {seeding ? (
@@ -42,7 +60,14 @@ export function DataControls() {
               )
             ) {
               setResult(null);
-              startClear(async () => setResult(await clearAllData()));
+              startClear(async () =>
+                setResult(
+                  await attempt(
+                    clearAllData,
+                    "QuoteLoop couldn't be reached, so your data may not have been deleted, or only partly. Refresh the page to check, then try again."
+                  )
+                )
+              );
             }
           }}
         >
@@ -56,7 +81,7 @@ export function DataControls() {
       </div>
 
       {result?.error && (
-        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {result.error}
         </div>
       )}

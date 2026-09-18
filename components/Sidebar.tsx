@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -35,6 +36,39 @@ export function Sidebar({
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
+  // On narrow phones the tabs don't all fit: they scroll sideways, a fade shows
+  // there are more, and the current page's tab is kept in view.
+  const mobileNav = useRef<HTMLElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+
+  useEffect(() => {
+    const nav = mobileNav.current;
+    if (!nav) return;
+    const update = () =>
+      setMore({
+        left: nav.scrollLeft > 4,
+        right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 4,
+      });
+    update();
+    nav.addEventListener("scroll", update, { passive: true });
+    // The tabs change width after the web font loads, or when the badge
+    // count changes, without the bar itself scrolling or resizing.
+    const sizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    sizes?.observe(nav);
+    for (const tab of Array.from(nav.children)) sizes?.observe(tab);
+    document.fonts?.ready.then(update).catch(() => {});
+    return () => {
+      nav.removeEventListener("scroll", update);
+      sizes?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    mobileNav.current
+      ?.querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
+
   return (
     <>
       {/* Desktop sidebar */}
@@ -62,6 +96,7 @@ export function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   active
@@ -109,25 +144,42 @@ export function Sidebar({
             </form>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "tap flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
-                isActive(item.href) ? "bg-white/10 text-white" : "hover:bg-white/5"
-              )}
-            >
-              {item.label}
-              {item.badge && attentionCount > 0 && (
-                <span className="num rounded bg-brand-600 px-1 text-[11px] font-semibold text-white">
-                  {attentionCount}
-                </span>
-              )}
-            </Link>
-          ))}
-        </nav>
+        <div className="relative">
+          <nav ref={mobileNav} aria-label="Main" className="flex gap-1 overflow-x-auto px-3 pb-2">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive(item.href) ? "page" : undefined}
+                // shrink-0: .tap's minimum width would otherwise let the tabs
+                // squeeze together until their labels overlap.
+                className={cn(
+                  "tap flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+                  isActive(item.href) ? "bg-white/10 text-white" : "hover:bg-white/5"
+                )}
+              >
+                {item.label}
+                {item.badge && attentionCount > 0 && (
+                  <span className="num rounded bg-brand-600 px-1 text-[11px] font-semibold text-white">
+                    {attentionCount}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </nav>
+          {more.left && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-stone-950 to-transparent"
+            />
+          )}
+          {more.right && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-stone-950 to-transparent"
+            />
+          )}
+        </div>
       </div>
     </>
   );

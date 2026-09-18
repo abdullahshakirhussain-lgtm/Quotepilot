@@ -255,7 +255,29 @@ export interface TrackQuoteDeps {
    * An already saved quote with the same customer, title, amount and sent date,
    * if there is one. Looks only; never creates a customer.
    */
-  findExistingQuote?(f: QuoteFields): Promise<{ title: string; customerName: string; sentDate: string } | null>;
+  findExistingQuote?(f: QuoteFields): Promise<SimilarQuote | null>;
+  /**
+   * Run right after this quote is saved: the same quote saved moments earlier
+   * by another request (a second tab submitting at the same instant, which the
+   * check above can't catch). Returns it only when this copy is the later one.
+   */
+  findEarlierTwin?(quoteId: string, f: QuoteFields, customer: CustomerRecord): Promise<SimilarQuote | null>;
+  /** Removes a quote this request has just saved. False if it couldn't. */
+  discardQuote?(quoteId: string): Promise<boolean>;
+}
+
+/** A saved quote that looks like the one being added. */
+export interface SimilarQuote {
+  title: string;
+  customerName: string;
+  sentDate: string;
+}
+
+function duplicateMessage(existing: SimilarQuote, f: QuoteFields): string {
+  return `This looks like a quote you already added: “${existing.title}” for ${existing.customerName}, ${formatCurrency(
+    parseAmount(f.amount)!,
+    String(f.currency).toUpperCase()
+  )}, sent ${formatDate(existing.sentDate)}. Add it again only if it's a separate quote.`;
 }
 
 export interface SendQuoteDeps extends TrackQuoteDeps {
@@ -331,20 +353,22 @@ export async function trackQuoteCore(
   // a mistake, but not always, so warn and let the user decide.
   if (!f.allowDuplicate && deps.findExistingQuote) {
     const existing = await deps.findExistingQuote(f);
-    if (existing) {
-      return {
-        ok: false,
-        duplicate: true,
-        error: `This looks like a quote you already added: “${existing.title}” for ${existing.customerName}, ${formatCurrency(
-          parseAmount(f.amount)!,
-          String(f.currency).toUpperCase()
-        )}, sent ${formatDate(existing.sentDate)}. Add it again only if it's a separate quote.`,
-      };
-    }
+    if (existing) return { ok: false, duplicate: true, error: duplicateMessage(existing, f) };
   }
 
   const customer = await deps.resolveCustomer(f);
   const quoteId = await deps.createQuote(quoteRow(f, customer.id, "sent"));
+
+  // Two tabs submitting the same quote at the same instant both pass the check
+  // above. The copy saved first is kept; this one steps aside before any
+  // reminders are scheduled for it. Any doubt keeps it: a possible duplicate
+  // is better than a lost quote.
+  if (!f.allowDuplicate && deps.findEarlierTwin && deps.discardQuote) {
+    const twin = await deps.findEarlierTwin(quoteId, f, customer).catch(() => null);
+    if (twin && (await deps.discardQuote(quoteId).catch(() => false))) {
+      return { ok: false, duplicate: true, error: duplicateMessage(twin, f) };
+    }
+  }
 
   const warnings: string[] = [];
   try {

@@ -12,11 +12,15 @@ import { cleanPasted, isValidEmail } from "@/lib/email-address";
  * in through /auth/callback and lands on /reset-password to choose a new one.
  * The answer is the same whether or not an account exists for the address.
  */
-export default function ForgotPasswordForm() {
+export default function ForgotPasswordForm({ linkFailed = false }: { linkFailed?: boolean }) {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    linkFailed
+      ? "That reset link didn't work. It may have expired, already been used, or been opened in a different browser from the one you asked for it in. Enter your email to get a new one."
+      : null
+  );
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

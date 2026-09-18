@@ -159,6 +159,80 @@ export async function findSimilarQuote(
   };
 }
 
+/** How far back a same-instant twin (a second tab submitting too) is looked for. */
+const TWIN_WINDOW_MS = 2 * 60_000;
+
+type TwinRow = {
+  id: string;
+  title: string;
+  amount: number | string;
+  quote_date: string;
+  lead_id: string;
+  lead: { customer_name: string; email: string | null; phone: string | null } | { customer_name: string; email: string | null; phone: string | null }[] | null;
+};
+
+/**
+ * Run right after a tracked quote is saved. Two tabs submitting the same quote
+ * at the same instant both pass the "already added" check, so both save one.
+ * Among the copies saved in the last couple of minutes for this customer (the
+ * same saved customer, or one with the same email, phone, or — with neither —
+ * name), with the same title, amount and sent date, the first saved is the one
+ * kept. Returns that one when it isn't `quoteId`, meaning this copy should step
+ * aside. Both requests read the same order, so they agree on which stays.
+ */
+export async function findEarlierTwin(
+  supabase: SupabaseClient,
+  userId: string,
+  quoteId: string,
+  f: QuoteFields,
+  customer: CustomerRecord,
+  now = Date.now()
+): Promise<{ title: string; customerName: string; sentDate: string } | null> {
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("id, title, amount, quote_date, lead_id, lead:leads(customer_name, email, phone)")
+    .eq("user_id", userId)
+    .eq("quote_date", f.sentDate)
+    .gte("created_at", new Date(now - TWIN_WINDOW_MS).toISOString())
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(error.message);
+
+  const title = f.title.trim().toLowerCase();
+  const cents = (v: unknown) => Math.round(Number(String(v).replace(/[, ]/g, "")) * 100);
+  const amount = cents(f.amount);
+  const email = customer.email?.trim().toLowerCase() || null;
+  const phone = f.phone?.trim() || null;
+  const name = customer.customer_name.trim().toLowerCase();
+
+  const sameCustomer = (q: TwinRow) => {
+    if (q.lead_id === customer.id) return true;
+    // A customer picked from the list is exactly that customer.
+    if (f.customerMode === "existing") return false;
+    // Typed in as new: the other tab may have created its own copy of them.
+    const lead = Array.isArray(q.lead) ? q.lead[0] : q.lead;
+    if (!lead) return false;
+    const leadEmail = lead.email?.trim().toLowerCase() || null;
+    // Two different addresses are two different customers, whatever else matches.
+    if (email && leadEmail) return email === leadEmail;
+    if (phone && samePhone(lead.phone, phone)) return true;
+    return !email && !leadEmail && !phone && !lead.phone?.trim() && lead.customer_name.trim().toLowerCase() === name;
+  };
+
+  const copies = ((data ?? []) as TwinRow[]).filter(
+    (q) => String(q.title).trim().toLowerCase() === title && cents(q.amount) === amount && sameCustomer(q)
+  );
+  const first = copies[0];
+  if (!first || first.id === quoteId || !copies.some((q) => q.id === quoteId)) return null;
+  const firstLead = Array.isArray(first.lead) ? first.lead[0] : first.lead;
+  return {
+    title: String(first.title),
+    customerName: firstLead?.customer_name ?? customer.customer_name,
+    sentDate: String(first.quote_date),
+  };
+}
+
 /**
  * The chosen existing customer, or a new one created from the typed details.
  * A customer with the same email or phone is reused instead of duplicated.

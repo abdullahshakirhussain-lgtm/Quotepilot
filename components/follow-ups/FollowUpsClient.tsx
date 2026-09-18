@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { BellRing, Check, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -21,6 +21,9 @@ import {
 /** A request that never reached the server: usually a dropped connection, or a session that ended in another tab. */
 const OFFLINE_OR_SIGNED_OUT =
   "That didn't go through, so nothing changed. You may have lost your connection, or been signed out in another tab — refresh the page and try again.";
+
+/** Quote statuses whose reminders can't be reopened. */
+const CLOSED_QUOTE = ["accepted", "rejected", "expired"];
 
 const SECTIONS: { key: Exclude<FollowUpBucket, "done">; title: string; accent: string }[] = [
   { key: "overdue", title: "Overdue", accent: "text-red-700" },
@@ -44,6 +47,9 @@ export function FollowUpsClient({
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
   const [showDone, setShowDone] = useState(false);
+  // A message from a row that then moved out of view (e.g. into the closed
+  // "Completed & skipped" list when the page refreshed).
+  const [notice, setNotice] = useState<string | null>(null);
 
   const groups = useMemo(() => {
     const buckets: Record<FollowUpBucket, FollowUpWithContext[]> = {
@@ -70,6 +76,18 @@ export function FollowUpsClient({
             : `${needAttention} need${needAttention === 1 ? "s" : ""} attention · ${groups.upcoming.length} coming up`
         }
       />
+
+      {notice && (
+        <div
+          role="alert"
+          className="mb-4 flex items-start justify-between gap-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200"
+        >
+          <span>{notice}</span>
+          <button className="btn-ghost tap -my-1 shrink-0 px-2 text-xs" onClick={() => setNotice(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {followUps.length === 0 ? (
         <EmptyState
@@ -101,6 +119,7 @@ export function FollowUpsClient({
                       today={today}
                       emailEnabled={emailEnabled}
                       onWrite={() => setAiFor(f)}
+                      onLostMessage={setNotice}
                     />
                   ))}
                 </ul>
@@ -139,6 +158,7 @@ export function FollowUpsClient({
                       today={today}
                       emailEnabled={emailEnabled}
                       onWrite={() => setAiFor(f)}
+                      onLostMessage={setNotice}
                     />
                   ))}
                 </ul>
@@ -173,25 +193,43 @@ function FollowUpRow({
   today,
   emailEnabled,
   onWrite,
+  onLostMessage,
 }: {
   f: FollowUpWithContext;
   today: string;
   emailEnabled: boolean;
   onWrite: () => void;
+  /** Takes over this row's message if the row leaves the list while showing one. */
+  onLostMessage: (message: string) => void;
 }) {
   const [pending, start] = useTransition();
   const [rowError, setRowError] = useState<string | null>(null);
+  const shownError = useRef<string | null>(null);
   const bucket = classifyFollowUp(f, today);
+
+  const showError = (message: string | null) => {
+    shownError.current = message;
+    setRowError(message);
+  };
+  // A refused Done can refresh the page and move this reminder into the closed
+  // "Completed & skipped" list; its explanation then moves to the top.
+  useEffect(
+    () => () => {
+      if (shownError.current) onLostMessage(shownError.current);
+    },
+    [onLostMessage]
+  );
+
   // A failed Done / Skip / Reopen is shown on this row, not as an error page.
   const run = (fn: () => Promise<ActionResult>) =>
     start(async () => {
-      setRowError(null);
+      showError(null);
       try {
         const result = await fn();
-        if (!result.ok) setRowError(result.error);
+        if (!result.ok) showError(result.error);
       } catch (e) {
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
-        setRowError(OFFLINE_OR_SIGNED_OUT);
+        showError(OFFLINE_OR_SIGNED_OUT);
       }
     });
   const isPending = f.status === "pending";
@@ -206,13 +244,18 @@ function FollowUpRow({
           <span className="truncate font-medium text-stone-900">
             {f.lead?.customer_name ?? "—"}
           </span>
-          <span className="text-xs text-stone-400">follow-up #{f.follow_up_number}</span>
+          <span className="shrink-0 whitespace-nowrap text-xs text-stone-400">follow-up #{f.follow_up_number}</span>
           {!isPending && <StatusBadge kind="followup" value={f.status} />}
         </div>
-        <div className="truncate text-sm text-stone-500">
-          {f.quote?.title ?? "Quote"}
+        {/* A long title is cut short; the amount always stays in view. */}
+        <div className="flex min-w-0 items-baseline gap-1 text-sm text-stone-500">
+          <span className="min-w-0 truncate" title={f.quote?.title}>
+            {f.quote?.title ?? "Quote"}
+          </span>
           {f.quote && (
-            <span className="num"> · {formatCurrency(Number(f.quote.amount), f.quote.currency)}</span>
+            <span className="num shrink-0 whitespace-nowrap">
+              · {formatCurrency(Number(f.quote.amount), f.quote.currency)}
+            </span>
           )}
         </div>
         {isPending && !canEmail && (
@@ -279,11 +322,14 @@ function FollowUpRow({
             <button className="btn-ghost" disabled={pending} onClick={onWrite}>
               View messages
             </button>
-            <Menu>
-              <MenuItem onClick={() => run(() => reopenFollowUp(f.id))}>
-                Reopen reminder
-              </MenuItem>
-            </Menu>
+            {/* A won, lost or expired quote's reminders stay closed. */}
+            {!CLOSED_QUOTE.includes(f.quote?.status ?? "") && (
+              <Menu>
+                <MenuItem onClick={() => run(() => reopenFollowUp(f.id))}>
+                  Reopen reminder
+                </MenuItem>
+              </Menu>
+            )}
           </>
         )}
       </div>

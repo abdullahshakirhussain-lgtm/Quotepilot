@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import {
   CURRENCIES,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 import type { ActionState } from "@/app/(app)/settings/actions";
+import { reportUnreachable } from "@/lib/form-action";
 
 export function BusinessForm({
   action,
@@ -23,7 +24,8 @@ export function BusinessForm({
   /** Prefill for new workspaces (e.g. name and email from Google sign-in). */
   suggested?: { owner_name?: string; email?: string };
 }) {
-  const [state, formAction, pending] = useActionState(action, {});
+  const save = useMemo(() => reportUnreachable(action), [action]);
+  const [state, formAction, pending] = useActionState(save, {});
   const selectedDays = initial?.default_follow_up_days ?? DEFAULT_FOLLOW_UP_DAYS;
 
   return (

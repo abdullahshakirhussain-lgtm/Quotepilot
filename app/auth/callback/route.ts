@@ -4,33 +4,36 @@ import { safeRedirectPath } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-/** The public origin, even when a proxy (Railway/Vercel) terminates TLS. */
-function publicOrigin(request: NextRequest): string {
-  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  if (host && process.env.NODE_ENV !== "development") {
-    const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
-    return `${proto}://${host}`;
-  }
-  return request.nextUrl.origin;
+/**
+ * Sends the browser on to a path on this same site. The Location is relative,
+ * so the browser resolves it against the address it actually used: it works
+ * the same behind the hosting proxy and on localhost, and no request header (a
+ * spoofed X-Forwarded-Host, say) can point it at another site.
+ */
+function goTo(path: string) {
+  return new NextResponse(null, { status: 303, headers: { location: path, "cache-control": "no-store" } });
 }
 
 /**
- * Google sign-in and email-confirmation links land here with a one-time code.
- * We exchange it for a session cookie and continue to a same-site path only.
- * Users without a workspace are sent on to onboarding by the app layout.
+ * Google sign-in, email-confirmation and password-reset links land here with a
+ * one-time code. We exchange it for a session cookie and continue to a
+ * same-site path only. Users without a workspace are sent on to onboarding by
+ * the app layout.
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const next = safeRedirectPath(request.nextUrl.searchParams.get("next"));
-  const origin = publicOrigin(request);
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
+    if (!error) return goTo(next);
     console.error("[auth] code exchange failed:", error.message);
   }
 
-  // Cancelled consent, expired link, or a provider error.
-  return NextResponse.redirect(`${origin}/login?error=oauth`);
+  // A password reset link that didn't work (expired, already used, or opened
+  // in a different browser): straight to where a new one can be requested.
+  if (next === "/reset-password") return goTo("/forgot-password?error=link");
+  // Cancelled consent, an expired confirmation link, or a provider error.
+  return goTo("/login?error=oauth");
 }
