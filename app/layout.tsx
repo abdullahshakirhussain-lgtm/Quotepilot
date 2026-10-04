@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import { TimezoneCookie } from "@/components/TimezoneCookie";
+import { SITE_URL } from "@/lib/marketing";
 import "./globals.css";
 
 // Self-hosted at build time (no runtime font CDN).
@@ -12,6 +13,8 @@ const plex = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
+  // Absolute addresses for share images and canonical links.
+  metadataBase: new URL(SITE_URL),
   title: "QuoteLoop — Follow up on every quote. Win more jobs.",
   description:
     "QuoteLoop helps small service businesses follow up on the quotes they send, with reminders and AI-written messages they review and send themselves.",

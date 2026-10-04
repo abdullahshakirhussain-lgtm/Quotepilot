@@ -104,6 +104,9 @@ export const TIMEZONE_COOKIE = "qp_tz";
 export const FOLLOW_UP_DAY_OPTIONS = [1, 3, 7, 14, 21, 30] as const;
 export const DEFAULT_FOLLOW_UP_DAYS = [1, 3, 7, 14];
 
+/** AI drafts per user per rolling 24 hours (cost control). */
+export const AI_DAILY_LIMIT = 50;
+
 // ---------------------------------------------------------------------------
 // Human-readable labels (plain business language; DB values are unchanged)
 // ---------------------------------------------------------------------------

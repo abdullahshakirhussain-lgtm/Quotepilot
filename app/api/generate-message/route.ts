@@ -10,11 +10,9 @@ import {
 import { clip, daysSince } from "@/lib/utils";
 import { requestToday } from "@/lib/request-time";
 import { emailConfig, isValidEmail } from "@/lib/email";
+import { AI_DAILY_LIMIT } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
-
-/** AI drafts per user per rolling 24 hours (cost control). */
-const AI_DAILY_LIMIT = 50;
 
 // GET /api/generate-message?quoteId=... -> history for that quote, plus
 // whether it can be emailed from QuoteLoop.
