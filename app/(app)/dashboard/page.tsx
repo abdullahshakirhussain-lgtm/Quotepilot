@@ -5,6 +5,7 @@ import { computeDashboardMetrics } from "@/lib/metrics";
 import { classifyFollowUp } from "@/lib/follow-up-state";
 import { getRequestTimeZone } from "@/lib/request-time";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { isSampleAddress } from "@/lib/email-address";
 import type { Business, FollowUpWithContext } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +25,8 @@ export default async function DashboardPage() {
   // "you lost your data".
   const [businessRes, leads, quotes, followUps] = await Promise.all([
     supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
-    fetchAllRows<{ status: string }>((from, to) =>
-      supabase.from("leads").select("status").eq("user_id", user.id).order("id").range(from, to)
+    fetchAllRows<{ status: string; email: string | null }>((from, to) =>
+      supabase.from("leads").select("status, email").eq("user_id", user.id).order("id").range(from, to)
     ),
     fetchAllRows<{ status: string; amount: number; currency: string }>((from, to) =>
       supabase.from("quotes").select("status, amount, currency").eq("user_id", user.id).order("id").range(from, to)
@@ -63,6 +64,7 @@ export default async function DashboardPage() {
       attention={pending.filter((f) => classifyFollowUp(f, today) !== "upcoming")}
       upcoming={pending.filter((f) => classifyFollowUp(f, today) === "upcoming").slice(0, 5)}
       hasData={leads.length > 0 || quotes.length > 0}
+      hasSampleData={leads.some((l) => isSampleAddress(l.email))}
     />
   );
 }

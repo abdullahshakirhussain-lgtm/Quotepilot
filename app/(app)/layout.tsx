@@ -42,7 +42,8 @@ export default async function AppLayout({
         businessName={business.business_name}
         attentionCount={attention.count ?? 0}
       />
-      <main className="min-w-0 flex-1">
+      {/* On phones the tab bar is fixed along the bottom: keep the page clear of it. */}
+      <main className="min-w-0 flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {children}
         </div>

@@ -30,6 +30,7 @@ import {
   type OutgoingEmail,
   type SendResult,
 } from "./email";
+import { isSampleAddress, SAMPLE_RECIPIENT_ERROR } from "./email-address";
 
 export interface EmailLogInsert {
   quote_id: string;
@@ -150,6 +151,8 @@ export async function sendFollowUpEmailCore(
   if (!isValidEmail(to)) {
     return { ok: false, error: "Add a valid email address to this customer to send from QuoteLoop." };
   }
+  // Demo customers' addresses can never receive mail: sending would only bounce and use up the day's emails.
+  if (isSampleAddress(to)) return { ok: false, error: SAMPLE_RECIPIENT_ERROR };
   if (input.expectedTo?.trim() && !sameAddress(input.expectedTo, to)) {
     return {
       ok: false,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { unstable_rethrow, useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter, useSearchParams } from "next/navigation";
 import {
   BellRing,
   CalendarCheck,
@@ -31,8 +31,9 @@ import type { ActionResult, Quote, QuoteWithLead } from "@/lib/types";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { followUpUrgency } from "@/lib/follow-up-state";
 import { formatMoney, sumByCurrency } from "@/lib/metrics";
-import { isValidEmail } from "@/lib/email-address";
-import { deleteQuote, markQuoteSent, setQuoteStatus } from "@/app/(app)/quotes/actions";
+import { isSampleAddress, isValidEmail } from "@/lib/email-address";
+import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
+import { deleteQuote, markQuoteSent, setQuoteStatus, undoQuoteClose, type QuoteCloseUndo } from "@/app/(app)/quotes/actions";
 
 const OPEN: QuoteStatus[] = ["sent", "follow_up_due", "negotiating"];
 
@@ -127,11 +128,45 @@ export function QuotesClient({
   const [tab, setTab] = useState<Tab>(hasOpen ? "open" : "all");
   const [query, setQuery] = useState("");
   const [showNew, setShowNew] = useState(Boolean(openNew || initialNewLeadId));
+  // "New quote" in the header or sidebar links to ?new=1. When you are already on
+  // Quotes the page isn't rebuilt, so open the form whenever that link is followed.
+  const newParam = useSearchParams().get("new");
+  useEffect(() => {
+    if (newParam === "1") setShowNew(true);
+  }, [newParam]);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [aiFor, setAiFor] = useState<QuoteWithLead | null>(null);
   const [sendDraft, setSendDraft] = useState<QuoteWithLead | null>(null);
   const [addEmailFor, setAddEmailFor] = useState<QuoteWithLead | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Shown after Won / Lost: where the quote went, and a way back.
+  const [closed, setClosed] = useState<{ quoteId: string; title: string; kind: "won" | "lost"; undo?: QuoteCloseUndo; text?: string } | null>(null);
+  const [undoing, startUndo] = useTransition();
+
+  useEffect(() => {
+    if (!closed || undoing) return;
+    const t = setTimeout(() => setClosed(null), 10000);
+    return () => clearTimeout(t);
+  }, [closed, undoing]);
+
+  function undoClose() {
+    const notice = closed;
+    if (!notice?.undo) return;
+    startUndo(async () => {
+      try {
+        const result = await undoQuoteClose(notice.quoteId, notice.undo!);
+        setClosed(
+          result.ok
+            ? { ...notice, undo: undefined, text: `“${notice.title}” is open again, with its reminders back.` }
+            : { ...notice, undo: undefined, text: result.error }
+        );
+        if (result.ok) setTab("open");
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setClosed({ ...notice, undo: undefined, text: OFFLINE_OR_SIGNED_OUT });
+      }
+    });
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -211,6 +246,8 @@ export function QuotesClient({
         </div>
       )}
 
+      {quotes.some((q) => isSampleAddress(q.lead?.email)) && <SampleDataBanner />}
+
       {quotes.length === 0 ? (
         <div className="space-y-4">
           <HowItWorks />
@@ -283,6 +320,7 @@ export function QuotesClient({
                   onTracked={() =>
                     setToast("Follow-up tracking started. Reminders are counted from today.")
                   }
+                  onClosed={(kind, undo) => setClosed({ quoteId: quote.id, title: quote.title, kind, undo })}
                 />
               ))}
             </ul>
@@ -342,6 +380,36 @@ export function QuotesClient({
           onSent={setToast}
         />
       )}
+      {closed && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg bg-stone-900 px-4 py-3 text-sm text-white shadow-lg md:bottom-6"
+        >
+          <span>
+            {closed.text ??
+              `Marked as ${closed.kind}: “${closed.title}”. It's in the ${closed.kind === "won" ? "Won" : "Lost"} tab.`}
+          </span>
+          {closed.undo ? (
+            <button
+              type="button"
+              className="tap inline-flex shrink-0 items-center font-semibold text-brand-300 underline-offset-2 hover:underline"
+              onClick={undoClose}
+              disabled={undoing}
+            >
+              {undoing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Undo"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="tap inline-flex shrink-0 items-center text-stone-400 hover:text-white"
+              onClick={() => setClosed(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
       {aiFor && (
         <AIMessageModal
           quote={{
@@ -374,6 +442,7 @@ function QuoteRow({
   onAddEmail,
   onViewFollowUps,
   onTracked,
+  onClosed,
 }: {
   quote: QuoteWithLead;
   today: string;
@@ -387,6 +456,8 @@ function QuoteRow({
   onAddEmail: () => void;
   onViewFollowUps: () => void;
   onTracked: () => void;
+  /** Marked won or lost: the page says where it went and offers Undo. */
+  onClosed: (kind: "won" | "lost", undo?: QuoteCloseUndo) => void;
 }) {
   const [pending, start] = useTransition();
   // A failed Won / Lost / Delete / … stays next to the quote it was about.
@@ -400,7 +471,9 @@ function QuoteRow({
   // An earlier attempt went out, or may have: sending again could duplicate it.
   const alreadyAttempted = earlierEmail !== null;
   const sendingReady = emailEnabled && businessEmailOk;
-  const canEmailQuote = sendingReady && hasCustomerEmail && !alreadyAttempted;
+  // Demo customers' addresses can't receive mail, so their quotes are never emailed.
+  const sample = isSampleAddress(quote.lead?.email);
+  const canEmailQuote = sendingReady && hasCustomerEmail && !alreadyAttempted && !sample;
   const offerAddEmail = sendingReady && !hasCustomerEmail && !alreadyAttempted;
   // Sending is only blocked on the business email: a direct way to add it.
   const offerBusinessEmail = emailEnabled && !businessEmailOk && !alreadyAttempted;
@@ -417,10 +490,25 @@ function QuoteRow({
       }
     });
 
+  const close = (status: "accepted" | "rejected") =>
+    start(async () => {
+      setRowError(null);
+      try {
+        const result = await setQuoteStatus(quote.id, status);
+        if (!result.ok) return setRowError(result.error);
+        onClosed(status === "accepted" ? "won" : "lost", result.undo);
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setRowError(OFFLINE_OR_SIGNED_OUT);
+      }
+    });
+
   // Why a draft can't be emailed, in the user's terms.
   const draftHint = !isDraft
     ? null
-    : earlierEmail === "sent"
+    : sample
+      ? "This is a sample quote, so it can't be emailed. Use “I already sent this” to try the follow-up reminders."
+      : earlierEmail === "sent"
       ? "The quote email was already sent from QuoteLoop, so it won't be sent again. Use “I already sent this” to start its follow-ups."
       : earlierEmail === "pending"
         ? "QuoteLoop couldn't confirm an earlier quote email was delivered, so it won't send it again. If the customer has it, use “I already sent this”."
@@ -442,6 +530,7 @@ function QuoteRow({
         <div className="flex items-center gap-2">
           <span className="truncate font-medium text-stone-900">{quote.title}</span>
           <StatusBadge kind="quote" value={quote.status} />
+          {isSampleAddress(quote.lead?.email) && <SampleBadge />}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-stone-500">
           <span className="truncate">
@@ -525,14 +614,14 @@ function QuoteRow({
             <button
               className="btn-ghost text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
               disabled={pending}
-              onClick={() => run(() => setQuoteStatus(quote.id, "accepted"))}
+              onClick={() => close("accepted")}
             >
               <CheckCircle2 className="h-4 w-4" /> Won
             </button>
             <button
               className="btn-ghost text-red-700 hover:bg-red-50 hover:text-red-800"
               disabled={pending}
-              onClick={() => run(() => setQuoteStatus(quote.id, "rejected"))}
+              onClick={() => close("rejected")}
             >
               <XCircle className="h-4 w-4" /> Lost
             </button>
@@ -568,10 +657,10 @@ function QuoteRow({
             </MenuItem>
           )}
           {!isOpen && quote.status !== "accepted" && (
-            <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "accepted"))}>Mark won</MenuItem>
+            <MenuItem onClick={() => close("accepted")}>Mark won</MenuItem>
           )}
           {!isOpen && quote.status !== "rejected" && (
-            <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "rejected"))}>Mark lost</MenuItem>
+            <MenuItem onClick={() => close("rejected")}>Mark lost</MenuItem>
           )}
           {quote.status !== "expired" && quote.status !== "draft" && (
             <MenuItem onClick={() => run(() => setQuoteStatus(quote.id, "expired"))}>Mark expired</MenuItem>

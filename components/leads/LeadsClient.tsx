@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { FilePlus2, Pencil, Plus, Search, Trash2, UserPlus, Users } from "lucide-react";
+import { FilePlus2, Mail, Pencil, Plus, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -11,11 +11,14 @@ import { LeadFormModal } from "./LeadFormModal";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/constants";
 import type { Lead } from "@/lib/types";
 import { deleteLead } from "@/app/(app)/leads/actions";
+import { isSampleAddress } from "@/lib/email-address";
+import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
 
 export function LeadsClient({ leads }: { leads: Lead[] }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [editing, setEditing] = useState<Lead | null>(null);
+  const [focusEmail, setFocusEmail] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -46,6 +49,8 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
           </>
         }
       />
+
+      {leads.some((l) => isSampleAddress(l.email)) && <SampleDataBanner />}
 
       {leads.length === 0 ? (
         <EmptyState
@@ -99,7 +104,68 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
               No customers match your search.
             </p>
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            {/* Phones: one card per customer, every action labelled and in view. */}
+            <ul className="space-y-3 md:hidden">
+              {filtered.map((lead) => (
+                <li key={lead.id} className="card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-stone-900 [overflow-wrap:anywhere]">{lead.customer_name}</span>
+                        {isSampleAddress(lead.email) && <SampleBadge />}
+                      </div>
+                      {lead.company_name && <div className="text-sm text-stone-500">{lead.company_name}</div>}
+                    </div>
+                    <StatusBadge kind="lead" value={lead.status} />
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-sm text-stone-600">
+                    {lead.email ? (
+                      <div className="[overflow-wrap:anywhere]">{lead.email}</div>
+                    ) : (
+                      <div className="text-stone-400">No email yet</div>
+                    )}
+                    {lead.phone && <div>{lead.phone}</div>}
+                    {lead.source && <div className="text-xs text-stone-400">Source: {lead.source}</div>}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {!lead.email && (
+                      <button
+                        className="btn-primary"
+                        onClick={() => {
+                          setFocusEmail(true);
+                          setEditing(lead);
+                        }}
+                      >
+                        <Mail className="h-4 w-4" /> Add email
+                      </button>
+                    )}
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        setFocusEmail(false);
+                        setEditing(lead);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" /> Edit
+                    </button>
+                    <Link href={`/quotes?lead=${lead.id}`} className="btn-secondary">
+                      <FilePlus2 className="h-4 w-4" /> New quote
+                    </Link>
+                    <ConfirmButton
+                      className="btn-ghost text-stone-500 hover:bg-red-50 hover:text-red-700"
+                      title="Delete customer"
+                      confirmMessage={`Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too. Records of emails QuoteLoop already sent are kept.`}
+                      action={() => deleteLead(lead.id)}
+                      onError={setDeleteError}
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </ConfirmButton>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="card hidden overflow-hidden md:block">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
@@ -115,7 +181,10 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                     {filtered.map((lead) => (
                       <tr key={lead.id} className="hover:bg-stone-50/60">
                         <td className="px-4 py-3">
-                          <div className="font-medium text-stone-900">{lead.customer_name}</div>
+                          <div className="flex items-center gap-2 font-medium text-stone-900">
+                            {lead.customer_name}
+                            {isSampleAddress(lead.email) && <SampleBadge />}
+                          </div>
                           {lead.company_name && (
                             <div className="text-xs text-stone-500">{lead.company_name}</div>
                           )}
@@ -149,7 +218,7 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                               className="btn-ghost tap px-2 py-1"
                               title="Edit customer"
                               aria-label="Edit customer"
-                              onClick={() => setEditing(lead)}
+                              onClick={() => { setFocusEmail(false); setEditing(lead); }}
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -170,12 +239,13 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                 </table>
               </div>
             </div>
+            </>
           )}
         </>
       )}
 
       {showNew && <LeadFormModal onClose={() => setShowNew(false)} />}
-      {editing && <LeadFormModal lead={editing} onClose={() => setEditing(null)} />}
+      {editing && <LeadFormModal lead={editing} focusEmail={focusEmail} onClose={() => setEditing(null)} />}
     </div>
   );
 }

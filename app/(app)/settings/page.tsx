@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Download, LogOut } from "lucide-react";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
 import { DataControls } from "@/components/DataControls";
@@ -72,12 +72,27 @@ export default async function SettingsPage({
         </section>
 
         <section className="card p-5">
-          <h2 className="text-[15px] font-semibold text-stone-900">Demo data</h2>
+          <h2 className="text-[15px] font-semibold text-stone-900">Sample data</h2>
           <p className="mb-4 mt-0.5 text-sm text-stone-500">
-            Load sample quotes into an empty workspace to explore, or clear your
-            customers, quotes and follow-ups to start fresh. Your business profile is kept.
+            Load made-up sample quotes into an empty workspace to explore. Remove them again
+            without touching your own records, or delete everything to start fresh. Your business
+            profile is always kept.
           </p>
           <DataControls />
+        </section>
+
+        <section className="card flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold text-stone-900">Account</h2>
+            <p className="mt-0.5 text-sm text-stone-500 [overflow-wrap:anywhere]">
+              Signed in as <span className="font-medium text-stone-700">{user.email}</span>.
+            </p>
+          </div>
+          <form action="/auth/signout" method="post">
+            <button className="btn-secondary">
+              <LogOut className="h-4 w-4" /> Sign out
+            </button>
+          </form>
         </section>
 
         <p className="flex justify-center gap-3 text-center text-xs text-stone-500">

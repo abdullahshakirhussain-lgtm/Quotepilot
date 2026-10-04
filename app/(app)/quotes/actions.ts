@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, requireUser } from "@/lib/supabase/server";
-import { CURRENCIES, QUOTE_STATUSES, type QuoteStatus } from "@/lib/constants";
+import { CURRENCIES, LEAD_STATUSES, QUOTE_STATUSES, type QuoteStatus } from "@/lib/constants";
 import { addDays, clip, daysBetween, optionalString, requireString } from "@/lib/utils";
 import { requestToday } from "@/lib/request-time";
 import { EARLIEST_SENT_DATE, isRealDate, LIMITS, MAX_AMOUNT } from "@/lib/quote-flows";
+import { readAmount } from "@/lib/money";
 import {
   applyQuoteStatusChange,
   CLOSED_QUOTE_STATUSES,
@@ -58,12 +59,10 @@ function isQuoteStatus(value: unknown): value is QuoteStatus {
 class InputError extends Error {}
 
 function parseAmount(value: FormDataEntryValue | null): number {
-  const n = Number(String(value ?? "").replace(/[, ]/g, ""));
-  if (!String(value ?? "").trim() || !Number.isFinite(n) || n <= 0) {
-    throw new InputError("Enter the quote amount as a number greater than zero.");
-  }
+  const n = readAmount(typeof value === "string" ? value : null);
+  if (n === null) throw new InputError("Enter the quote amount as a number greater than zero.");
   if (n > MAX_AMOUNT) throw new InputError("That amount is too large. Check the number and try again.");
-  return Math.round(n * 100) / 100;
+  return n;
 }
 
 function parseDate(value: FormDataEntryValue | null, field: string): string | null {
@@ -311,12 +310,17 @@ export async function markQuoteSent(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<ActionResult> {
+/** What marking an open quote won or lost changed, so Undo can put exactly that back. */
+export type QuoteCloseUndo = { previous: QuoteStatus; followUpIds: string[]; leadStatus: string };
+export type QuoteStatusResult = { ok: true; undo?: QuoteCloseUndo } | { ok: false; error: string };
+
+export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<QuoteStatusResult> {
   if (!isQuoteStatus(status)) return { ok: false, error: "That isn't a quote status QuoteLoop knows." };
   if (status === "sent") return markQuoteSent(id);
 
   const user = await requireUser();
   const supabase = await createClient();
+  let undo: QuoteCloseUndo | undefined;
 
   try {
     const { data: quote, error } = await supabase
@@ -327,6 +331,21 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<A
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!quote) return { ok: false, error: QUOTE_GONE };
+
+    // Remember what closing this open quote is about to change.
+    if ((status === "accepted" || status === "rejected") && OPEN_STATUSES.includes(quote.status)) {
+      const [pendingRows, lead] = await Promise.all([
+        supabase.from("follow_ups").select("id").eq("quote_id", quote.id).eq("user_id", user.id).eq("status", "pending"),
+        supabase.from("leads").select("status").eq("id", quote.lead_id).eq("user_id", user.id).maybeSingle(),
+      ]);
+      if (!pendingRows.error && !lead.error) {
+        undo = {
+          previous: quote.status,
+          followUpIds: (pendingRows.data ?? []).map((row) => row.id as string),
+          leadStatus: (lead.data?.status as string | undefined) ?? "",
+        };
+      }
+    }
 
     if (quote.status === status) {
       // Already there (a double click, another tab). For a closed quote, make
@@ -355,6 +374,76 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<A
     await applyQuoteStatusChange(supabase, user.id, quote, quote.status, status);
   } catch (e) {
     console.error("[quotes] changing a quote's status failed:", errorMessage(e));
+    revalidateQuoteViews();
+    return { ok: false, error: TRY_AGAIN };
+  }
+
+  revalidateQuoteViews();
+  return { ok: true, undo };
+}
+
+/**
+ * Undoes "Won" or "Lost" pressed a moment ago: the quote goes back to the
+ * status it had, the reminders closing it skipped are pending again, and the
+ * customer's stage is restored. Refused if the quote has changed since.
+ */
+export async function undoQuoteClose(id: string, undo: QuoteCloseUndo): Promise<ActionResult> {
+  const previous = undo?.previous;
+  if (!OPEN_STATUSES.includes(previous)) return { ok: false, error: "That can't be undone. Use the quote's menu to change its status." };
+  const followUpIds = (Array.isArray(undo?.followUpIds) ? undo.followUpIds : [])
+    .filter((x): x is string => typeof x === "string")
+    .slice(0, 200);
+
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  try {
+    const { data: quote, error } = await supabase
+      .from("quotes")
+      .select("id, lead_id, status")
+      .eq("id", String(id ?? ""))
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!quote) return { ok: false, error: QUOTE_GONE };
+    if (quote.status !== "accepted" && quote.status !== "rejected") {
+      return { ok: false, error: "This quote has changed since, so there's nothing to undo." };
+    }
+
+    const { error: quoteError } = await supabase
+      .from("quotes")
+      .update({ status: previous })
+      .eq("id", quote.id)
+      .eq("user_id", user.id)
+      .eq("status", quote.status);
+    if (quoteError) throw new Error(quoteError.message);
+
+    if (followUpIds.length) {
+      const { error: reopenError } = await supabase
+        .from("follow_ups")
+        .update({ status: "pending" })
+        .eq("quote_id", quote.id)
+        .eq("user_id", user.id)
+        .eq("status", "skipped")
+        .in("id", followUpIds);
+      if (reopenError) throw new Error(reopenError.message);
+    }
+
+    // Only where closing the quote set the customer's stage.
+    const closedStage = quote.status === "accepted" ? "won" : "lost";
+    if ((LEAD_STATUSES as readonly string[]).includes(undo.leadStatus) && undo.leadStatus !== closedStage) {
+      const { error: leadError } = await supabase
+        .from("leads")
+        .update({ status: undo.leadStatus })
+        .eq("id", quote.lead_id)
+        .eq("user_id", user.id)
+        .eq("status", closedStage);
+      if (leadError) throw new Error(leadError.message);
+    }
+
+    await recomputeQuoteFollowUpState(supabase, user.id, quote.id);
+  } catch (e) {
+    console.error("[quotes] undoing won/lost failed:", errorMessage(e));
     revalidateQuoteViews();
     return { ok: false, error: TRY_AGAIN };
   }

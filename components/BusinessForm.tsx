@@ -78,14 +78,26 @@ export function BusinessForm({
 
         <div>
           <label htmlFor="industry" className="label">
-            Industry *
+            Type of business *
           </label>
+          {/* Nothing is pre-chosen for a new workspace: a default would be
+              left as it is by anyone who doesn't notice it. */}
           <select
             id="industry"
             name="industry"
             className="input"
-            defaultValue={initial?.industry ?? INDUSTRIES[0]}
+            required
+            defaultValue={initial?.industry ?? ""}
           >
+            {!initial?.industry && (
+              <option value="" disabled>
+                Choose your type of business
+              </option>
+            )}
+            {/* A type saved before this list changed stays selectable. */}
+            {initial?.industry && !(INDUSTRIES as readonly string[]).includes(initial.industry) && (
+              <option value={initial.industry}>{initial.industry}</option>
+            )}
             {INDUSTRIES.map((i) => (
               <option key={i} value={i}>
                 {i}

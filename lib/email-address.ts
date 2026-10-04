@@ -18,3 +18,20 @@ export function cleanPasted(value: string | null | undefined): string {
 export function isValidEmail(value: string | null | undefined): value is string {
   return Boolean(value) && value!.length <= 254 && EMAIL_PATTERN.test(value!.trim());
 }
+
+/**
+ * An address on a domain reserved for examples and tests (RFC 2606 and 6761):
+ * no mail to it can ever arrive. QuoteLoop's demo customers use these, which
+ * is how sample records are recognised, and why nothing is ever sent to them.
+ */
+export function isSampleAddress(value: string | null | undefined): boolean {
+  const domain = (value ?? "").trim().toLowerCase().split("@")[1] ?? "";
+  if (!domain) return false;
+  return (
+    /^example\.(?:com|net|org)$/.test(domain) ||
+    /(?:^|\.)(?:example|test|invalid|localhost)$/.test(domain)
+  );
+}
+
+export const SAMPLE_RECIPIENT_ERROR =
+  "This is a sample customer from the demo data, so QuoteLoop won't email them. Nothing was sent. Copy the message to try it out instead.";

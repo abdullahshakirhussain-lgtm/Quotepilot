@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BellRing, CalendarCheck, Plus } from "lucide-react";
 import { HowItWorks } from "@/components/quotes/HowItWorks";
+import { LoadSampleDataButton, SampleDataBanner } from "@/components/SampleData";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AttentionList } from "./AttentionList";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -27,6 +28,7 @@ export function DashboardView({
   attention,
   upcoming,
   hasData,
+  hasSampleData = false,
 }: {
   m: DashboardMetrics;
   currency: string;
@@ -36,6 +38,8 @@ export function DashboardView({
   attention: FollowUpWithContext[];
   upcoming: FollowUpWithContext[];
   hasData: boolean;
+  /** Made-up demo customers are in the workspace. */
+  hasSampleData?: boolean;
 }) {
   const needAttention = m.dueToday + m.overdue;
   const open = splitMoney(m.openValue, currency);
@@ -43,29 +47,38 @@ export function DashboardView({
   const lost = splitMoney(m.lostValue, currency);
   const average = splitMoney(m.avgQuote, currency);
 
+  // A brand-new workspace: one clear next step, not a page of zeros.
+  if (!hasData) {
+    return (
+      <div className="space-y-4">
+        <section className="card px-5 py-6 sm:px-7 sm:py-7">
+          <p className="text-sm text-stone-500">
+            {greeting}
+            {firstName ? `, ${firstName}` : ""}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-stone-900">Welcome to QuoteLoop</h1>
+          <p className="mt-1.5 max-w-xl text-stone-600">
+            Add a quote you&apos;ve sent, or send one from here, and QuoteLoop reminds you when it&apos;s time to
+            follow up.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <Link href="/quotes?new=1" className="btn-accent px-4 py-2 text-[15px]">
+              <Plus className="h-4 w-4" /> Add your first quote
+            </Link>
+            <LoadSampleDataButton />
+          </div>
+          <p className="mt-3 text-xs text-stone-500">
+            Not ready yet? Sample data is made up, so you can click around safely and remove it any time.
+          </p>
+        </section>
+        <HowItWorks />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {!hasData && (
-        <section className="space-y-3">
-          <div className="card flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-            <div>
-              <h2 className="text-[15px] font-semibold text-stone-900">Start with your first quote</h2>
-              <p className="mt-0.5 text-sm text-stone-500">
-                Send it with QuoteLoop, or track one you already sent.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link href="/quotes?new=1" className="btn-primary">
-                <Plus className="h-4 w-4" /> New quote
-              </Link>
-              <Link href="/settings" className="btn-secondary">
-                Load demo data
-              </Link>
-            </div>
-          </div>
-          <HowItWorks />
-        </section>
-      )}
+      {hasSampleData && <SampleDataBanner />}
 
       {/* Hero: what needs doing, and how much money is riding on it */}
       <section className="overflow-hidden rounded-lg bg-stone-950 text-stone-300">

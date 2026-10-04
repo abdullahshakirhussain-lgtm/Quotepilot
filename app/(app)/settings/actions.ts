@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { CURRENCIES, FOLLOW_UP_DAY_OPTIONS } from "@/lib/constants";
 import { optionalString } from "@/lib/utils";
-import { cleanPasted, isValidEmail } from "@/lib/email-address";
+import { cleanPasted, isSampleAddress, isValidEmail } from "@/lib/email-address";
 import { requestToday } from "@/lib/request-time";
 import { buildDemoSeed } from "@/lib/demo-seed";
 import { sanitizeFollowUpDays } from "@/lib/quote-state";
@@ -59,7 +59,7 @@ function readBusinessForm(formData: FormData) {
   }
   return {
     business_name: required(formData, "business_name", "Enter your business name.", "The business name"),
-    industry: required(formData, "industry", "Choose your industry.", "The industry"),
+    industry: required(formData, "industry", "Choose your type of business.", "The type of business"),
     currency,
     owner_name: required(formData, "owner_name", "Enter your name.", "Your name"),
     phone,
@@ -145,12 +145,12 @@ export async function seedDemoData(): Promise<ActionState> {
     .eq("user_id", uid);
   if (countError) {
     console.error("[settings] demo data check failed:", countError.message);
-    return { error: "Demo data couldn't be loaded just now. Please try again." };
+    return { error: "Sample data couldn't be loaded just now. Please try again." };
   }
   if ((count ?? 0) > 0) {
     return {
       error:
-        "Demo data can only be loaded into an empty workspace. Use “Delete all data” first if you want a fresh demo set.",
+        "Sample data can only be loaded into an empty workspace. Use “Delete all data” first if you want a fresh set.",
     };
   }
 
@@ -211,12 +211,52 @@ export async function seedDemoData(): Promise<ActionState> {
     console.error("[settings] loading demo data failed part way:", e instanceof Error ? e.message : e);
     revalidateAll();
     return {
-      error: "Demo data only partly loaded. Use “Delete all data” to clear it, then try again.",
+      error: "Sample data only partly loaded. Use “Remove sample data” to clear it, then try again.",
     };
   }
 
   revalidateAll();
-  return { ok: true, message: "Demo data loaded. Head to the Dashboard to explore it." };
+  return { ok: true, message: "Sample data loaded. Head to the Dashboard to explore it." };
+}
+
+/**
+ * Deletes only the demo data: customers whose address is a sample one (demo
+ * customers all use reserved example domains), with their quotes, follow-ups
+ * and messages. Everything the user added themselves stays.
+ */
+export async function removeSampleData(): Promise<ActionState> {
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const { data: leads, error } = await supabase.from("leads").select("id, email").eq("user_id", user.id);
+  if (error) {
+    console.error("[settings] reading customers for sample removal failed:", error.message);
+    return { error: "The sample data couldn't be removed just now. Please try again." };
+  }
+  const ids = (leads ?? []).filter((l) => isSampleAddress(l.email)).map((l) => l.id as string);
+  if (!ids.length) return { ok: true, message: "There's no sample data to remove." };
+
+  // Children first, so a failure part-way never leaves orphaned references.
+  for (const table of ["messages", "follow_ups", "quotes"] as const) {
+    const { error: deleteError } = await supabase.from(table).delete().eq("user_id", user.id).in("lead_id", ids);
+    if (deleteError) {
+      console.error(`[settings] removing sample ${table} failed:`, deleteError.message);
+      revalidateAll();
+      return { error: "QuoteLoop couldn't finish removing the sample data. Anything already removed stays removed. Please try again." };
+    }
+  }
+  const { error: leadError } = await supabase.from("leads").delete().eq("user_id", user.id).in("id", ids);
+  if (leadError) {
+    console.error("[settings] removing sample customers failed:", leadError.message);
+    revalidateAll();
+    return { error: "QuoteLoop couldn't finish removing the sample data. Anything already removed stays removed. Please try again." };
+  }
+
+  revalidateAll();
+  return {
+    ok: true,
+    message: `Sample data removed (${ids.length} sample customer${ids.length === 1 ? "" : "s"} and their quotes). Your own records were kept.`,
+  };
 }
 
 /** Deletes all of the current user's leads/quotes/follow-ups/messages (keeps the workspace). */

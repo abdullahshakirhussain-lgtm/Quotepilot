@@ -26,9 +26,12 @@ function contactOf(data: FormData): string {
 export function LeadFormModal({
   lead,
   onClose,
+  focusEmail = false,
 }: {
   lead?: Lead | null;
   onClose: () => void;
+  /** Opened from "Add email": start in the email field. */
+  focusEmail?: boolean;
 }) {
   const isEdit = Boolean(lead);
   const [state, formAction, pending] = useActionState<LeadActionState, FormData>(
@@ -149,6 +152,7 @@ export function LeadFormModal({
               name="email"
               type="email"
               className="input"
+              autoFocus={focusEmail}
               defaultValue={lead?.email ?? ""}
             />
           </div>

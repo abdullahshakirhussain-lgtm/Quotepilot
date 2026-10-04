@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,8 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+const NAV: { href: string; label: string; short?: string; icon: typeof LayoutDashboard; badge?: boolean }[] = [
+  { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard },
   { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/follow-ups", label: "Follow-ups", icon: BellRing, badge: true },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
@@ -35,39 +34,6 @@ export function Sidebar({
   const pathname = usePathname();
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
-
-  // On narrow phones the tabs don't all fit: they scroll sideways, a fade shows
-  // there are more, and the current page's tab is kept in view.
-  const mobileNav = useRef<HTMLElement>(null);
-  const [more, setMore] = useState({ left: false, right: false });
-
-  useEffect(() => {
-    const nav = mobileNav.current;
-    if (!nav) return;
-    const update = () =>
-      setMore({
-        left: nav.scrollLeft > 4,
-        right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 4,
-      });
-    update();
-    nav.addEventListener("scroll", update, { passive: true });
-    // The tabs change width after the web font loads, or when the badge
-    // count changes, without the bar itself scrolling or resizing.
-    const sizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-    sizes?.observe(nav);
-    for (const tab of Array.from(nav.children)) sizes?.observe(tab);
-    document.fonts?.ready.then(update).catch(() => {});
-    return () => {
-      nav.removeEventListener("scroll", update);
-      sizes?.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    mobileNav.current
-      ?.querySelector<HTMLElement>('[aria-current="page"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [pathname]);
 
   return (
     <>
@@ -127,60 +93,51 @@ export function Sidebar({
         </form>
       </aside>
 
-      {/* Mobile top bar */}
+      {/* Phones: a slim top bar with the main action... */}
       <div className="sticky top-0 z-30 bg-stone-950 text-stone-400 md:hidden">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2 font-semibold text-white">
-            QuoteLoop
-          </div>
-          <div className="flex items-center gap-1">
-            <Link href="/quotes?new=1" className="btn-accent tap px-2.5 py-1 text-xs">
-              <Plus className="h-3.5 w-3.5" /> Quote
-            </Link>
-            <form action="/auth/signout" method="post">
-              <button className="tap inline-flex items-center justify-center rounded-md p-1.5 hover:bg-white/10" aria-label="Sign out">
-                <LogOut className="h-4 w-4" />
-              </button>
-            </form>
-          </div>
-        </div>
-        <div className="relative">
-          <nav ref={mobileNav} aria-label="Main" className="flex gap-1 overflow-x-auto px-3 pb-2">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isActive(item.href) ? "page" : undefined}
-                // shrink-0: .tap's minimum width would otherwise let the tabs
-                // squeeze together until their labels overlap.
-                className={cn(
-                  "tap flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
-                  isActive(item.href) ? "bg-white/10 text-white" : "hover:bg-white/5"
-                )}
-              >
-                {item.label}
-                {item.badge && attentionCount > 0 && (
-                  <span className="num rounded bg-brand-600 px-1 text-[11px] font-semibold text-white">
-                    {attentionCount}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </nav>
-          {more.left && (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-stone-950 to-transparent"
-            />
-          )}
-          {more.right && (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-stone-950 to-transparent"
-            />
-          )}
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <div className="font-semibold text-white">QuoteLoop</div>
+          <Link href="/quotes?new=1" className="btn-accent tap px-3 py-1.5">
+            <Plus className="h-4 w-4" /> New quote
+          </Link>
         </div>
       </div>
+
+      {/* ...and every section in a tab bar along the bottom, always in view.
+          Signing out lives in Settings, away from the buttons used all day. */}
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        <ul className="grid grid-cols-6">
+          {NAV.map((item) => {
+            const active = isActive(item.href);
+            const Icon = item.icon;
+            return (
+              <li key={item.href} className="min-w-0">
+                <Link
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  aria-label={item.badge && attentionCount > 0 ? `${item.label}, ${attentionCount} need attention` : item.label}
+                  className={cn(
+                    "relative flex h-14 flex-col items-center justify-center gap-0.5 px-0.5 text-[10.5px] font-medium",
+                    active ? "text-brand-700" : "text-stone-500 hover:text-stone-900"
+                  )}
+                >
+                  {active && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-brand-600" />}
+                  <Icon className="h-5 w-5" />
+                  <span className="max-w-full truncate leading-tight">{item.short ?? item.label}</span>
+                  {item.badge && attentionCount > 0 && (
+                    <span className="num absolute left-1/2 top-1.5 ml-2 rounded-full bg-brand-600 px-1.5 text-[10px] font-semibold leading-4 text-white">
+                      {attentionCount}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
     </>
   );
 }

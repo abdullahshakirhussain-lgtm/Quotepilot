@@ -31,6 +31,8 @@ import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { suggestMessageType } from "@/lib/follow-up-state";
 import { logFollowUpSent } from "@/app/(app)/quotes/actions";
 import { sendFollowUpEmail } from "@/app/(app)/quotes/email-actions";
+import { addCustomerEmail } from "@/app/(app)/quotes/new-quote-actions";
+import { isSampleAddress } from "@/lib/email-address";
 
 type SendOutcome = Awaited<ReturnType<typeof sendFollowUpEmail>>;
 
@@ -100,6 +102,8 @@ export function AIMessageModal({
   const [logged, setLogged] = useState<LoggedEntry[]>([]);
   const [emails, setEmails] = useState<EmailLogEntry[]>([]);
   const [recipient, setRecipient] = useState<string | null>(null);
+  // The quote's customer, so an email address can be added right here.
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
   // Replies go to the business email, so sending needs a working one.
   const [replyToReady, setReplyToReady] = useState(true);
@@ -119,7 +123,9 @@ export function AIMessageModal({
 
   const firstName = quote.customerName.split(" ")[0] || quote.customerName;
   const edited = content.trim() !== "" && content.trim() !== draft.trim();
-  const canEmail = emailEnabled && Boolean(recipient) && replyToReady;
+  // Demo customers' addresses can never receive mail, so they are never emailed.
+  const sampleRecipient = isSampleAddress(recipient);
+  const canEmail = emailEnabled && Boolean(recipient) && replyToReady && !sampleRecipient;
 
   const loadHistory = useCallback(async () => {
     try {
@@ -130,6 +136,7 @@ export function AIMessageModal({
       setLogged(data.logged ?? []);
       setEmails(data.emails ?? []);
       setRecipient(data.recipientEmail ?? null);
+      setCustomerId(typeof data.customerId === "string" ? data.customerId : null);
       setEmailEnabled(Boolean(data.emailEnabled));
       setReplyToReady(data.replyToReady !== false);
       setPendingFollowUpId(typeof data.pendingFollowUpId === "string" ? data.pendingFollowUpId : null);
@@ -435,6 +442,10 @@ export function AIMessageModal({
 
         {content && !loading && (
           <div className="space-y-3">
+            {/* Where the To line goes once there's an address: add one right here. */}
+            {emailEnabled && replyToReady && !recipient && customerId && (
+              <InlineCustomerEmail customerId={customerId} name={firstName} onSaved={loadHistory} />
+            )}
             {canEmail && (
               <div className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
                 <div className="flex items-start gap-3 px-3 py-2">
@@ -529,7 +540,13 @@ export function AIMessageModal({
                       />
                     </div>
                   )}
-                  {!recipient && (
+                  {sampleRecipient && (
+                    <p className="rounded-md bg-violet-50 px-3 py-2 text-sm text-violet-900 ring-1 ring-inset ring-violet-200">
+                      This is a sample customer from the demo data, so QuoteLoop won&apos;t email them. Copy the
+                      message to try it out.
+                    </p>
+                  )}
+                  {!recipient && !customerId && (
                     <p className="text-xs text-stone-500">
                       Add an email address to this customer to send from QuoteLoop.{" "}
                       <Link href="/leads" className="font-medium text-stone-700 underline-offset-2 hover:underline">
@@ -642,5 +659,75 @@ export function AIMessageModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Saves an email address for a customer who has none, inside the follow-up
+ * window, so Send email appears without leaving it. The saved address is what
+ * the server sends to; the browser never supplies the recipient at send time.
+ */
+function InlineCustomerEmail({
+  customerId,
+  name,
+  onSaved,
+}: {
+  customerId: string;
+  name: string;
+  onSaved: () => Promise<void>;
+}) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, start] = useTransition();
+
+  function save() {
+    // Enter pressed again while saving must not save twice.
+    if (busy || !email.trim()) return;
+    setError(null);
+    start(async () => {
+      try {
+        const outcome = await addCustomerEmail(customerId, email.trim());
+        if (!outcome.ok) return setError(outcome.error);
+        await onSaved();
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setError("QuoteLoop couldn't be reached, so the email address may not have been saved. Check your connection and try again.");
+      }
+    });
+  }
+
+  return (
+    <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+      <label htmlFor="ai-add-email" className="text-sm font-medium text-stone-800">
+        Add {name}&apos;s email to send this from QuoteLoop
+      </label>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <input
+          id="ai-add-email"
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          className="input min-w-0 flex-1 basis-48"
+          placeholder="name@company.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+          }}
+        />
+        <button type="button" className="btn-primary" onClick={save} disabled={busy || !email.trim()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Save email
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-stone-500">Saved to this customer, so later follow-ups can be emailed too.</p>
+      {error && (
+        <p role="alert" className="mt-1 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

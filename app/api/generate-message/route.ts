@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false }),
     supabase
       .from("quotes")
-      .select("lead:leads(email)")
+      .select("lead_id, lead:leads(email)")
       .eq("id", quoteId)
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -88,6 +88,8 @@ export async function GET(request: Request) {
     logged: logged.data ?? [],
     emails: emails.error ? [] : (emails.data ?? []),
     recipientEmail: isValidEmail(leadEmail) ? leadEmail.trim() : null,
+    // So the window can save an address for a customer who has none, in place.
+    customerId: (quote.data as { lead_id?: string } | null)?.lead_id ?? null,
     emailEnabled: emailConfig() !== null && !emails.error,
     replyToReady: isValidEmail(business.data?.email),
     pendingFollowUpId: pending.data?.[0]?.id ?? null,

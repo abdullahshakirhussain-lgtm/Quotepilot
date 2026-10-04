@@ -14,11 +14,14 @@ export type QuoteSuccess = Extract<QuoteFlowOutcome, { ok: true }>;
  */
 export function QuoteDonePanel({
   result,
+  summary,
   today,
   onWriteFollowUp,
   onAnother,
 }: {
   result: QuoteSuccess;
+  /** What was saved, e.g. "Deep clean · $1,250.00". */
+  summary?: string;
   /** Viewer's local date from the server. */
   today: string;
   onWriteFollowUp: () => void;
@@ -35,11 +38,17 @@ export function QuoteDonePanel({
           {result.recipient ? (
             <>
               Sent to <span className="font-medium">{result.recipient}</span>. {result.customerName} has your
-              quote.
+              quote{summary ? <>: <span className="num font-medium">{summary}</span></> : null}.
             </>
           ) : (
             <>
-              Saved for {result.customerName}.
+              Saved for {result.customerName}
+              {summary ? (
+                <>
+                  : <span className="num font-medium">{summary}</span>
+                </>
+              ) : null}
+              .
               {firstDue && !result.followUpDueNow
                 ? ` Follow-up #${firstDue.follow_up_number} is scheduled for ${formatDate(
                     firstDue.due_date,

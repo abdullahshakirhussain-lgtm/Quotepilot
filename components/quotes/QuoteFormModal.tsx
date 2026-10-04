@@ -1,12 +1,13 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { CURRENCIES } from "@/lib/constants";
 import type { Lead, Quote } from "@/lib/types";
 import { updateQuote, type QuoteActionState } from "@/app/(app)/quotes/actions";
 import { reportUnreachable } from "@/lib/form-action";
+import { AmountInput } from "@/components/ui/AmountInput";
 
 const saveQuote = reportUnreachable(updateQuote);
 
@@ -50,6 +51,8 @@ export function QuoteFormModal({
   onSaved?: (message: string) => void;
 }) {
   const [state, formAction, pending] = useActionState<QuoteActionState, FormData>(saveQuote, {});
+  // Followed by the amount field, which shows what it understood in this currency.
+  const [currency, setCurrency] = useState(quote.currency ?? defaultCurrency);
   const done = useRef(false);
   // Set once anything is changed, so closing by accident asks first.
   const dirty = useRef(false);
@@ -127,23 +130,13 @@ export function QuoteFormModal({
               <label className="label" htmlFor="amount">
                 Amount
               </label>
-              <input
-                id="amount"
-                name="amount"
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                inputMode="decimal"
-                className="input num"
-                defaultValue={quote.amount}
-              />
+              <AmountInput id="amount" name="amount" required defaultValue={String(quote.amount)} currency={currency} />
             </div>
             <div>
               <label className="label" htmlFor="currency">
                 Currency
               </label>
-              <select id="currency" name="currency" className="input" defaultValue={quote.currency ?? defaultCurrency}>
+              <select id="currency" name="currency" className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>
                     {c}

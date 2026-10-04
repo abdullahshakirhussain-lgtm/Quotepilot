@@ -25,7 +25,7 @@ export default async function OnboardingPage() {
           QuoteLoop
         </div>
         <div className="card p-6 sm:p-8">
-          <p className="eyebrow text-brand-700">Step 1 of 1</p>
+          <p className="eyebrow text-brand-700">Welcome to QuoteLoop</p>
           <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-900">
             Tell us about your business
           </h1>

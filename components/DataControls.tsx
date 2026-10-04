@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { Database, Loader2, Trash2 } from "lucide-react";
-import { clearAllData, seedDemoData } from "@/app/(app)/settings/actions";
+import { clearAllData, removeSampleData, seedDemoData } from "@/app/(app)/settings/actions";
 import type { ActionState } from "@/app/(app)/settings/actions";
 
 /** Runs a settings action; a request that never got an answer is said so, not a crash. */
@@ -19,6 +19,7 @@ async function attempt(action: () => Promise<ActionState>, unreachable: string):
 export function DataControls() {
   const [seeding, startSeed] = useTransition();
   const [clearing, startClear] = useTransition();
+  const [removing, startRemove] = useTransition();
   const [result, setResult] = useState<ActionState | null>(null);
 
   return (
@@ -27,14 +28,14 @@ export function DataControls() {
         <button
           type="button"
           className="btn-secondary"
-          disabled={seeding || clearing}
+          disabled={seeding || clearing || removing}
           onClick={() => {
             setResult(null);
             startSeed(async () =>
               setResult(
                 await attempt(
                   seedDemoData,
-                  "QuoteLoop couldn't be reached, so the demo data may not have loaded. Refresh the page to check, then try again."
+                  "QuoteLoop couldn't be reached, so the sample data may not have loaded. Refresh the page to check, then try again."
                 )
               )
             );
@@ -45,13 +46,34 @@ export function DataControls() {
           ) : (
             <Database className="h-4 w-4" />
           )}
-          Load demo data
+          Load sample data
+        </button>
+
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={seeding || clearing || removing}
+          onClick={() => {
+            if (!window.confirm("Remove the sample customers and their quotes? Anything you added yourself stays.")) return;
+            setResult(null);
+            startRemove(async () =>
+              setResult(
+                await attempt(
+                  removeSampleData,
+                  "QuoteLoop couldn't be reached, so the sample data may not have been removed. Refresh the page to check, then try again."
+                )
+              )
+            );
+          }}
+        >
+          {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          Remove sample data
         </button>
 
         <button
           type="button"
           className="btn-danger"
-          disabled={seeding || clearing}
+          disabled={seeding || clearing || removing}
           onClick={() => {
             if (
               window.confirm(

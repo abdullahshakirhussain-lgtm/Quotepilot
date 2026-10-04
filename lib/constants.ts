@@ -49,19 +49,27 @@ export const TONES = [
 ] as const;
 export type Tone = (typeof TONES)[number];
 
-// Industries geared at generic small service businesses.
+// Types of small service business, A to Z so a name is easy to find, with
+// Other last. Includes every trade the landing page speaks to. Stored as plain
+// text, so adding one never needs a database change.
 export const INDUSTRIES = [
-  "Home Repair / Handyman",
-  "Electrical",
-  "Plumbing",
   "AC / HVAC Repair",
   "Cleaning Services",
-  "Printing / Signage",
-  "Interior Design",
   "Custom Furniture",
+  "Electrical",
+  "Freelance / Creative",
+  "Garage Door Repair",
+  "Home Repair / Handyman",
+  "Installation Services",
+  "Interior Design",
   "Landscaping",
   "Painting",
-  "Freelance / Creative",
+  "Pest Control",
+  "Photography / Studio",
+  "Plumbing",
+  "Printing / Signage",
+  "Renovation / Remodeling",
+  "Roofing",
   "Small Agency",
   "Other",
 ] as const;

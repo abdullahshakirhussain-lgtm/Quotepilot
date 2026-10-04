@@ -5,10 +5,11 @@ import { unstable_rethrow } from "next/navigation";
 import { ArrowRight, CalendarCheck, ChevronRight, Loader2, Mail, Send } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { CURRENCIES } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
 import { cleanPasted, isValidEmail } from "@/lib/email-address";
-import { EARLIEST_SENT_DATE, LIMITS, MAX_AMOUNT } from "@/lib/quote-flows";
+import { EARLIEST_SENT_DATE, LIMITS, MAX_AMOUNT, parseAmount } from "@/lib/quote-flows";
+import { AmountInput } from "@/components/ui/AmountInput";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { QuoteDonePanel } from "./QuoteDonePanel";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
@@ -196,10 +197,8 @@ export function NewQuoteModal({
         : "That email address doesn't look right. Leave it empty if you don't have one.";
     }
     if (!title.trim()) return "Add a short title for the quote, like “Service 3 AC units”.";
-    const value = Number(String(amount).replace(/[, ]/g, ""));
-    if (!String(amount).trim() || !Number.isFinite(value) || value <= 0) {
-      return "Enter the quote amount as a number greater than zero.";
-    }
+    const value = parseAmount(amount);
+    if (value === null) return "Enter the quote amount as a number greater than zero.";
     if (value > MAX_AMOUNT) return "That amount is too large. Check the number and try again.";
     if (flow === "track" && !sentDate) return "Enter the date you sent this quote.";
     if (flow === "track" && sentDate > today) return "The sent date can't be in the future.";
@@ -254,7 +253,7 @@ export function NewQuoteModal({
         businessName: business.name,
         ownerName: business.ownerName,
         title: title.trim(),
-        amount: Number(amount),
+        amount: parseAmount(amount) ?? 0,
         currency,
         description: description.trim() || null,
         validUntil: validUntil || null,
@@ -585,17 +584,7 @@ export function NewQuoteModal({
             </Field>
             <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
               <Field label="Amount" htmlFor="q-amount">
-                <input
-                  id="q-amount"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
-                  className="input num"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                />
+                <AmountInput id="q-amount" value={amount} onChange={setAmount} currency={currency} />
               </Field>
               <Field label="Currency" htmlFor="q-currency">
                 <select
@@ -775,7 +764,7 @@ export function NewQuoteModal({
               setBodyEdited(true);
             }}
             title={title.trim()}
-            amount={Number(amount)}
+            amount={parseAmount(amount) ?? 0}
             currency={currency}
             description={description.trim() || null}
             businessName={business.name}
@@ -818,6 +807,8 @@ export function NewQuoteModal({
       {step === "done" && result && (
         <QuoteDonePanel
           result={result}
+          // What was saved, so a misread amount is noticed straight away.
+          summary={`${title.trim()} · ${formatCurrency(parseAmount(amount) ?? 0, currency)}`}
           today={today}
           onWriteFollowUp={() => onWriteFollowUp(result.quoteId)}
           onAnother={startAnother}

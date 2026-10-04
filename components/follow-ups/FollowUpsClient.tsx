@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import type { ActionResult, FollowUpWithContext } from "@/lib/types";
+import { isSampleAddress } from "@/lib/email-address";
+import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { classifyFollowUp, type FollowUpBucket } from "@/lib/follow-up-state";
 import {
@@ -76,6 +78,8 @@ export function FollowUpsClient({
             : `${needAttention} need${needAttention === 1 ? "s" : ""} attention · ${groups.upcoming.length} coming up`
         }
       />
+
+      {followUps.some((f) => isSampleAddress(f.lead?.email)) && <SampleDataBanner />}
 
       {notice && (
         <div
@@ -246,6 +250,7 @@ function FollowUpRow({
           </span>
           <span className="shrink-0 whitespace-nowrap text-xs text-stone-400">follow-up #{f.follow_up_number}</span>
           {!isPending && <StatusBadge kind="followup" value={f.status} />}
+          {isSampleAddress(f.lead?.email) && <SampleBadge />}
         </div>
         {/* A long title is cut short; the amount always stays in view. */}
         <div className="flex min-w-0 items-baseline gap-1 text-sm text-stone-500">
@@ -300,21 +305,19 @@ function FollowUpRow({
         {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
         {isPending ? (
           <>
-            {/* Records a follow-up the user made themselves; nothing is sent.
-                The shorter label keeps a phone's row of buttons on one line. */}
-            <button
-              className="btn-ghost text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-              disabled={pending}
-              onClick={() => run(() => completeFollowUp(f.id))}
-              aria-label="Mark followed up"
-              title="Record that you followed up yourself. Nothing is sent."
-            >
-              <Check className="h-4 w-4" />
-              <span className="sm:hidden">Followed up</span>
-              <span className="hidden sm:inline">Mark followed up</span>
-            </button>
             <button className={urgent ? "btn-accent" : "btn-secondary"} disabled={pending} onClick={onWrite}>
               <Sparkles className="h-4 w-4" /> Write follow-up
+            </button>
+            {/* Records a follow-up the user made themselves; nothing is sent.
+                A plain outlined button with the full label, so it reads as
+                something to press, never as "already done". */}
+            <button
+              className="btn-secondary"
+              disabled={pending}
+              onClick={() => run(() => completeFollowUp(f.id))}
+              title="Record that you followed up yourself. Nothing is sent."
+            >
+              <Check className="h-4 w-4" /> Mark followed up
             </button>
             <Menu>
               <MenuItem onClick={() => run(() => skipFollowUp(f.id))}>

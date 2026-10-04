@@ -53,8 +53,55 @@ export function PipelineClient({ leads, currency }: { leads: PipelineLead[]; cur
         }
       />
 
-      {/* All seven stages fit side by side on a laptop screen; narrower screens scroll. */}
-      <div className="overflow-x-auto pb-4">
+      {/* Phones and tablets: the stages that have customers, one under another.
+          A sideways board on a small screen opens on empty columns and hides
+          the customers off to the right. */}
+      <div className="space-y-5 lg:hidden">
+        {PIPELINE_COLUMNS.filter((col) => leads.some((l) => l.status === col)).map((col) => {
+          const items = leads.filter((l) => l.status === col);
+          const colTotal = combineMoney(
+            items.map((l) => l.quoteTotals),
+            currency
+          ).filter((m) => m.amount > 0);
+          return (
+            <section key={col}>
+              <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+                <h2 className={cn("text-sm font-semibold text-stone-800", COLUMN_ACCENT[col])}>
+                  {LEAD_STATUS_LABELS[col]}
+                  <span className="num ml-1.5 text-xs font-medium text-stone-400">{items.length}</span>
+                </h2>
+                {colTotal.length > 0 && (
+                  <p className="num text-right text-xs text-stone-500 [overflow-wrap:anywhere]">{formatMoney(colTotal, currency)}</p>
+                )}
+              </div>
+              {/* grid-cols-1 (minmax(0, 1fr)): a very long name is cut short, never widens the page. */}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {items.map((l) => (
+                  <PipelineCard key={l.id} lead={l} currency={currency} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+        {(() => {
+          const empty = PIPELINE_COLUMNS.filter((col) => !leads.some((l) => l.status === col));
+          if (empty.length === PIPELINE_COLUMNS.length) {
+            return (
+              <p className="card px-4 py-8 text-center text-sm text-stone-500">
+                No customers yet. They appear here when you add a quote.
+              </p>
+            );
+          }
+          return empty.length ? (
+            <p className="px-1 text-xs text-stone-400">
+              No customers in: {empty.map((col) => LEAD_STATUS_LABELS[col]).join(" · ")}
+            </p>
+          ) : null;
+        })()}
+      </div>
+
+      {/* Laptops and up: all seven stages side by side. */}
+      <div className="hidden overflow-x-auto pb-4 lg:block">
         <div className="grid min-w-[62rem] grid-cols-7 gap-2">
           {PIPELINE_COLUMNS.map((col) => {
             const items = leads.filter((l) => l.status === col);

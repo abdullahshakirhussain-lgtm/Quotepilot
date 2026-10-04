@@ -9,6 +9,8 @@
 //      Never sends an email.
 // ---------------------------------------------------------------------------
 import { CURRENCIES } from "./constants";
+import { readAmount } from "./money";
+import { isSampleAddress, SAMPLE_RECIPIENT_ERROR } from "./email-address";
 import { defaultQuoteSubject } from "./quote-email";
 import {
   cleanSubject,
@@ -148,11 +150,9 @@ function tooLong(value: string | null | undefined, max: number, label: string): 
     : null;
 }
 
-/** A positive money amount, or null when it isn't one. */
+/** A positive money amount as typed ("1,250.00", "1.250,00", "$1,250"...), or null when it isn't one. */
 export function parseAmount(value: string | number | null | undefined): number | null {
-  const n = typeof value === "number" ? value : Number(String(value ?? "").replace(/[, ]/g, ""));
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n * 100) / 100;
+  return readAmount(value);
 }
 
 /**
@@ -434,6 +434,8 @@ export async function sendQuoteCore(
       error: "This customer doesn't have a valid email address saved, so the quote can't be sent. Add their email address, then try again.",
     };
   }
+  // Demo customers' addresses can never receive mail: sending would only bounce and use up the day's emails.
+  if (isSampleAddress(to)) return { ok: false, error: SAMPLE_RECIPIENT_ERROR };
   // The preview showed one address; the customer's saved one is now different
   // (changed in another tab). Only refuse — never send to the browser's copy.
   if (f.expectedTo?.trim() && !sameAddress(f.expectedTo, to)) {
