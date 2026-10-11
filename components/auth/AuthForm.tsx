@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import { Loader2 } from "lucide-react";
@@ -40,10 +40,22 @@ async function googleProviderStatus(): Promise<"enabled" | "disabled" | "unknown
   }
 }
 
-export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
+/**
+ * `redirect` and `error` come from the page's URL. The page reads them on the
+ * server and passes them in, so the whole form is in the first HTML response
+ * (no empty page while JavaScript loads).
+ */
+export default function AuthForm({
+  mode,
+  redirect = null,
+  error: initialError = null,
+}: {
+  mode: "login" | "signup";
+  redirect?: string | null;
+  error?: string | null;
+}) {
   const router = useRouter();
-  const params = useSearchParams();
-  const redirectTo = safeRedirectPath(params.get("redirect"));
+  const redirectTo = safeRedirectPath(redirect);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,7 +64,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState<string | null>(
     // Set by /auth/callback: Google was cancelled, or a confirmation link failed.
     // (A reset link that fails goes to /forgot-password instead.)
-    params.get("error") === "oauth"
+    initialError === "oauth"
       ? "Sign-in didn't complete. Please try again. If you were confirming your email, log in with your password."
       : null
   );

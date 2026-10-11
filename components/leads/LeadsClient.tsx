@@ -115,7 +115,7 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                         <span className="font-medium text-stone-900 [overflow-wrap:anywhere]">{lead.customer_name}</span>
                         {isSampleAddress(lead.email) && <SampleBadge />}
                       </div>
-                      {lead.company_name && <div className="text-sm text-stone-500">{lead.company_name}</div>}
+                      {lead.company_name && <div className="text-sm text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>}
                     </div>
                     <StatusBadge kind="lead" value={lead.status} />
                   </div>
@@ -125,8 +125,8 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                     ) : (
                       <div className="text-stone-400">No email yet</div>
                     )}
-                    {lead.phone && <div>{lead.phone}</div>}
-                    {lead.source && <div className="text-xs text-stone-400">Source: {lead.source}</div>}
+                    {lead.phone && <div className="[overflow-wrap:anywhere]">{lead.phone}</div>}
+                    {lead.source && <div className="text-xs text-stone-400 [overflow-wrap:anywhere]">Source: {lead.source}</div>}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {!lead.email && (
@@ -186,7 +186,7 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                             {isSampleAddress(lead.email) && <SampleBadge />}
                           </div>
                           {lead.company_name && (
-                            <div className="text-xs text-stone-500">{lead.company_name}</div>
+                            <div className="text-xs text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>
                           )}
                           {lead.notes && (
                             <div className="mt-0.5 line-clamp-1 max-w-xs text-xs text-stone-400">
