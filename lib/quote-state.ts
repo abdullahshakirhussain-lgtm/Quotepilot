@@ -56,8 +56,8 @@ export async function recomputeQuoteFollowUpState(
 
 /**
  * Replaces a quote's pending reminders with a fresh schedule (the base date +
- * each configured day). Completed/skipped history is kept and numbering
- * continues after it.
+ * each configured day). Completed/skipped history is kept, and numbering
+ * continues after the follow-ups actually done.
  *
  * `baseDate` is the day the quote actually went out. For a quote the user sent
  * themselves days ago that puts the early reminders in the past, where they
@@ -88,7 +88,7 @@ export async function scheduleFollowUps(
 
   const { data: history, error: historyError } = await supabase
     .from("follow_ups")
-    .select("follow_up_number")
+    .select("status, follow_up_number")
     .eq("quote_id", quoteId)
     .eq("user_id", userId);
   check(historyError, "Could not read reminder history");

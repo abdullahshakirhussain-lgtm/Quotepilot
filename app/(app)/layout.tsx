@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { requestToday } from "@/lib/request-time";
 import { Sidebar } from "@/components/Sidebar";
 import type { Business } from "@/lib/types";
@@ -20,13 +21,20 @@ export default async function AppLayout({
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle<Business>(),
-    // Pending reminders due today or overdue — the sidebar badge.
-    supabase
-      .from("follow_ups")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("status", "pending")
-      .lte("due_date", await requestToday()),
+    // Quotes with a reminder due today or overdue — the sidebar badge. Counted
+    // per quote, like the dashboard: several missed reminders are one job.
+    requestToday().then((today) =>
+      fetchAllRows<{ quote_id: string }>((from, to) =>
+        supabase
+          .from("follow_ups")
+          .select("quote_id")
+          .eq("user_id", user.id)
+          .eq("status", "pending")
+          .lte("due_date", today)
+          .order("id")
+          .range(from, to)
+      )
+    ),
   ]);
 
   // A failed query must not look like "no workspace" — that would send an
@@ -40,7 +48,7 @@ export default async function AppLayout({
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar
         businessName={business.business_name}
-        attentionCount={attention.count ?? 0}
+        attentionCount={new Set(attention.map((f) => f.quote_id)).size}
       />
       {/* On phones the tab bar is fixed along the bottom: keep the page clear of it. */}
       <main className="min-w-0 flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">

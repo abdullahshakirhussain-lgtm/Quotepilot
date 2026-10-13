@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { recomputeQuoteFollowUpState, skipRemindersCoveredBy } from "@/lib/quote-state";
 import { requestToday } from "@/lib/request-time";
+import { addDays } from "@/lib/utils";
 import type { ActionResult } from "@/lib/types";
 
 type ReminderStatus = "pending" | "completed" | "skipped";
@@ -33,7 +34,7 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
   try {
     const { data: fu, error } = await supabase
       .from("follow_ups")
-      .select("id, quote_id, status, quote:quotes(status)")
+      .select("id, quote_id, status, due_date, quote:quotes(status)")
       .eq("id", String(id ?? ""))
       .eq("user_id", user.id)
       .maybeSingle();
@@ -94,8 +95,11 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
     }
 
     // Following up today also covers the quote's other reminders already due.
-    if (status === "completed") {
-      await skipRemindersCoveredBy(supabase, user.id, fu.quote_id, fu.id, await requestToday());
+    // Skipping a due reminder skips them too: the lists show one row per quote
+    // for everything due, so skipping that row must clear the whole stack.
+    const today = await requestToday();
+    if (status === "completed" || (status === "skipped" && String(fu.due_date) <= today)) {
+      await skipRemindersCoveredBy(supabase, user.id, fu.quote_id, fu.id, today);
     }
     await recomputeQuoteFollowUpState(supabase, user.id, fu.quote_id);
   } catch (e) {
@@ -118,4 +122,65 @@ export async function skipFollowUp(id: string): Promise<ActionResult> {
 
 export async function reopenFollowUp(id: string): Promise<ActionResult> {
   return setFollowUpStatus(id, "pending");
+}
+
+/** How far a reminder can be pushed back in one go. */
+const SNOOZE_DAYS = [1, 3, 7, 14] as const;
+
+/**
+ * Moves one open reminder to a later day ("they asked me to call back next
+ * week"). Counted from today, or from its own date if that is later. Any of
+ * the quote's other reminders that are already due move with it, since the
+ * lists show them as a single row.
+ */
+export async function snoozeFollowUp(id: string, days: number): Promise<ActionResult> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  if (!(SNOOZE_DAYS as readonly number[]).includes(days)) {
+    return { ok: false, error: "Choose how long to snooze this reminder." };
+  }
+
+  try {
+    const { data: fu, error } = await supabase
+      .from("follow_ups")
+      .select("id, quote_id, status, due_date")
+      .eq("id", String(id ?? ""))
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!fu) return { ok: false, error: "This reminder no longer exists. Its quote may have been deleted." };
+    if (fu.status !== "pending") {
+      revalidateViews();
+      return { ok: false, error: alreadyMessage(fu.status) };
+    }
+
+    const today = await requestToday();
+    const from = String(fu.due_date) > today ? String(fu.due_date) : today;
+    const next = addDays(from, days);
+
+    const { data: moved, error: updateError } = await supabase
+      .from("follow_ups")
+      .update({ due_date: next })
+      .eq("id", fu.id)
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .select("id");
+    if (updateError) throw new Error(updateError.message);
+    if (!moved?.length) {
+      revalidateViews();
+      return { ok: false, error: "This reminder changed in another tab. Refresh the page and try again." };
+    }
+    // Other reminders for the quote that were already due are covered by this one.
+    if (String(fu.due_date) <= today) {
+      await skipRemindersCoveredBy(supabase, user.id, fu.quote_id, fu.id, today);
+    }
+    await recomputeQuoteFollowUpState(supabase, user.id, fu.quote_id);
+  } catch (e) {
+    console.error("[follow-ups] snoozing a reminder failed:", e instanceof Error ? e.message : e);
+    revalidateViews();
+    return { ok: false, error: "The reminder couldn't be moved just now. Please try again." };
+  }
+
+  revalidateViews();
+  return { ok: true };
 }

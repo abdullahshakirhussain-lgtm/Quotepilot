@@ -18,6 +18,17 @@ export const ACTIVE_LEAD_STATUSES = [
 /** Quotes that are out with the customer and still undecided. */
 export const OPEN_QUOTE_STATUSES = ["sent", "follow_up_due", "negotiating"] as const;
 
+/**
+ * Which of a customer's quotes a pipeline card adds up: the won ones in Won,
+ * the lost ones in Lost, and everything still in play (drafts and open quotes)
+ * in the other stages. So a column total never counts an open quote as won.
+ */
+export function quoteCountsForStage(leadStatus: string, quoteStatus: string): boolean {
+  if (leadStatus === "won") return quoteStatus === "accepted";
+  if (leadStatus === "lost") return quoteStatus === "rejected";
+  return quoteStatus === "draft" || (OPEN_QUOTE_STATUSES as readonly string[]).includes(quoteStatus);
+}
+
 /** An amount in one currency. */
 export interface Money {
   currency: string;

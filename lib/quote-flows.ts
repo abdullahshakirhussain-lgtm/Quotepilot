@@ -9,6 +9,7 @@
 //      Never sends an email.
 // ---------------------------------------------------------------------------
 import { CURRENCIES } from "./constants";
+import { isPlausiblePhone, PHONE_ERROR } from "./phone";
 import { readAmount } from "./money";
 import { isSampleAddress, SAMPLE_RECIPIENT_ERROR } from "./email-address";
 import { defaultQuoteSubject } from "./quote-email";
@@ -133,8 +134,19 @@ export const LIMITS = {
 /** The largest amount the database column can hold. */
 export const MAX_AMOUNT = 999_999_999_999.99;
 
-/** Earliest believable sent date: catches two-digit-year typos such as 0026. */
-export const EARLIEST_SENT_DATE = "2000-01-01";
+/**
+ * Earliest sent date QuoteLoop follows up on: one year before `today`. Older
+ * is almost always a mistyped year (2000 for 2026, 0026), and every reminder
+ * for it would already be months overdue.
+ */
+export function earliestSentDate(today: string): string {
+  const year = Number(today.slice(0, 4)) - 1;
+  const md = today.slice(5, 10) === "02-29" ? "02-28" : today.slice(5, 10);
+  return `${String(year).padStart(4, "0")}-${md}`;
+}
+
+export const OLD_SENT_DATE_ERROR =
+  "That sent date is more than a year ago. Check the year: QuoteLoop follows up on quotes from the last 12 months.";
 
 /** A YYYY-MM-DD string that is a real calendar date (not 2026-02-30). */
 export function isRealDate(value: string | null | undefined): boolean {
@@ -214,15 +226,14 @@ export function validateQuote(flow: "send" | "track", f: QuoteFields, today: str
     tooLong(f.description, LIMITS.description, "The description") ??
     tooLong(f.notes, LIMITS.notes, "The notes");
   if (long) return long;
+  if (!isPlausiblePhone(f.phone)) return PHONE_ERROR;
 
   if (!f.sentDate || !DATE.test(f.sentDate)) {
     return flow === "track" ? "Enter the date you sent this quote." : "The quote date isn't valid.";
   }
   if (!isRealDate(f.sentDate)) return "That sent date isn't a real date. Check it and try again.";
   if (flow === "track" && f.sentDate > today) return "The sent date can't be in the future.";
-  if (flow === "track" && f.sentDate < EARLIEST_SENT_DATE) {
-    return "That sent date looks too far in the past. Check the year.";
-  }
+  if (flow === "track" && f.sentDate < earliestSentDate(today)) return OLD_SENT_DATE_ERROR;
 
   if (f.validUntil) {
     if (!isRealDate(f.validUntil)) return "The valid-until date isn't a real date. Check it and try again.";

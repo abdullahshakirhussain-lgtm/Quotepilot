@@ -8,7 +8,7 @@ import { CURRENCIES } from "@/lib/constants";
 import { cn, formatCurrency } from "@/lib/utils";
 import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
 import { cleanPasted, isValidEmail } from "@/lib/email-address";
-import { EARLIEST_SENT_DATE, LIMITS, MAX_AMOUNT, parseAmount } from "@/lib/quote-flows";
+import { earliestSentDate, LIMITS, MAX_AMOUNT, OLD_SENT_DATE_ERROR, parseAmount } from "@/lib/quote-flows";
 import { AmountInput } from "@/components/ui/AmountInput";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { QuoteDonePanel } from "./QuoteDonePanel";
@@ -142,6 +142,14 @@ export function NewQuoteModal({
   const [busy, startAction] = useTransition();
 
   const selected = customers.find((c) => c.id === leadId) ?? null;
+  // A "new" customer whose name matches one already saved: offer that one, so
+  // the same person isn't added twice (customers only merge on email or phone).
+  const sameName = (a: string, b: string) =>
+    a.trim().replace(/\s+/g, " ").toLocaleLowerCase() === b.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  const nameTwin =
+    customerMode === "new" && customerName.trim()
+      ? (customers.find((c) => sameName(c.customer_name, customerName)) ?? null)
+      : null;
   const customerLabel =
     customerMode === "existing" ? (selected?.customer_name ?? "") : customerName.trim();
   const savedEmail = customerMode === "existing" ? (selected?.email?.trim() ?? "") : "";
@@ -202,9 +210,7 @@ export function NewQuoteModal({
     if (value > MAX_AMOUNT) return "That amount is too large. Check the number and try again.";
     if (flow === "track" && !sentDate) return "Enter the date you sent this quote.";
     if (flow === "track" && sentDate > today) return "The sent date can't be in the future.";
-    if (flow === "track" && sentDate < EARLIEST_SENT_DATE) {
-      return "That sent date looks too far in the past. Check the year.";
-    }
+    if (flow === "track" && sentDate < earliestSentDate(today)) return OLD_SENT_DATE_ERROR;
     if (validUntil && validUntil < (flow === "send" ? today : sentDate)) {
       return flow === "send"
         ? "The valid-until date can't be before today."
@@ -553,6 +559,23 @@ export function NewQuoteModal({
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="e.g. Marcus Reed"
                   />
+                  {nameTwin && (
+                    <p className="mt-1.5 text-xs text-amber-800">
+                      You already have a customer called{" "}
+                      <span className="font-medium [overflow-wrap:anywhere]">{nameTwin.customer_name}</span>.{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-stone-900 underline underline-offset-2"
+                        onClick={() => {
+                          setCustomerMode("existing");
+                          setLeadId(nameTwin.id);
+                        }}
+                      >
+                        Use them
+                      </button>{" "}
+                      or keep typing to add a new one.
+                    </p>
+                  )}
                 </Field>
                 {flow === "send" && (
                   <Field label="Customer email" htmlFor="q-email" hint="QuoteLoop sends the quote to this address.">
@@ -610,6 +633,7 @@ export function NewQuoteModal({
                 <input
                   id="q-sent"
                   type="date"
+                  min={earliestSentDate(today)}
                   max={today}
                   className="input"
                   value={sentDate}

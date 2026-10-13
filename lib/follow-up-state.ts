@@ -47,9 +47,18 @@ export function deriveQuoteFollowUpState(rows: FollowUpRowLite[]): QuoteFollowUp
   };
 }
 
-/** Next reminder number for a quote, continuing after any existing history. */
-export function nextFollowUpNumber(rows: Pick<FollowUpRowLite, "follow_up_number">[]): number {
-  return rows.reduce((max, r) => Math.max(max, r.follow_up_number ?? 0), 0) + 1;
+/**
+ * Next reminder number for a quote: one after the follow-ups actually done.
+ * Skipped reminders (a quote marked won or lost, then reopened) never
+ * happened, so they don't push the count up: the next one is still "#2", not
+ * "#5".
+ */
+export function nextFollowUpNumber(rows: Pick<FollowUpRowLite, "status" | "follow_up_number">[]): number {
+  return (
+    rows
+      .filter((r) => r.status === "completed")
+      .reduce((max, r) => Math.max(max, r.follow_up_number ?? 0), 0) + 1
+  );
 }
 
 export type FollowUpBucket = "overdue" | "today" | "upcoming" | "done";
@@ -64,6 +73,34 @@ export function classifyFollowUp(
   if (d < today) return "overdue";
   if (d === today) return "today";
   return "upcoming";
+}
+
+/**
+ * One row per quote for everything already due. A quote nobody followed up on
+ * builds up several due reminders (day 1, 3, 7...), but one follow-up covers
+ * them all, so the lists and counts show the earliest one (matching the quote's
+ * "overdue by") with `dueCount` saying how many are waiting. Reminders still
+ * ahead, and finished ones, pass through unchanged. Order is kept.
+ */
+export function oneDuePerQuote<T extends { quote_id: string; status: string; due_date: string }>(
+  rows: T[],
+  today: string
+): Array<T & { dueCount: number }> {
+  const kept = new Map<string, T>();
+  const counts = new Map<string, number>();
+  const isDue = (r: T) => {
+    const b = classifyFollowUp(r, today);
+    return b === "overdue" || b === "today";
+  };
+  for (const r of rows) {
+    if (!isDue(r)) continue;
+    counts.set(r.quote_id, (counts.get(r.quote_id) ?? 0) + 1);
+    const best = kept.get(r.quote_id);
+    if (!best || r.due_date.slice(0, 10) < best.due_date.slice(0, 10)) kept.set(r.quote_id, r);
+  }
+  return rows
+    .filter((r) => !isDue(r) || kept.get(r.quote_id) === r)
+    .map((r) => ({ ...r, dueCount: isDue(r) ? (counts.get(r.quote_id) ?? 1) : 1 }));
 }
 
 export type Urgency =

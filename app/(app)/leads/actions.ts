@@ -6,6 +6,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { LEAD_STATUSES, type LeadStatus } from "@/lib/constants";
 import { optionalString } from "@/lib/utils";
 import { cleanPasted, isValidEmail } from "@/lib/email-address";
+import { isPlausiblePhone, PHONE_ERROR } from "@/lib/phone";
 import { LIMITS } from "@/lib/quote-flows";
 import { samePhone } from "@/lib/quote-write";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -54,6 +55,9 @@ function readLeadForm(formData: FormData) {
   const email = cleanPasted(optionalString(formData.get("email"))) || null;
   if (email && !isValidEmail(email)) {
     throw new InputError("That email address doesn't look right. Check it, or leave it empty.");
+  }
+  if (!isPlausiblePhone(cleanPasted(optionalString(formData.get("phone"))))) {
+    throw new InputError(PHONE_ERROR);
   }
   return {
     customer_name: limited(name, LIMITS.customerName, "The customer's name")!,

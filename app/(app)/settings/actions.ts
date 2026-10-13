@@ -6,6 +6,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { CURRENCIES, FOLLOW_UP_DAY_OPTIONS } from "@/lib/constants";
 import { optionalString } from "@/lib/utils";
 import { cleanPasted, isSampleAddress, isValidEmail } from "@/lib/email-address";
+import { isPlausiblePhone, PHONE_ERROR } from "@/lib/phone";
 import { requestToday } from "@/lib/request-time";
 import { buildDemoSeed } from "@/lib/demo-seed";
 import { sanitizeFollowUpDays } from "@/lib/quote-state";
@@ -52,6 +53,7 @@ function readBusinessForm(formData: FormData) {
   if (phone && phone.length > PHONE_LIMIT) {
     throw new InputError(`The phone number is too long. Keep it under ${PHONE_LIMIT} characters.`);
   }
+  if (!isPlausiblePhone(phone)) throw new InputError(PHONE_ERROR);
   // Only the offered days count: a tampered form can't sneak in day 0 or 900.
   const days = formData.getAll("default_follow_up_days").map(Number);
   if (!days.some((d) => (FOLLOW_UP_DAY_OPTIONS as readonly number[]).includes(d))) {

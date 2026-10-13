@@ -43,6 +43,8 @@ export function LeadFormModal({
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [contactNow, setContactNow] = useState<string | null>(null);
   const warned = Boolean(state.duplicate) && submitted !== null && submitted === contactNow;
+  // A problem from the last save stops showing once the user starts fixing it.
+  const [editedSinceSubmit, setEditedSinceSubmit] = useState(false);
 
   // Set once anything is typed, so closing by accident asks first.
   const dirty = useRef(false);
@@ -80,10 +82,12 @@ export function LeadFormModal({
           if (warned && contact === submitted) data.set("allow_duplicate", "1");
           setSubmitted(contact);
           setContactNow(contact);
+          setEditedSinceSubmit(false);
           startTransition(() => formAction(data));
         }}
         onInput={(e) => {
           dirty.current = true;
+          setEditedSinceSubmit(true);
           setContactNow(contactOf(new FormData(e.currentTarget)));
         }}
         className="flex flex-col gap-4"
@@ -188,7 +192,7 @@ export function LeadFormModal({
           </div>
         </div>
 
-        {state.error && !state.duplicate && (
+        {state.error && !state.duplicate && !editedSinceSubmit && (
           <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {state.error}
           </div>

@@ -13,8 +13,15 @@ const SELECT =
 /** How much finished history the page lists; the CSV export has all of it. */
 const DONE_SHOWN = 200;
 
-export default async function FollowUpsPage() {
+export default async function FollowUpsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ quote?: string | string[] }>;
+}) {
   const user = await requireUser();
+  // "View follow-ups" on a quote opens this page showing just that quote.
+  const quoteParam = (await searchParams).quote;
+  const quoteId = (Array.isArray(quoteParam) ? quoteParam[0] : quoteParam) ?? null;
   const supabase = await createClient();
 
   // Every open reminder, however many; finished ones are history, so only the
@@ -57,6 +64,7 @@ export default async function FollowUpsPage() {
       today={await requestToday()}
       emailEnabled={emailConfig() !== null}
       moreDone={done.length > DONE_SHOWN}
+      quoteId={quoteId}
     />
   );
 }

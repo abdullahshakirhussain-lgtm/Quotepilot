@@ -34,7 +34,8 @@ export function QuoteDonePanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-start gap-3 rounded-md bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
         <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-        <span>
+        {/* min-w-0 + anywhere: a long unbroken title wraps instead of running out of the dialog. */}
+        <span className="min-w-0 [overflow-wrap:anywhere]">
           {result.recipient ? (
             <>
               Sent to <span className="font-medium">{result.recipient}</span>. {result.customerName} has your
@@ -111,13 +112,13 @@ export function QuoteDonePanel({
               <button type="button" className="btn-accent" onClick={onWriteFollowUp}>
                 <Sparkles className="h-4 w-4" /> Write follow-up now
               </button>
-              <Link href="/follow-ups" className="btn-secondary">
+              <Link href={`/follow-ups?quote=${result.quoteId}`} className="btn-secondary">
                 View follow-ups
               </Link>
             </>
           ) : (
             <>
-              <Link href="/follow-ups" className="btn-primary">
+              <Link href={`/follow-ups?quote=${result.quoteId}`} className="btn-primary">
                 View follow-ups
               </Link>
               <button type="button" className="btn-secondary" onClick={onWriteFollowUp}>

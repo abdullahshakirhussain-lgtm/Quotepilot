@@ -35,7 +35,7 @@ export function DashboardView({
   today: string;
   greeting: string;
   firstName: string;
-  attention: FollowUpWithContext[];
+  attention: Array<FollowUpWithContext & { dueCount?: number }>;
   upcoming: FollowUpWithContext[];
   hasData: boolean;
   /** Made-up demo customers are in the workspace. */

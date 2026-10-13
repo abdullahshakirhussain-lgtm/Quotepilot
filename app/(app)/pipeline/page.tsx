@@ -9,7 +9,7 @@ import { KanbanSquare } from "lucide-react";
 import Link from "next/link";
 import type { LeadStatus } from "@/lib/constants";
 import type { Business } from "@/lib/types";
-import { sumByCurrency } from "@/lib/metrics";
+import { quoteCountsForStage, sumByCurrency } from "@/lib/metrics";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ type LeadWithQuotes = {
   customer_name: string;
   company_name: string | null;
   status: LeadStatus;
-  quotes: { amount: number; currency: string | null }[] | null;
+  quotes: { amount: number; currency: string | null; status: string }[] | null;
 };
 
 export default async function PipelinePage() {
@@ -31,7 +31,7 @@ export default async function PipelinePage() {
     fetchAllRows<LeadWithQuotes>((from, to) =>
       supabase
         .from("leads")
-        .select("id, customer_name, company_name, status, quotes(amount, currency)")
+        .select("id, customer_name, company_name, status, quotes(amount, currency, status)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
@@ -52,8 +52,12 @@ export default async function PipelinePage() {
     customer_name: l.customer_name,
     company_name: l.company_name ?? null,
     status: l.status,
-    // Per currency: a customer's quotes in different currencies aren't added up.
-    quoteTotals: sumByCurrency(l.quotes ?? [], currency),
+    // Only the quotes that match the card's stage, so Won never counts an open
+    // quote. Per currency: quotes in different currencies aren't added up.
+    quoteTotals: sumByCurrency(
+      (l.quotes ?? []).filter((q) => quoteCountsForStage(l.status, q.status)),
+      currency
+    ),
   }));
 
   if (rows.length === 0) {

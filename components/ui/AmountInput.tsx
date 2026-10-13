@@ -31,6 +31,12 @@ export function AmountInput({
   const [own, setOwn] = useState(defaultValue ?? "");
   const text = value ?? own;
   const amount = readAmount(text);
+  // A well-formed number that is zero or negative ("0", "0.00", "-500") gets
+  // its own hint, not "enter a number": it reads as a valid amount once the
+  // minus sign is dropped or its zeros are swapped for other digits.
+  const notPositive =
+    amount === null &&
+    (readAmount(text.replace(/^\s*-/, "")) !== null || readAmount(text.replace(/0/g, "1")) !== null);
   const hintId = `${id}-reads-as`;
 
   return (
@@ -53,7 +59,9 @@ export function AmountInput({
       />
       {text.trim() !== "" && (
         <p id={hintId} className={amount === null ? "mt-1 text-xs text-red-700" : "mt-1 text-xs text-stone-500"} aria-live="polite">
-          {amount === null ? (
+          {notPositive ? (
+            "Enter an amount greater than zero."
+          ) : amount === null ? (
             "Enter a number, like 1250 or 1,250.00."
           ) : (
             <>

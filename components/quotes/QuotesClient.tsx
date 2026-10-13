@@ -316,7 +316,7 @@ export function QuotesClient({
                   onWrite={() => setAiFor(quote)}
                   onSendQuote={() => setSendDraft(quote)}
                   onAddEmail={() => setAddEmailFor(quote)}
-                  onViewFollowUps={() => router.push("/follow-ups")}
+                  onViewFollowUps={() => router.push(`/follow-ups?quote=${quote.id}`)}
                   onTracked={() =>
                     setToast("Follow-up tracking started. Reminders are counted from today.")
                   }

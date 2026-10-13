@@ -6,7 +6,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { CURRENCIES, LEAD_STATUSES, QUOTE_STATUSES, type QuoteStatus } from "@/lib/constants";
 import { addDays, clip, daysBetween, optionalString, requireString } from "@/lib/utils";
 import { requestToday } from "@/lib/request-time";
-import { EARLIEST_SENT_DATE, isRealDate, LIMITS, MAX_AMOUNT } from "@/lib/quote-flows";
+import { earliestSentDate, isRealDate, LIMITS, MAX_AMOUNT, OLD_SENT_DATE_ERROR } from "@/lib/quote-flows";
 import { readAmount } from "@/lib/money";
 import {
   applyQuoteStatusChange,
@@ -179,11 +179,13 @@ export async function updateQuote(
     if (readError) throw new Error(readError.message);
     if (!existing) return { error: QUOTE_GONE };
 
-    // A quote that went out can't have been sent in the future, or in the 0020s.
+    // A quote that went out can't have been sent in the future. A sent date
+    // changed to more than a year ago is a mistyped year; an older quote that
+    // keeps its date can still be edited.
     if (existing.status !== "draft") {
       if (fields.quote_date > today) return { error: "The sent date can't be in the future." };
-      if (fields.quote_date < EARLIEST_SENT_DATE) {
-        return { error: "That sent date looks too far in the past. Check the year." };
+      if (fields.quote_date !== existing.quote_date && fields.quote_date < earliestSentDate(today)) {
+        return { error: OLD_SENT_DATE_ERROR };
       }
     }
 

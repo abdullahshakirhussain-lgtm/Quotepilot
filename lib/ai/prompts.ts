@@ -63,7 +63,7 @@ export function buildUserPrompt(ctx: MessageContext): string {
   lines.push(`- Quote title: ${ctx.quoteTitle}`);
   if (ctx.quoteDescription) lines.push(`- Quote details: ${ctx.quoteDescription}`);
   lines.push(`- Quote amount: ${formatCurrency(ctx.quoteAmount, ctx.currency)}`);
-  lines.push(`- Quote sent on: ${ctx.quoteDate}`);
+  lines.push(`- Quote sent on: ${spokenDate(ctx.quoteDate)}`);
   lines.push(`- Days since the quote was sent: ${ctx.daysSinceSent}`);
   lines.push(`- Previous follow-ups already sent: ${ctx.previousFollowUpCount}`);
   if (ctx.objection && ctx.messageType === "objection_response") {
@@ -96,4 +96,16 @@ export function templateFallback(ctx: MessageContext): string {
   };
 
   return `Hi ${first},\n\n${bodyByType[ctx.messageType]}\n\nBest,\n${sign}`;
+}
+
+/**
+ * "2026-10-01" -> "October 1, 2026": the model copies dates as given, and a
+ * customer should read a date, not a database value. Anything else is passed
+ * through unchanged.
+ */
+export function spokenDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso;
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(d);
 }

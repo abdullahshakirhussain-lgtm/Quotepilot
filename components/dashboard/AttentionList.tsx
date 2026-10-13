@@ -13,7 +13,8 @@ export function AttentionList({
   today,
   compact,
 }: {
-  items: FollowUpWithContext[];
+  /** `dueCount`: how many of the quote's reminders are due (one row per quote). */
+  items: Array<FollowUpWithContext & { dueCount?: number }>;
   /** Viewer's local date from the server. */
   today: string;
   /** Narrow column: hide the amount and use a smaller button. */
@@ -57,6 +58,9 @@ export function AttentionList({
                         : `Due ${relativeDay(f.due_date, today)}`}
                   </span>
                   <span className="text-stone-400"> · follow-up #{f.follow_up_number}</span>
+                  {(f.dueCount ?? 1) > 1 && (
+                    <span className="text-stone-400"> · {f.dueCount} reminders missed</span>
+                  )}
                 </div>
               </div>
               {f.quote && !compact && (

@@ -13,12 +13,22 @@ import type { ActionResult, FollowUpWithContext } from "@/lib/types";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
-import { classifyFollowUp, type FollowUpBucket } from "@/lib/follow-up-state";
+import { classifyFollowUp, oneDuePerQuote, type FollowUpBucket } from "@/lib/follow-up-state";
 import {
   completeFollowUp,
   reopenFollowUp,
   skipFollowUp,
+  snoozeFollowUp,
 } from "@/app/(app)/follow-ups/actions";
+
+type Row = FollowUpWithContext & { dueCount?: number };
+
+const SNOOZE_CHOICES: { days: number; label: string }[] = [
+  { days: 1, label: "Remind me tomorrow" },
+  { days: 3, label: "Remind me in 3 days" },
+  { days: 7, label: "Remind me next week" },
+  { days: 14, label: "Remind me in 2 weeks" },
+];
 
 /** A request that never reached the server: usually a dropped connection, or a session that ended in another tab. */
 const OFFLINE_OR_SIGNED_OUT =
@@ -38,6 +48,7 @@ export function FollowUpsClient({
   today,
   emailEnabled,
   moreDone = false,
+  quoteId = null,
 }: {
   followUps: FollowUpWithContext[];
   /** Server-computed date so grouping matches the dashboard and SSR. */
@@ -46,6 +57,8 @@ export function FollowUpsClient({
   emailEnabled: boolean;
   /** Older finished reminders exist beyond the ones listed. */
   moreDone?: boolean;
+  /** Show only this quote's reminders ("View follow-ups" on a quote). */
+  quoteId?: string | null;
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -53,18 +66,28 @@ export function FollowUpsClient({
   // "Completed & skipped" list when the page refreshed).
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Only one quote's reminders when opened from that quote, if it has any here.
+  const forQuote = useMemo(
+    () => (quoteId ? followUps.filter((f) => f.quote_id === quoteId) : []),
+    [followUps, quoteId]
+  );
+  const filtered = forQuote.length > 0;
+  const shown = filtered ? forQuote : followUps;
+  const quoteTitle = forQuote[0]?.quote?.title ?? null;
+
   const groups = useMemo(() => {
-    const buckets: Record<FollowUpBucket, FollowUpWithContext[]> = {
+    const buckets: Record<FollowUpBucket, Row[]> = {
       overdue: [],
       today: [],
       upcoming: [],
       done: [],
     };
-    for (const f of followUps) buckets[classifyFollowUp(f, today)].push(f);
+    // A quote's missed reminders show as one row: one follow-up covers them all.
+    for (const f of oneDuePerQuote(shown, today)) buckets[classifyFollowUp(f, today)].push(f);
     // Most recently completed first.
     buckets.done.sort((a, b) => (b.completed_at ?? b.due_date).localeCompare(a.completed_at ?? a.due_date));
     return buckets;
-  }, [followUps, today]);
+  }, [shown, today]);
 
   const needAttention = groups.overdue.length + groups.today.length;
 
@@ -80,6 +103,17 @@ export function FollowUpsClient({
       />
 
       {followUps.some((f) => isSampleAddress(f.lead?.email)) && <SampleDataBanner />}
+
+      {filtered && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md bg-stone-900/[0.04] px-3 py-2 text-sm text-stone-700 ring-1 ring-inset ring-stone-200">
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            Showing reminders for <span className="font-medium text-stone-900">{quoteTitle ?? "one quote"}</span>
+          </span>
+          <Link href="/follow-ups" className="btn-ghost tap shrink-0 px-2 text-xs">
+            Show all follow-ups
+          </Link>
+        </div>
+      )}
 
       {notice && (
         <div
@@ -199,7 +233,7 @@ function FollowUpRow({
   onWrite,
   onLostMessage,
 }: {
-  f: FollowUpWithContext;
+  f: Row;
   today: string;
   emailEnabled: boolean;
   onWrite: () => void;
@@ -249,6 +283,14 @@ function FollowUpRow({
             {f.lead?.customer_name ?? "—"}
           </span>
           <span className="shrink-0 whitespace-nowrap text-xs text-stone-400">follow-up #{f.follow_up_number}</span>
+          {(f.dueCount ?? 1) > 1 && (
+            <span
+              className="shrink-0 whitespace-nowrap text-xs text-stone-400"
+              title="One follow-up covers all of them."
+            >
+              · {f.dueCount} reminders missed
+            </span>
+          )}
           {!isPending && <StatusBadge kind="followup" value={f.status} />}
           {isSampleAddress(f.lead?.email) && <SampleBadge />}
         </div>
@@ -320,8 +362,13 @@ function FollowUpRow({
               <Check className="h-4 w-4" /> Mark followed up
             </button>
             <Menu>
+              {SNOOZE_CHOICES.map((c) => (
+                <MenuItem key={c.days} onClick={() => run(() => snoozeFollowUp(f.id, c.days))}>
+                  {c.label}
+                </MenuItem>
+              ))}
               <MenuItem onClick={() => run(() => skipFollowUp(f.id))}>
-                Skip this reminder
+                {(f.dueCount ?? 1) > 1 ? "Skip these reminders" : "Skip this reminder"}
               </MenuItem>
             </Menu>
           </>
