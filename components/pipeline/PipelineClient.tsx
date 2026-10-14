@@ -19,8 +19,10 @@ export interface PipelineLead {
   customer_name: string;
   company_name: string | null;
   status: LeadStatus;
-  /** The customer's quotes added up per currency. */
+  /** The customer's quotes for this stage, added up per currency. */
   quoteTotals: Money[];
+  /** Open quotes of a won, lost or cold customer, which no column counts. */
+  stillOpen?: Money[];
 }
 
 const COLUMN_ACCENT: Partial<Record<LeadStatus, string>> = {
@@ -154,6 +156,11 @@ function PipelineCard({ lead, currency }: { lead: PipelineLead; currency: string
       {totals.length > 0 && (
         <div className="num mt-1 break-words text-sm font-semibold text-stone-800">
           {formatMoney(totals, currency)}
+        </div>
+      )}
+      {(lead.stillOpen ?? []).some((m) => m.amount > 0) && (
+        <div className="num mt-0.5 break-words text-xs text-stone-500">
+          + {formatMoney(lead.stillOpen!.filter((m) => m.amount > 0), currency)} still open
         </div>
       )}
       <select

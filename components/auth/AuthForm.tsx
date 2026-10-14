@@ -23,20 +23,24 @@ function GoogleLogo() {
 /**
  * Whether Google is switched on in Supabase. signInWithOAuth can't tell — it
  * just navigates, and a disabled provider lands on Supabase's raw JSON error —
- * but the public auth settings endpoint can. "unknown" if it can't be checked.
+ * but the public auth settings endpoint can. "unreachable" when the sign-in
+ * service doesn't answer (down, paused, offline): Google's redirect would land
+ * on a browser error page, so it isn't started. "unknown" if it can't tell.
  */
-async function googleProviderStatus(): Promise<"enabled" | "disabled" | "unknown"> {
+async function googleProviderStatus(): Promise<"enabled" | "disabled" | "unreachable" | "unknown"> {
   try {
     const { url, anonKey } = getSupabaseEnv();
     const res = await fetch(`${url}/auth/v1/settings`, {
       headers: { apikey: anonKey },
       signal: AbortSignal.timeout(5000),
     });
+    if (res.status >= 500) return "unreachable";
     if (!res.ok) return "unknown";
     const google = (await res.json())?.external?.google;
     return google === true ? "enabled" : google === false ? "disabled" : "unknown";
   } catch {
-    return "unknown";
+    // A network failure or timeout: the same service hosts the Google redirect.
+    return "unreachable";
   }
 }
 
@@ -89,8 +93,14 @@ export default function AuthForm({
     setError(null);
     setGoogleLoading(true);
     try {
-      if ((await googleProviderStatus()) === "disabled") {
+      const google = await googleProviderStatus();
+      if (google === "disabled") {
         setError("Google sign-in isn't set up yet. Please use your email and password.");
+        setGoogleLoading(false);
+        return;
+      }
+      if (google === "unreachable") {
+        setError("QuoteLoop couldn't reach the sign-in service. Check your connection and try again in a minute.");
         setGoogleLoading(false);
         return;
       }

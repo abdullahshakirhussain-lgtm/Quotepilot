@@ -128,24 +128,6 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
 
-  // Cost control: cap AI drafts per user per rolling 24 hours. Only when an
-  // AI provider is set up — without one, drafts are free built-in templates.
-  if (aiProviderConfigured()) {
-    const { count: recentDrafts, error: countError } = await supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
-    if (!countError && (recentDrafts ?? 0) >= AI_DAILY_LIMIT) {
-      return NextResponse.json(
-        {
-          error: `You've reached the limit of ${AI_DAILY_LIMIT} AI drafts in 24 hours. You can still write or edit a message yourself.`,
-        },
-        { status: 429 }
-      );
-    }
-  }
-
   // Fetch the quote + its lead, scoped to the current user (RLS also enforces this).
   const { data: quote, error: quoteErr } = await supabase
     .from("quotes")
@@ -161,6 +143,23 @@ export async function POST(request: Request) {
       { error: "This quote no longer exists. It may have been deleted in another tab." },
       { status: 404 }
     );
+  }
+
+  // Cost control: cap AI drafts per user per rolling 24 hours. Only when an
+  // AI provider is set up — without one, drafts are free built-in templates.
+  // Checked after the quote is found, so a bad request never uses up a draft.
+  if (aiProviderConfigured()) {
+    const limited = await aiLimitReached(supabase, user.id);
+    if (limited) {
+      return NextResponse.json(
+        limited === "limit"
+          ? {
+              error: `You've reached the limit of ${AI_DAILY_LIMIT} AI drafts in 24 hours. You can still write or edit a message yourself.`,
+            }
+          : { error: "AI drafts are unavailable just now. You can still write or edit a message yourself." },
+        { status: limited === "limit" ? 429 : 503 }
+      );
+    }
   }
 
   const { data: business } = await supabase
@@ -213,4 +212,37 @@ export async function POST(request: Request) {
     error: result.error ?? null,
     historySaved: !saveError,
   });
+}
+
+/**
+ * Records one AI draft against the user's daily limit, or says why not:
+ * "limit" when it's used up, "unavailable" when it can't be checked (never
+ * allowed through unchecked: each draft is billed).
+ *
+ * claim_ai_draft counts and records in one step in a log users can't edit.
+ * Until that function exists in the database (schema.sql not yet run), the
+ * older count of saved drafts is used instead.
+ */
+async function aiLimitReached(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<"limit" | "unavailable" | null> {
+  const { data: allowed, error } = await supabase.rpc("claim_ai_draft", { p_limit: AI_DAILY_LIMIT });
+  if (!error) return allowed === true ? null : "limit";
+
+  const missing = error.code === "PGRST202" || error.code === "42883";
+  if (!missing) {
+    console.error("[ai] daily limit check failed:", error.message);
+    return "unavailable";
+  }
+  const { count, error: countError } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
+  if (countError) {
+    console.error("[ai] daily limit check failed:", countError.message);
+    return "unavailable";
+  }
+  return (count ?? 0) >= AI_DAILY_LIMIT ? "limit" : null;
 }

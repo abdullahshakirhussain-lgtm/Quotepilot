@@ -9,7 +9,7 @@ import { KanbanSquare } from "lucide-react";
 import Link from "next/link";
 import type { LeadStatus } from "@/lib/constants";
 import type { Business } from "@/lib/types";
-import { quoteCountsForStage, sumByCurrency } from "@/lib/metrics";
+import { OPEN_QUOTE_STATUSES, quoteCountsForStage, sumByCurrency } from "@/lib/metrics";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +58,14 @@ export default async function PipelinePage() {
       (l.quotes ?? []).filter((q) => quoteCountsForStage(l.status, q.status)),
       currency
     ),
+    // A won, lost or cold customer can still have another quote out: shown on
+    // the card so no open money is hidden from the pipeline.
+    stillOpen: ["won", "lost", "cold"].includes(l.status)
+      ? sumByCurrency(
+          (l.quotes ?? []).filter((q) => (OPEN_QUOTE_STATUSES as readonly string[]).includes(q.status)),
+          currency
+        )
+      : [],
   }));
 
   if (rows.length === 0) {
