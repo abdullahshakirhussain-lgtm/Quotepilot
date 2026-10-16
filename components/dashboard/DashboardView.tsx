@@ -169,7 +169,7 @@ export function DashboardView({
           extra={average.others}
           hint={m.mixedCurrencies ? "Per currency, across quotes sent" : "Across quotes sent"}
         />
-        <Metric label="Quotes sent" value={String(m.quotesSent)} hint={`${m.activeLeads} active customers`} />
+        <Metric label="Quotes sent" value={String(m.quotesSent)} hint={`${m.activeLeads} active customer${m.activeLeads === 1 ? "" : "s"}`} />
       </section>
 
       {/* The work */}

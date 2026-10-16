@@ -2,7 +2,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { DashboardView } from "@/components/dashboard/DashboardView";
 import { currentHour, todayISO } from "@/lib/utils";
 import { computeDashboardMetrics } from "@/lib/metrics";
-import { classifyFollowUp, oneDuePerQuote } from "@/lib/follow-up-state";
+import { classifyFollowUp, onePerQuote } from "@/lib/follow-up-state";
 import { getRequestTimeZone } from "@/lib/request-time";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { isSampleAddress } from "@/lib/email-address";
@@ -53,7 +53,8 @@ export default async function DashboardPage() {
   }));
 
   // One row per quote for what's due: a quote's missed reminders are one job.
-  const due = oneDuePerQuote(pending, today).filter((f) => classifyFollowUp(f, today) !== "upcoming");
+  const perQuote = onePerQuote(pending, today);
+  const due = perQuote.filter((f) => classifyFollowUp(f, today) !== "upcoming");
   const m = computeDashboardMetrics({ leads, quotes, followUps: due, today, currency });
 
   return (
@@ -64,7 +65,7 @@ export default async function DashboardPage() {
       greeting={greeting(currentHour(timeZone))}
       firstName={(business?.owner_name || "").split(" ")[0]}
       attention={due}
-      upcoming={pending.filter((f) => classifyFollowUp(f, today) === "upcoming").slice(0, 5)}
+      upcoming={perQuote.filter((f) => classifyFollowUp(f, today) === "upcoming").slice(0, 5)}
       hasData={leads.length > 0 || quotes.length > 0}
       hasSampleData={leads.some((l) => isSampleAddress(l.email))}
     />

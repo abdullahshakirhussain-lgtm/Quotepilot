@@ -76,31 +76,37 @@ export function classifyFollowUp(
 }
 
 /**
- * One row per quote for everything already due. A quote nobody followed up on
- * builds up several due reminders (day 1, 3, 7...), but one follow-up covers
- * them all, so the lists and counts show the earliest one (matching the quote's
- * "overdue by") with `dueCount` saying how many are waiting. Reminders still
- * ahead, and finished ones, pass through unchanged. Order is kept.
+ * One row per quote for open reminders. A quote nobody followed up on builds
+ * up several due reminders (day 1, 3, 7...), and every quote has more coming,
+ * but it is one job: the lists show the earliest due reminder (matching the
+ * quote's "overdue by"), or, when nothing is due, the next one coming up.
+ * `dueCount` says how many are due; `laterCount` how many more are scheduled
+ * after the one shown. Finished reminders pass through unchanged. Order kept.
  */
-export function oneDuePerQuote<T extends { quote_id: string; status: string; due_date: string }>(
+export function onePerQuote<T extends { quote_id: string; status: string; due_date: string }>(
   rows: T[],
   today: string
-): Array<T & { dueCount: number }> {
+): Array<T & { dueCount: number; laterCount: number }> {
   const kept = new Map<string, T>();
-  const counts = new Map<string, number>();
-  const isDue = (r: T) => {
-    const b = classifyFollowUp(r, today);
-    return b === "overdue" || b === "today";
-  };
+  const due = new Map<string, number>();
+  const later = new Map<string, number>();
+  const day = (r: T) => r.due_date.slice(0, 10);
   for (const r of rows) {
-    if (!isDue(r)) continue;
-    counts.set(r.quote_id, (counts.get(r.quote_id) ?? 0) + 1);
+    if (r.status !== "pending") continue;
+    const isDue = day(r) <= today;
+    if (isDue) due.set(r.quote_id, (due.get(r.quote_id) ?? 0) + 1);
+    else later.set(r.quote_id, (later.get(r.quote_id) ?? 0) + 1);
     const best = kept.get(r.quote_id);
-    if (!best || r.due_date.slice(0, 10) < best.due_date.slice(0, 10)) kept.set(r.quote_id, r);
+    // Earliest wins, so a due reminder is always chosen over an upcoming one.
+    if (!best || day(r) < day(best)) kept.set(r.quote_id, r);
   }
   return rows
-    .filter((r) => !isDue(r) || kept.get(r.quote_id) === r)
-    .map((r) => ({ ...r, dueCount: isDue(r) ? (counts.get(r.quote_id) ?? 1) : 1 }));
+    .filter((r) => r.status !== "pending" || kept.get(r.quote_id) === r)
+    .map((r) => {
+      if (r.status !== "pending") return { ...r, dueCount: 1, laterCount: 0 };
+      const upcomingShown = day(r) > today ? 1 : 0;
+      return { ...r, dueCount: Math.max(due.get(r.quote_id) ?? 0, 1), laterCount: (later.get(r.quote_id) ?? 0) - upcomingShown };
+    });
 }
 
 export type Urgency =

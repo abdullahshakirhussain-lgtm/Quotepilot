@@ -13,7 +13,7 @@ import type { ActionResult, FollowUpWithContext } from "@/lib/types";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
 import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
-import { classifyFollowUp, oneDuePerQuote, type FollowUpBucket } from "@/lib/follow-up-state";
+import { classifyFollowUp, onePerQuote, type FollowUpBucket } from "@/lib/follow-up-state";
 import {
   completeFollowUp,
   reopenFollowUp,
@@ -21,7 +21,7 @@ import {
   snoozeFollowUp,
 } from "@/app/(app)/follow-ups/actions";
 
-type Row = FollowUpWithContext & { dueCount?: number };
+type Row = FollowUpWithContext & { dueCount?: number; laterCount?: number };
 
 const SNOOZE_CHOICES: { days: number; label: string }[] = [
   { days: 1, label: "Remind me tomorrow" },
@@ -82,12 +82,13 @@ export function FollowUpsClient({
       upcoming: [],
       done: [],
     };
-    // A quote's missed reminders show as one row: one follow-up covers them all.
-    for (const f of oneDuePerQuote(shown, today)) buckets[classifyFollowUp(f, today)].push(f);
+    // One row per quote: its due reminder, or else its next one. Opened for a
+    // single quote ("View follow-ups"), its whole schedule is listed instead.
+    for (const f of filtered ? shown : onePerQuote(shown, today)) buckets[classifyFollowUp(f, today)].push(f);
     // Most recently completed first.
     buckets.done.sort((a, b) => (b.completed_at ?? b.due_date).localeCompare(a.completed_at ?? a.due_date));
     return buckets;
-  }, [shown, today]);
+  }, [shown, filtered, today]);
 
   const needAttention = groups.overdue.length + groups.today.length;
 
@@ -283,14 +284,6 @@ function FollowUpRow({
             {f.lead?.customer_name ?? "—"}
           </span>
           <span className="shrink-0 whitespace-nowrap text-xs text-stone-400">follow-up #{f.follow_up_number}</span>
-          {(f.dueCount ?? 1) > 1 && (
-            <span
-              className="shrink-0 whitespace-nowrap text-xs text-stone-400"
-              title="One follow-up covers all of them."
-            >
-              · {f.dueCount} reminders missed
-            </span>
-          )}
           {!isPending && <StatusBadge kind="followup" value={f.status} />}
           {isSampleAddress(f.lead?.email) && <SampleBadge />}
         </div>
@@ -305,6 +298,17 @@ function FollowUpRow({
             </span>
           )}
         </div>
+        {/* On its own line, so it wraps on a narrow phone instead of widening the row. */}
+        {((f.dueCount ?? 1) > 1 || (f.laterCount ?? 0) > 0) && (
+          <p className="mt-0.5 text-xs text-stone-500" title="One follow-up covers all the missed reminders.">
+            {[
+              (f.dueCount ?? 1) > 1 ? `${f.dueCount} reminders missed` : null,
+              (f.laterCount ?? 0) > 0 ? `then ${f.laterCount} more scheduled` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
         {isPending && !canEmail && (
           <p className="mt-0.5 text-xs text-stone-500">
             Add an email address to send from QuoteLoop, or copy the message.

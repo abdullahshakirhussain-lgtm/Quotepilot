@@ -121,8 +121,10 @@ export default function AuthForm({
     e.preventDefault();
     setError(null);
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    // New passwords need 8 characters; logging in still accepts older,
+    // shorter ones so nobody is locked out of an existing account.
+    if (password.length < (isSignup ? 8 : 6)) {
+      setError(isSignup ? "Use at least 8 characters for your password." : "Password must be at least 6 characters.");
       return;
     }
 
@@ -250,7 +252,7 @@ export default function AuthForm({
                 className="input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder={isSignup ? "At least 8 characters" : "Your password"}
               />
             </div>
 

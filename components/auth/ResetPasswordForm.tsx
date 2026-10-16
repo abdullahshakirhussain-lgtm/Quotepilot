@@ -17,8 +17,8 @@ export default function ResetPasswordForm({ email }: { email: string | null }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
-    if (password.length < 6) {
-      setError("Use at least 6 characters for your new password.");
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your new password.");
       return;
     }
     if (password !== confirm) {
@@ -82,7 +82,7 @@ export default function ResetPasswordForm({ email }: { email: string | null }) {
                   className="input"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                 />
               </div>
               <div>

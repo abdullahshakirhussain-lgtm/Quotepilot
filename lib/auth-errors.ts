@@ -27,7 +27,7 @@ export function authErrorMessage(err: unknown, context: AuthContext): string {
       : "Too many attempts just now. Wait a minute, then try again.";
   }
   if (code === "weak_password" || /password should be|password is too weak/i.test(message)) {
-    return "Choose a stronger password: at least 6 characters, and not one that's easy to guess.";
+    return "Choose a stronger password: at least 8 characters, and not one that's easy to guess.";
   }
   if (code === "same_password" || /different from the old password/i.test(message)) {
     return "Choose a password you haven't used for this account before.";

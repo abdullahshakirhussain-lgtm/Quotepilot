@@ -125,7 +125,16 @@ export function QuotesClient({
 }) {
   const router = useRouter();
   const hasOpen = quotes.some((q) => OPEN.includes(q.status));
-  const [tab, setTab] = useState<Tab>(hasOpen ? "open" : "all");
+  const defaultTab: Tab = hasOpen ? "open" : "all";
+  // The tab lives in the address (?tab=won), so refreshing or sharing keeps it.
+  const tabParam = useSearchParams().get("tab");
+  const [tab, setTab] = useState<Tab>(TABS.some((t) => t.key === tabParam) ? (tabParam as Tab) : defaultTab);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (tab === defaultTab) url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tab);
+    if (url.href !== window.location.href) window.history.replaceState(null, "", url.pathname + url.search);
+  }, [tab, defaultTab]);
   const [query, setQuery] = useState("");
   const [showNew, setShowNew] = useState(Boolean(openNew || initialNewLeadId));
   // "New quote" in the header or sidebar links to ?new=1. When you are already on
@@ -187,7 +196,7 @@ export function QuotesClient({
       .filter(
         (quote) =>
           !q ||
-          [quote.title, quote.lead?.customer_name, quote.lead?.company_name]
+          [quote.title, quote.lead?.customer_name, quote.lead?.company_name, ...amountTexts(quote.amount)]
             .filter(Boolean)
             .some((v) => (v as string).toLowerCase().includes(q))
       )
@@ -202,7 +211,12 @@ export function QuotesClient({
   function closeNew() {
     setShowNew(false);
     // Don't reopen the form on refresh when it came from a ?new=1 link.
-    if (window.location.search) window.history.replaceState(null, "", "/quotes");
+    if (window.location.search) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("new");
+      url.searchParams.delete("lead");
+      window.history.replaceState(null, "", url.pathname + url.search);
+    }
   }
 
   // Per currency: amounts in different currencies are never added together.
@@ -540,7 +554,7 @@ function QuoteRow({
           <span className="text-stone-300">/</span>
           <span className={TEXT[step.tone]}>{step.text}</span>
           {isOpen && urgent && quote.next_follow_up_at && (
-            <span className="text-stone-400">· {formatDate(quote.next_follow_up_at)}</span>
+            <span className="text-stone-400">· {formatDate(quote.next_follow_up_at?.slice(0, 10))}</span>
           )}
           {quote.follow_up_count > 0 && (
             <span className="text-stone-400">
@@ -557,7 +571,7 @@ function QuoteRow({
         )}
         {isOpen && !urgent && quote.next_follow_up_at && (
           <p className="mt-0.5 text-xs text-stone-500">
-            Next follow-up: {formatDate(quote.next_follow_up_at)} ·{" "}
+            Next follow-up: {formatDate(quote.next_follow_up_at?.slice(0, 10))} ·{" "}
             {relativeDay(quote.next_follow_up_at, today)}
           </p>
         )}
@@ -685,4 +699,11 @@ function QuoteRow({
       </div>
     </li>
   );
+}
+
+/** An amount as people might search for it: 1500, 1500.50, 1,500.50. */
+function amountTexts(amount: number | string): string[] {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return [];
+  return [String(n), n.toFixed(2), n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })];
 }

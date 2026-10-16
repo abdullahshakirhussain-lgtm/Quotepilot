@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { unstable_rethrow, useRouter } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { Database, Loader2, Trash2 } from "lucide-react";
 import { removeSampleData, seedDemoData, type ActionState } from "@/app/(app)/settings/actions";
 
@@ -30,7 +30,6 @@ export function SampleBadge() {
  * and removes it in one step without touching the user's own records.
  */
 export function SampleDataBanner() {
-  const router = useRouter();
   const [busy, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +50,10 @@ export function SampleDataBanner() {
             start(async () => {
               const result = await attempt(removeSampleData);
               if (result.error) return setError(result.error);
-              router.refresh();
+              // A one-off change to the whole workspace: reload the page. Waiting
+              // for the action's streamed update sometimes left the button
+              // spinning for good (the data had saved; the page never updated).
+              window.location.reload();
             });
           }}
         >
@@ -70,7 +72,6 @@ export function SampleDataBanner() {
 
 /** Loads the demo data straight from the dashboard of an empty workspace. */
 export function LoadSampleDataButton({ className = "btn-secondary" }: { className?: string }) {
-  const router = useRouter();
   const [busy, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -85,7 +86,8 @@ export function LoadSampleDataButton({ className = "btn-secondary" }: { classNam
           start(async () => {
             const result = await attempt(seedDemoData);
             if (result.error) return setError(result.error);
-            router.refresh();
+            // Reload rather than wait for the streamed update (see above).
+            window.location.reload();
           });
         }}
       >
