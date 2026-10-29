@@ -5,6 +5,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { recomputeQuoteFollowUpState, skipRemindersCoveredBy } from "@/lib/quote-state";
 import { requestToday } from "@/lib/request-time";
 import { addDays } from "@/lib/utils";
+import { readOnlyReason } from "@/lib/billing-server";
 import type { ActionResult } from "@/lib/types";
 
 type ReminderStatus = "pending" | "completed" | "skipped";
@@ -29,6 +30,9 @@ function alreadyMessage(current: string): string {
 
 async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<ActionResult> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't change reminders.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
 
   try {
@@ -135,6 +139,9 @@ const SNOOZE_DAYS = [1, 3, 7, 14] as const;
  */
 export async function snoozeFollowUp(id: string, days: number): Promise<ActionResult> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't change reminders.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   if (!(SNOOZE_DAYS as readonly number[]).includes(days)) {
     return { ok: false, error: "Choose how long to snooze this reminder." };

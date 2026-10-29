@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { requestToday } from "@/lib/request-time";
+import { getRequestTimeZone, requestToday } from "@/lib/request-time";
+import { getAccess } from "@/lib/billing-server";
+import { BillingBanner } from "@/components/billing/BillingBanner";
+import { AccessFlag } from "@/components/billing/AccessContext";
 import { Sidebar } from "@/components/Sidebar";
 import type { Business } from "@/lib/types";
 
@@ -15,7 +18,7 @@ export default async function AppLayout({
   const user = await requireUser();
 
   const supabase = await createClient();
-  const [{ data: business, error }, attention] = await Promise.all([
+  const [{ data: business, error }, attention, access, timeZone] = await Promise.all([
     supabase
       .from("businesses")
       .select("*")
@@ -35,6 +38,8 @@ export default async function AppLayout({
           .range(from, to)
       )
     ),
+    getAccess(user.id),
+    getRequestTimeZone(),
   ]);
 
   // A failed query must not look like "no workspace" — that would send an
@@ -46,6 +51,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
+      <AccessFlag canWrite={access.canWrite} />
       <Sidebar
         businessName={business.business_name}
         attentionCount={new Set(attention.map((f) => f.quote_id)).size}
@@ -53,6 +59,13 @@ export default async function AppLayout({
       {/* On phones the tab bar is fixed along the bottom: keep the page clear of it. */}
       <main className="min-w-0 flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <BillingBanner
+            state={access.state}
+            canWrite={access.canWrite}
+            endsAt={access.endsAt}
+            daysLeft={access.daysLeft}
+            timeZone={timeZone}
+          />
           {children}
         </div>
       </main>

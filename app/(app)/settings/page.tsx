@@ -3,8 +3,12 @@ import { Download, LogOut } from "lucide-react";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
 import { DataControls } from "@/components/DataControls";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { updateBusiness } from "./actions";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { BillingSection } from "@/components/billing/BillingSection";
+import { getAccess } from "@/lib/billing-server";
+import { getBillingProvider } from "@/lib/billing-provider";
+import { getRequestTimeZone } from "@/lib/request-time";
 import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +16,9 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ export?: string; focus?: string }>;
+  searchParams: Promise<{ export?: string; focus?: string; billing?: string }>;
 }) {
-  const { export: exportStatus, focus } = await searchParams;
+  const { export: exportStatus, focus, billing } = await searchParams;
   const user = await requireUser();
   const supabase = await createClient();
   const { data: business, error } = await supabase
@@ -24,6 +28,7 @@ export default async function SettingsPage({
     .maybeSingle<Business>();
 
   if (error) throw new Error(`Could not load settings: ${error.message}`);
+  const [access, timeZone] = await Promise.all([getAccess(user.id), getRequestTimeZone()]);
 
   return (
     <div>
@@ -44,6 +49,16 @@ export default async function SettingsPage({
             highlightEmail={focus === "business-email"}
           />
         </section>
+
+        <BillingSection
+          state={access.state}
+          endsAt={access.endsAt}
+          daysLeft={access.daysLeft}
+          timeZone={timeZone}
+          providerReady={getBillingProvider() !== null}
+          hasPaymentAccount={Boolean(access.subscription?.provider_customer_id)}
+          justReturned={billing === "done"}
+        />
 
         <section className="card p-5">
           <h2 className="text-[15px] font-semibold text-stone-900">Export</h2>

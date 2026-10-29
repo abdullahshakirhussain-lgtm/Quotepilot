@@ -8,6 +8,7 @@ import type { Lead, Quote } from "@/lib/types";
 import { updateQuote, type QuoteActionState } from "@/app/(app)/quotes/actions";
 import { reportUnreachable } from "@/lib/form-action";
 import { AmountInput } from "@/components/ui/AmountInput";
+import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
 
 const saveQuote = reportUnreachable(updateQuote);
 
@@ -53,6 +54,7 @@ export function QuoteFormModal({
   const [state, formAction, pending] = useActionState<QuoteActionState, FormData>(saveQuote, {});
   // Followed by the amount field, which shows what it understood in this currency.
   const [currency, setCurrency] = useState(quote.currency ?? defaultCurrency);
+  const canWrite = useCanWrite();
   const done = useRef(false);
   // Set once anything is changed, so closing by accident asks first.
   const dirty = useRef(false);
@@ -81,6 +83,7 @@ export function QuoteFormModal({
       title="Edit quote"
       description="Won, lost and follow-ups are handled from the quote card."
     >
+      <ReadOnlyNotice />
       {/* Submitted by hand rather than with <form action>: React resets a form
           after its action runs, which would wipe the user's edits whenever the
           server answers with a problem to fix. */}
@@ -221,7 +224,7 @@ export function QuoteFormModal({
           <button type="button" className="btn-ghost" onClick={requestClose} disabled={pending}>
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={pending}>
+          <button type="submit" className="btn-primary" disabled={pending || !canWrite}>
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             Save changes
           </button>

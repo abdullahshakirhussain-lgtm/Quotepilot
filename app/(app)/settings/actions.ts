@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { CURRENCIES, FOLLOW_UP_DAY_OPTIONS } from "@/lib/constants";
@@ -10,6 +9,7 @@ import { isPlausiblePhone, PHONE_ERROR } from "@/lib/phone";
 import { requestToday } from "@/lib/request-time";
 import { buildDemoSeed } from "@/lib/demo-seed";
 import { sanitizeFollowUpDays } from "@/lib/quote-state";
+import { readOnlyReason } from "@/lib/billing-server";
 
 export interface ActionState {
   ok?: boolean;
@@ -17,11 +17,9 @@ export interface ActionState {
   message?: string;
 }
 
-function revalidateAll() {
-  for (const path of ["/dashboard", "/leads", "/quotes", "/follow-ups", "/pipeline", "/settings"]) {
-    revalidatePath(path);
-  }
-}
+// None of these actions call revalidatePath. Their buttons reload the page
+// once they're done (lib/flash.ts explains why), which shows the new state
+// everywhere, including the sidebar.
 
 /** A problem with what the user typed: its message is safe to show as-is. */
 class InputError extends Error {}
@@ -126,8 +124,8 @@ export async function updateBusiness(
   }
   if (!data?.length) return { error: "Your workspace wasn't found. Refresh the page and try again." };
 
-  revalidatePath("/settings");
-  revalidatePath("/dashboard");
+  // No revalidatePath (see the note at the top): the form reloads the page
+  // itself when the change shows elsewhere (the business name in the sidebar).
   return { ok: true, message: "Settings saved." };
 }
 
@@ -137,6 +135,9 @@ export async function updateBusiness(
 
 export async function seedDemoData(): Promise<ActionState> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { error: readOnly };
   const supabase = await createClient();
   const uid = user.id;
 
@@ -211,13 +212,11 @@ export async function seedDemoData(): Promise<ActionState> {
     if (msgError) throw new Error(msgError.message);
   } catch (e) {
     console.error("[settings] loading demo data failed part way:", e instanceof Error ? e.message : e);
-    revalidateAll();
     return {
       error: "Sample data only partly loaded. Use “Remove sample data” to clear it, then try again.",
     };
   }
 
-  revalidateAll();
   return { ok: true, message: "Sample data loaded. Head to the Dashboard to explore it." };
 }
 
@@ -243,18 +242,15 @@ export async function removeSampleData(): Promise<ActionState> {
     const { error: deleteError } = await supabase.from(table).delete().eq("user_id", user.id).in("lead_id", ids);
     if (deleteError) {
       console.error(`[settings] removing sample ${table} failed:`, deleteError.message);
-      revalidateAll();
       return { error: "QuoteLoop couldn't finish removing the sample data. Anything already removed stays removed. Please try again." };
     }
   }
   const { error: leadError } = await supabase.from("leads").delete().eq("user_id", user.id).in("id", ids);
   if (leadError) {
     console.error("[settings] removing sample customers failed:", leadError.message);
-    revalidateAll();
     return { error: "QuoteLoop couldn't finish removing the sample data. Anything already removed stays removed. Please try again." };
   }
 
-  revalidateAll();
   return {
     ok: true,
     message: `Sample data removed (${ids.length} sample customer${ids.length === 1 ? "" : "s"} and their quotes). Your own records were kept.`,
@@ -272,14 +268,12 @@ export async function clearAllData(): Promise<ActionState> {
     const { error } = await supabase.from(table).delete().eq("user_id", user.id);
     if (error) {
       console.error(`[settings] clearing ${table} failed:`, error.message);
-      revalidateAll();
       return {
         error: `QuoteLoop couldn't finish deleting your data (it stopped at your ${labels[table]}). Anything already deleted stays deleted. Please try again.`,
       };
     }
   }
 
-  revalidateAll();
   return {
     ok: true,
     message:

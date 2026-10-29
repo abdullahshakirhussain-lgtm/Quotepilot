@@ -8,6 +8,7 @@ import { sendFollowUpEmailCore, type SendOutcome } from "@/lib/email-send";
 import { recomputeQuoteFollowUpState, skipRemindersCoveredBy } from "@/lib/quote-state";
 import { requestToday } from "@/lib/request-time";
 import { clip } from "@/lib/utils";
+import { readOnlyReason } from "@/lib/billing-server";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -29,6 +30,9 @@ export async function sendFollowUpEmail(input: {
   expectedFollowUpId?: string | null;
 }): Promise<SendOutcome> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   const uid = user.id;
   const config = emailConfig();

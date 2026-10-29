@@ -1,23 +1,31 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { Database, Loader2, Trash2 } from "lucide-react";
 import { clearAllData, removeSampleData, seedDemoData } from "@/app/(app)/settings/actions";
 import type { ActionState } from "@/app/(app)/settings/actions";
 import { Modal } from "@/components/ui/Modal";
+import { reloadWithMessage, takeFlash } from "@/lib/flash";
 
 /** Typed to confirm "Delete all data", so a stray Enter can never wipe a workspace. */
 const CONFIRM_WORD = "DELETE";
 
-/** Runs a settings action; a request that never got an answer is said so, not a crash. */
+/**
+ * Runs a settings action; a request that never got an answer is said so, not a
+ * crash. Done: the page reloads to show the new state everywhere, with the
+ * confirmation shown again after it.
+ */
 async function attempt(action: () => Promise<ActionState>, unreachable: string): Promise<ActionState> {
+  let result: ActionState;
   try {
-    return await action();
+    result = await action();
   } catch (e) {
     unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
     return { error: unreachable };
   }
+  if (result.ok) reloadWithMessage("data", result.message ?? "Done.");
+  return result;
 }
 
 export function DataControls() {
@@ -28,6 +36,12 @@ export function DataControls() {
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
   const confirmed = typed.trim().toUpperCase() === CONFIRM_WORD;
+
+  // The confirmation from just before the reload.
+  useEffect(() => {
+    const message = takeFlash("data");
+    if (message) setResult({ ok: true, message });
+  }, []);
 
   function clearEverything() {
     if (!confirmed) return;

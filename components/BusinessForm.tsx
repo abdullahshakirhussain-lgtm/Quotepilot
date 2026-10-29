@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useMemo } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   CURRENCIES,
@@ -11,6 +11,7 @@ import {
 import type { Business } from "@/lib/types";
 import type { ActionState } from "@/app/(app)/settings/actions";
 import { reportUnreachable } from "@/lib/form-action";
+import { reloadWithMessage, takeFlash } from "@/lib/flash";
 import { cn } from "@/lib/utils";
 
 export function BusinessForm({
@@ -30,6 +31,19 @@ export function BusinessForm({
 }) {
   const save = useMemo(() => reportUnreachable(action), [action]);
   const [state, formAction, pending] = useActionState(save, {});
+  // The business name is also in the sidebar: a new one reloads the page so it
+  // shows there too (lib/flash.ts), with "Settings saved." shown again after.
+  const submittedName = useRef<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  useEffect(() => {
+    setFlash(takeFlash("business"));
+  }, []);
+  useEffect(() => {
+    if (state.ok && initial && submittedName.current !== null && submittedName.current !== initial.business_name) {
+      reloadWithMessage("business", state.message ?? "Settings saved.");
+    }
+  }, [state, initial]);
+  const notice = state.ok ? state.message : state.error ? null : flash;
   const selectedDays = initial?.default_follow_up_days ?? DEFAULT_FOLLOW_UP_DAYS;
 
   return (
@@ -41,6 +55,8 @@ export function BusinessForm({
         e.preventDefault();
         if (pending) return;
         const data = new FormData(e.currentTarget);
+        submittedName.current = String(data.get("business_name") ?? "").trim();
+        setFlash(null);
         startTransition(() => formAction(data));
       }}
       className="flex flex-col gap-5"
@@ -191,9 +207,9 @@ export function BusinessForm({
           {state.error}
         </div>
       )}
-      {state.ok && state.message && (
+      {notice && (
         <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          {state.message}
+          {notice}
         </div>
       )}
 

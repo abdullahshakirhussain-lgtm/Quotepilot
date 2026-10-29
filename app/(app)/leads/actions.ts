@@ -11,6 +11,7 @@ import { LIMITS } from "@/lib/quote-flows";
 import { samePhone } from "@/lib/quote-write";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { ActionResult } from "@/lib/types";
+import { readOnlyReason } from "@/lib/billing-server";
 
 export interface LeadActionState {
   ok?: boolean;
@@ -127,6 +128,9 @@ export async function createLead(
   formData: FormData
 ): Promise<LeadActionState> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { error: readOnly };
 
   let payload;
   try {
@@ -156,6 +160,9 @@ export async function updateLead(
   formData: FormData
 ): Promise<LeadActionState> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { error: readOnly };
 
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "This customer no longer exists." };
@@ -225,6 +232,9 @@ export async function deleteLead(id: string): Promise<ActionResult> {
 export async function setLeadStatus(id: string, status: LeadStatus): Promise<ActionResult> {
   if (!isLeadStatus(status)) return { ok: false, error: "That isn't a stage QuoteLoop knows." };
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("leads")

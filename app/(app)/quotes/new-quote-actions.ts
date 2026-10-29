@@ -24,6 +24,7 @@ import {
   type TrackQuoteDeps,
 } from "@/lib/quote-flows";
 import { clip } from "@/lib/utils";
+import { readOnlyReason } from "@/lib/billing-server";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -215,6 +216,9 @@ function emailDeps(
  */
 export async function trackQuoteAlreadySent(input: QuoteFields): Promise<QuoteFlowOutcome> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   const today = await requestToday();
 
@@ -236,6 +240,9 @@ export async function trackQuoteAlreadySent(input: QuoteFields): Promise<QuoteFl
  */
 export async function sendQuoteWithQuoteLoop(input: QuoteFields): Promise<QuoteFlowOutcome> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   const today = await requestToday();
   const config = emailConfig();
@@ -280,6 +287,9 @@ export async function sendDraftQuoteEmail(input: {
   expectedTo?: string | null;
 }): Promise<QuoteFlowOutcome> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   const today = await requestToday();
   const config = emailConfig();
@@ -382,6 +392,9 @@ export async function addCustomerEmail(
   email: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   // Pasted addresses often carry invisible characters.
   const address = cleanPasted(clip(email ?? "", 320));

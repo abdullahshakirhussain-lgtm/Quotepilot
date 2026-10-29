@@ -11,6 +11,7 @@ import { clip, daysSince } from "@/lib/utils";
 import { requestToday } from "@/lib/request-time";
 import { emailConfig, isValidEmail } from "@/lib/email";
 import { AI_DAILY_LIMIT } from "@/lib/constants";
+import { readOnlyReason } from "@/lib/billing-server";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Read-only accounts (trial or subscription over) can't draft. Earlier
+  // drafts stay readable (GET).
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return NextResponse.json({ error: readOnly, readOnly: true }, { status: 402 });
 
   let body: {
     quoteId?: string;

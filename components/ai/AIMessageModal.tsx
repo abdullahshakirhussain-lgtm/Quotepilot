@@ -33,6 +33,7 @@ import { logFollowUpSent } from "@/app/(app)/quotes/actions";
 import { sendFollowUpEmail } from "@/app/(app)/quotes/email-actions";
 import { addCustomerEmail } from "@/app/(app)/quotes/new-quote-actions";
 import { isSampleAddress } from "@/lib/email-address";
+import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
 
 type SendOutcome = Awaited<ReturnType<typeof sendFollowUpEmail>>;
 
@@ -89,6 +90,7 @@ export function AIMessageModal({
   );
 
   const [messageType, setMessageType] = useState<MessageType>(suggested);
+  const canWrite = useCanWrite();
   const [tone, setTone] = useState<Tone>("friendly");
   const [context, setContext] = useState("");
   const [adjusting, setAdjusting] = useState(false);
@@ -345,6 +347,7 @@ export function AIMessageModal({
         </span>
       }
     >
+      <ReadOnlyNotice />
       <div className="space-y-4">
         {/* What will be written, with options tucked away */}
         <div className="rounded-md bg-stone-50 px-3 py-2.5 ring-1 ring-inset ring-stone-200">
@@ -420,7 +423,7 @@ export function AIMessageModal({
         {/* The draft */}
         {!content && !loading && (
           <div className="flex flex-col items-center rounded-md border border-dashed border-stone-300 px-6 py-8 text-center">
-            <button className="btn-accent px-4 py-2" onClick={generate}>
+            <button className="btn-accent px-4 py-2" onClick={generate} disabled={!canWrite}>
               <Sparkles className="h-4 w-4" /> Draft follow-up for {firstName}
             </button>
             <p className="mt-2 text-xs text-stone-500">

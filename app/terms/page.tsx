@@ -6,6 +6,7 @@ import {
   LegalPage,
   LegalSection,
 } from "@/components/legal/LegalPage";
+import { PRICE_LABEL, TRIAL_DAYS } from "@/lib/marketing";
 
 export const metadata: Metadata = {
   title: "Terms of Service — QuoteLoop",
@@ -16,7 +17,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      effectiveDate="September 16, 2026"
+      effectiveDate="October 28, 2026"
       intro={
         <>
           <p>
@@ -157,9 +158,16 @@ export default function TermsPage() {
       </LegalSection>
 
       <LegalSection title="Fees">
+        <LegalList
+          items={[
+            `New accounts get a ${TRIAL_DAYS}-day free trial. No card is needed for the trial.`,
+            `After the trial, QuoteLoop costs ${PRICE_LABEL} a month. The price is shown before you pay, and any change is announced before it applies to you.`,
+            "If the trial ends, or a subscription ends or stays unpaid after a short grace period, your account becomes read-only: you can still sign in, view and export your data, change your settings and delete your data, but you can't add, send or draft until you subscribe again. We don't delete your data because a subscription ended.",
+            "You can cancel at any time. You keep full access until the end of the period you've paid for.",
+          ]}
+        />
         <p>
-          QuoteLoop is currently free to use. If we add paid plans, prices and limits will be shown
-          before you buy anything.
+          Questions about billing: <ContactEmail />.
         </p>
       </LegalSection>
 

@@ -15,6 +15,7 @@ import {
   skipRemindersCoveredBy,
 } from "@/lib/quote-state";
 import type { ActionResult } from "@/lib/types";
+import { readOnlyReason } from "@/lib/billing-server";
 
 export interface QuoteActionState {
   ok?: boolean;
@@ -153,6 +154,9 @@ export async function updateQuote(
   formData: FormData
 ): Promise<QuoteActionState> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { error: readOnly };
 
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: QUOTE_GONE };
@@ -258,6 +262,9 @@ export async function deleteQuote(id: string): Promise<ActionResult> {
 
 export async function markQuoteSent(id: string): Promise<ActionResult> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
 
   try {
@@ -321,6 +328,9 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<Q
   if (status === "sent") return markQuoteSent(id);
 
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
   let undo: QuoteCloseUndo | undefined;
 
@@ -397,6 +407,9 @@ export async function undoQuoteClose(id: string, undo: QuoteCloseUndo): Promise<
     .slice(0, 200);
 
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
   const supabase = await createClient();
 
   try {
@@ -469,6 +482,9 @@ export async function logFollowUpSent(
   expectedFollowUpId?: string | null
 ): Promise<LogFollowUpResult> {
   const user = await requireUser();
+  // Read-only accounts (trial or subscription over) can't create or send.
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { logged: false, failed: true, message: readOnly };
   const supabase = await createClient();
   const alreadyRecorded: LogFollowUpResult = {
     logged: false,

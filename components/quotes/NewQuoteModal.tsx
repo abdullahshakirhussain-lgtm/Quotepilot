@@ -18,6 +18,7 @@ import {
   sendQuoteWithQuoteLoop,
   trackQuoteAlreadySent,
 } from "@/app/(app)/quotes/new-quote-actions";
+import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
 
 type Outcome = Awaited<ReturnType<typeof trackQuoteAlreadySent>>;
 type Success = Extract<Outcome, { ok: true }>;
@@ -98,6 +99,7 @@ export function NewQuoteModal({
 }) {
   const preselected = customers.find((c) => c.id === preselectCustomerId);
   const [step, setStep] = useState<"choose" | "form" | "preview" | "done">("choose");
+  const canWrite = useCanWrite();
   const [flow, setFlow] = useState<"send" | "track">("send");
   const [customerMode, setCustomerMode] = useState<"new" | "existing">(
     preselected ? "existing" : "new"
@@ -425,6 +427,7 @@ export function NewQuoteModal({
 
   return (
     <Modal open onClose={requestClose} size="lg" title={heading.title} description={heading.description}>
+      <ReadOnlyNotice />
       {step === "choose" && (
         <div className="flex flex-col gap-3">
           <button
@@ -738,11 +741,11 @@ export function NewQuoteModal({
               Back
             </button>
             {flow === "send" ? (
-              <button type="button" className="btn-accent" onClick={goToPreview} disabled={busy}>
+              <button type="button" className="btn-accent" onClick={goToPreview} disabled={busy || !canWrite}>
                 <Mail className="h-4 w-4" /> Preview quote email
               </button>
             ) : (
-              <button type="button" className="btn-primary" onClick={() => submit("track")} disabled={busy}>
+              <button type="button" className="btn-primary" onClick={() => submit("track")} disabled={busy || !canWrite}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
                 {duplicateWarned ? "Add it anyway" : "Start follow-up tracking"}
               </button>

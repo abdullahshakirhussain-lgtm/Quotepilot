@@ -11,6 +11,7 @@ import {
   updateLead,
   type LeadActionState,
 } from "@/app/(app)/leads/actions";
+import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
 
 const saveNew = reportUnreachable(createLead);
 const saveEdit = reportUnreachable(updateLead);
@@ -41,6 +42,7 @@ export function LeadFormModal({
   // The email and phone as last submitted, and as they are now: after a
   // duplicate warning, submitting them unchanged saves anyway.
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const canWrite = useCanWrite();
   const [contactNow, setContactNow] = useState<string | null>(null);
   const warned = Boolean(state.duplicate) && submitted !== null && submitted === contactNow;
   // A problem from the last save stops showing once the user starts fixing it.
@@ -70,6 +72,7 @@ export function LeadFormModal({
           : "Customers are also added automatically when you add a quote."
       }
     >
+      <ReadOnlyNotice />
       {/* Submitted by hand rather than with <form action>: React resets a form
           after its action runs, which would wipe what was typed whenever the
           server answers with a problem to fix. */}
@@ -211,7 +214,7 @@ export function LeadFormModal({
           <button type="button" className="btn-secondary" onClick={requestClose}>
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={pending}>
+          <button type="submit" className="btn-primary" disabled={pending || !canWrite}>
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             {warned ? (isEdit ? "Save anyway" : "Add anyway") : isEdit ? "Save changes" : "Add customer"}
           </button>
