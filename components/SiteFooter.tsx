@@ -19,6 +19,9 @@ export function SiteFooter() {
         <Link href="/terms" className="tap inline-flex items-center text-stone-500 hover:text-stone-800">
           Terms of Service
         </Link>
+        <Link href="/refunds" className="tap inline-flex items-center text-stone-500 hover:text-stone-800">
+          Refund Policy
+        </Link>
       </nav>
     </footer>
   );

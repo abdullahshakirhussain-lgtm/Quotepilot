@@ -17,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effectiveDate="September 18, 2026"
+      effectiveDate="October 29, 2026"
       intro={
         <>
           <p>
@@ -191,6 +191,7 @@ export default function PrivacyPage() {
             "DeepSeek — AI text generation",
             "Google — sign-in with Google",
             "Cloudflare — domain and DNS",
+            "Our payment provider (when you subscribe) — sells you the subscription as the reseller, and handles your card details, billing address and sales tax. We never see your full card number.",
           ]}
         />
         <p>

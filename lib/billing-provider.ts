@@ -10,6 +10,7 @@
 // and provider-neutral, so it is tested once for every provider.
 // ---------------------------------------------------------------------------
 import { GRACE_DAYS, type SubscriptionRow, type SubscriptionStatus } from "@/lib/billing";
+import { makePaddleProvider } from "@/lib/billing-paddle";
 
 export type BillingEventType =
   /** Paid: first payment or a renewal. */
@@ -46,8 +47,10 @@ export interface BillingProvider {
   parseWebhook(request: Request, rawBody: string): Promise<BillingEvent[]>;
 }
 
-/** Adapters by name (BILLING_PROVIDER). None yet: payments aren't set up. */
-const ADAPTERS: Record<string, () => BillingProvider> = {};
+/** Adapters by name (BILLING_PROVIDER). Null when its settings are incomplete: payments then aren't set up. */
+const ADAPTERS: Record<string, () => BillingProvider | null> = {
+  paddle: () => makePaddleProvider(),
+};
 
 let testProvider: BillingProvider | null = null;
 /** Tests only: stand in for a real provider. Ignored in production. */

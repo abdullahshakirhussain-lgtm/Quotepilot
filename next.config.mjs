@@ -36,7 +36,13 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      // The checkout page hosts Paddle's payment frame, which may offer Apple
+      // Pay or Google Pay; everywhere else payment stays off. (Later entries
+      // override earlier ones for the same header.)
+      { source: "/pay", headers: [{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=*" }] },
+    ];
   },
 };
 

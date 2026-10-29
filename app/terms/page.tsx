@@ -17,7 +17,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      effectiveDate="October 28, 2026"
+      effectiveDate="October 29, 2026"
       intro={
         <>
           <p>
@@ -164,6 +164,10 @@ export default function TermsPage() {
             `After the trial, QuoteLoop costs ${PRICE_LABEL} a month. The price is shown before you pay, and any change is announced before it applies to you.`,
             "If the trial ends, or a subscription ends or stays unpaid after a short grace period, your account becomes read-only: you can still sign in, view and export your data, change your settings and delete your data, but you can't add, send or draft until you subscribe again. We don't delete your data because a subscription ended.",
             "You can cancel at any time. You keep full access until the end of the period you've paid for.",
+            <>
+              Any payment can be refunded in full if you ask within 14 days. See our{" "}
+              <InternalLink href="/refunds">Refund Policy</InternalLink>.
+            </>,
           ]}
         />
         <p>

@@ -118,6 +118,10 @@ export default async function SettingsPage({
           <Link href="/terms" className="tap inline-flex items-center hover:text-stone-800">
             Terms of Service
           </Link>
+          <span aria-hidden="true" className="self-center">·</span>
+          <Link href="/refunds" className="tap inline-flex items-center hover:text-stone-800">
+            Refund Policy
+          </Link>
         </p>
       </div>
     </div>
