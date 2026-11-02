@@ -42,7 +42,7 @@ export function BillingSection({
       ? `${daysLeft ?? 0} day${daysLeft === 1 ? "" : "s"} left · ends ${day(endsAt, timeZone)}`
       : state === "active"
         ? endsAt
-          ? `Renews ${day(endsAt, timeZone)}`
+          ? `${hasPaymentAccount ? "Renews" : "Active until"} ${day(endsAt, timeZone)}`
           : "Your subscription is active."
         : state === "ending"
           ? `Access until ${day(endsAt, timeZone)}`

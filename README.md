@@ -154,7 +154,8 @@ Paddle sells the subscription as the merchant of record. To connect it:
 1. In Paddle, create a product with a monthly price, a client-side token, an
    API key (permissions: transactions write, customer portal sessions write),
    and a notification destination for `https://<your domain>/api/billing/webhook`
-   with the `subscription.*` events.
+   with the `subscription.*` events plus `adjustment.created` and
+   `adjustment.updated` (refunds and chargebacks).
 2. Under Checkout settings, set the default payment link to
    `https://<your domain>/pay` (the domain must be approved by Paddle).
 3. Set `BILLING_PROVIDER=paddle`, `PADDLE_API_KEY`, `PADDLE_PRICE_ID`,
@@ -164,6 +165,10 @@ Paddle sells the subscription as the merchant of record. To connect it:
 Sandbox and live follow the key prefixes (`pdl_sdbx_`/`test_` vs
 `pdl_live_`/`live_`). If any Paddle setting is missing, Settings falls back to
 "Email us to subscribe" and the webhook answers 404.
+
+Refunds, chargebacks and a customer paying for two subscriptions don't change
+anyone's access by themselves. They go to the server log and, if email is set
+up, to `BILLING_ALERT_EMAIL` (default: the contact address), for you to act on.
 
 ### Time zones
 

@@ -29,6 +29,14 @@ interface PaddleSubscription {
   scheduled_change?: { action?: string; effective_at?: string } | null;
 }
 
+interface PaddleAdjustment {
+  id?: string;
+  action?: string;
+  status?: string;
+  customer_id?: string;
+  subscription_id?: string | null;
+}
+
 /** Null (with a log line) when a setting is missing: the app then says payments aren't set up. */
 export function makePaddleProvider(env: Env = process.env, fetchImpl: typeof fetch = fetch): BillingProvider | null {
   const apiKey = env.PADDLE_API_KEY?.trim();
@@ -126,8 +134,10 @@ export function toBillingEvent(payload: unknown): BillingEvent | null {
     occurred_at?: unknown;
     data?: PaddleSubscription;
   };
-  if (typeof event_id !== "string" || typeof event_type !== "string" || !event_type.startsWith("subscription.")) return null;
+  if (typeof event_id !== "string" || typeof event_type !== "string") return null;
   if (typeof occurred_at !== "string" || !data || typeof data !== "object") return null;
+  if (event_type.startsWith("adjustment.")) return toReversalEvent(event_id, occurred_at, data as unknown as PaddleAdjustment);
+  if (!event_type.startsWith("subscription.")) return null;
 
   const userId = typeof data.custom_data?.user_id === "string" ? data.custom_data.user_id : null;
   const periodEnd = data.current_billing_period?.ends_at ?? null;
@@ -158,4 +168,23 @@ export function toBillingEvent(payload: unknown): BillingEvent | null {
       // "trialing": QuoteLoop's own trial needs no card, so Paddle never runs one.
       return null;
   }
+}
+
+/**
+ * Refunds and chargebacks. A refund counts once approved (most start out
+ * pending, and can be rejected); chargebacks are Paddle's own record of a
+ * dispute, so every step counts. Credits don't move money back to anyone.
+ */
+function toReversalEvent(id: string, occurredAt: string, data: PaddleAdjustment): BillingEvent | null {
+  const action = data.action ?? "";
+  const counts = (action === "refund" && data.status === "approved") || action.startsWith("chargeback");
+  if (!counts) return null;
+  return {
+    id,
+    type: "payment_reversed",
+    occurredAt,
+    customerId: data.customer_id ?? null,
+    subscriptionId: data.subscription_id ?? null,
+    detail: `${action.replace(/_/g, " ")} (${data.id ?? "no id"}, status ${data.status ?? "unknown"})`,
+  };
 }

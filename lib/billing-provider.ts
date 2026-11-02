@@ -20,7 +20,9 @@ export type BillingEventType =
   /** Canceled; access continues until the end of the paid period. */
   | "subscription_canceled"
   /** Access is over (canceled period ended, or retries ran out). */
-  | "subscription_expired";
+  | "subscription_expired"
+  /** Money went back (a refund or chargeback). Recorded and sent to the owner; access doesn't change. */
+  | "payment_reversed";
 
 export interface BillingEvent {
   /** The provider's own event id: each one is applied once. */
@@ -35,6 +37,8 @@ export interface BillingEvent {
   /** Paid until (subscription_active / subscription_canceled). */
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean;
+  /** What happened, for the owner (payment_reversed). */
+  detail?: string;
 }
 
 export interface BillingProvider {
@@ -82,9 +86,21 @@ export type SubscriptionPatch = Partial<{
   last_event_at: string;
 }>;
 
+const isOtherSubscription = (sub: SubscriptionForEvents, event: BillingEvent) =>
+  Boolean(event.subscriptionId && sub.provider_subscription_id && event.subscriptionId !== sub.provider_subscription_id);
+
+/** A new subscription starting while the one on file is still billing: this customer is paying twice. */
+export function isSecondLiveSubscription(sub: SubscriptionForEvents, event: BillingEvent): boolean {
+  if (event.type !== "subscription_active" || !isOtherSubscription(sub, event)) return false;
+  return sub.status === "past_due" || (sub.status === "active" && !sub.cancel_at_period_end);
+}
+
 /**
  * The subscription change one provider event makes, or null when it changes
- * nothing (an event older than one already applied arrived late).
+ * nothing: an event older than one already applied arrived late, or it's about
+ * a subscription other than the one on file. An account can briefly have two
+ * (paid in two tabs), or an old one still reporting after resubscribing; only
+ * a subscription that is paid takes over.
  */
 export function applyBillingEvent(
   sub: SubscriptionForEvents,
@@ -94,6 +110,7 @@ export function applyBillingEvent(
   const at = Date.parse(event.occurredAt);
   if (Number.isNaN(at)) return null;
   if (sub.last_event_at && at < Date.parse(sub.last_event_at)) return null;
+  if (event.type !== "subscription_active" && isOtherSubscription(sub, event)) return null;
 
   const base: SubscriptionPatch = {
     provider: providerName,
@@ -101,6 +118,9 @@ export function applyBillingEvent(
     ...(event.customerId ? { provider_customer_id: event.customerId } : {}),
     ...(event.subscriptionId ? { provider_subscription_id: event.subscriptionId } : {}),
   };
+
+  // Free access is the owner's decision: keep the provider's ids, change nothing else.
+  if (sub.status === "comped") return event.type === "payment_reversed" ? null : base;
 
   switch (event.type) {
     case "subscription_active":
@@ -134,4 +154,26 @@ export function applyBillingEvent(
     default:
       return null;
   }
+}
+
+const LIFECYCLE: BillingEventType[] = ["subscription_active", "payment_failed", "subscription_canceled", "subscription_expired"];
+
+/**
+ * When the subscription on file ends: the newest event of another subscription
+ * on the account that is still paid for, if any. From the account's recorded
+ * events, so a customer who paid twice doesn't lose access while still billed.
+ */
+export function liveOtherSubscription(events: BillingEvent[], endedId: string | null | undefined, now: Date = new Date()): BillingEvent | null {
+  const latest = new Map<string, BillingEvent>();
+  for (const e of events) {
+    if (!e?.subscriptionId || e.subscriptionId === endedId || !LIFECYCLE.includes(e.type)) continue;
+    const seen = latest.get(e.subscriptionId);
+    if (!seen || Date.parse(e.occurredAt) >= Date.parse(seen.occurredAt)) latest.set(e.subscriptionId, e);
+  }
+  const live = [...latest.values()].filter((e) =>
+    e.type === "subscription_active" ||
+    e.type === "payment_failed" ||
+    (e.type === "subscription_canceled" && Boolean(e.currentPeriodEnd) && Date.parse(e.currentPeriodEnd!) > now.getTime())
+  );
+  return live.sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0] ?? null;
 }

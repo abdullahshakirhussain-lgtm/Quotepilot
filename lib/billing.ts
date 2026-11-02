@@ -59,13 +59,19 @@ export function accessFrom(sub: SubscriptionRow | null | undefined, now: Date = 
     case "comped":
       return { state: "comped", canWrite: true, endsAt: null, daysLeft: null };
     case "active": {
+      const t = until(sub.current_period_end, now);
       if (sub.cancel_at_period_end && sub.current_period_end) {
-        const t = until(sub.current_period_end, now);
         return t.open
           ? { state: "ending", canWrite: true, endsAt: sub.current_period_end, daysLeft: t.daysLeft }
           : { state: "expired", canWrite: false, endsAt: sub.current_period_end, daysLeft: 0 };
       }
-      return { state: "active", canWrite: true, endsAt: sub.current_period_end, daysLeft: null };
+      // Activated by hand with an end date: nothing will renew it.
+      if (sub.provider === "manual" && sub.current_period_end && !t.open) {
+        return { state: "expired", canWrite: false, endsAt: sub.current_period_end, daysLeft: 0 };
+      }
+      // Past its date otherwise means a renewal notice is late: a paying
+      // customer keeps working, but no date in the past is shown.
+      return { state: "active", canWrite: true, endsAt: t.open ? sub.current_period_end : null, daysLeft: null };
     }
     case "trialing": {
       const t = until(sub.trial_ends_at, now);
