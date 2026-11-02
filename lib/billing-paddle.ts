@@ -47,6 +47,15 @@ export function makePaddleProvider(env: Env = process.env, fetchImpl: typeof fet
     console.error(`[billing] BILLING_PROVIDER=paddle but ${missing.join(", ")} isn't set`);
     return null;
   }
+  // The product page shows a pro_… id right next to the price's pri_… one;
+  // only a price can be bought, so payments stay off rather than fail at checkout.
+  if (!priceId!.startsWith("pri_")) {
+    console.error(`[billing] PADDLE_PRICE_ID must be a price id (pri_…), not "${priceId!.slice(0, 4)}…"`);
+    return null;
+  }
+  if (!webhookSecret!.startsWith("pdl_ntfset_")) {
+    console.error("[billing] PADDLE_WEBHOOK_SECRET doesn't look like a notification secret key (pdl_ntfset_…): check it's the destination's secret key, not its id");
+  }
   const baseUrl = apiKey!.startsWith("pdl_sdbx_") ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
   const appUrl = (env.APP_URL || "https://quoteloop.site").replace(/\/+$/, "");
 
@@ -55,11 +64,14 @@ export function makePaddleProvider(env: Env = process.env, fetchImpl: typeof fet
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Paddle-Version": "1" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
     });
     const json = await res.json().catch(() => null);
     if (!res.ok) {
-      const detail = json?.error?.code ?? json?.error?.detail ?? "";
-      throw new Error(`Paddle ${path} answered ${res.status} ${detail}`.trim());
+      // Paddle's own explanation, e.g. which field it refused (no secrets in it).
+      const error = json?.error ?? {};
+      const fields = Array.isArray(error.errors) ? error.errors.map((e: { field?: string; message?: string }) => `${e.field}: ${e.message}`).join("; ") : "";
+      throw new Error([`Paddle ${path} answered ${res.status}`, error.code, error.detail, fields].filter(Boolean).join(" | "));
     }
     return json?.data;
   }

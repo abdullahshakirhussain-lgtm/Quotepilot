@@ -25,6 +25,6 @@ export async function POST() {
     return NextResponse.json({ url });
   } catch (e) {
     console.error("[billing] checkout failed:", e instanceof Error ? e.message : e);
-    return NextResponse.json({ error: "Checkout couldn't be started just now. Please try again." }, { status: 502 });
+    return NextResponse.json({ error: "Checkout couldn't be started just now. Please try again." }, { status: 500 });
   }
 }

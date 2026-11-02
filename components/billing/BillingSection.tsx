@@ -1,4 +1,5 @@
 import { BillingActions } from "@/components/billing/BillingActions";
+import { ForgetReturn, PaymentConfirmed, PaymentPending } from "@/components/billing/PaymentPending";
 import { CONTACT_EMAIL, PRICE_LABEL, TRIAL_DAYS } from "@/lib/marketing";
 import type { AccessState } from "@/lib/billing";
 
@@ -64,11 +65,15 @@ export function BillingSection({
       <p className="mb-4 mt-0.5 text-sm text-stone-500">
         One plan: {PRICE_LABEL} a month after a {TRIAL_DAYS}-day free trial. No card needed for the trial.
       </p>
-      {justReturned && (
-        <p role="status" className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
-          Thanks! Your payment is being confirmed. This page updates within a minute or so.
-        </p>
-      )}
+      {/* Back from checkout: wait for the provider's notice, confirm it once, then forget it. */}
+      {justReturned &&
+        (state === "trial" || state === "expired" ? (
+          <PaymentPending contactEmail={CONTACT_EMAIL} />
+        ) : state === "active" ? (
+          <PaymentConfirmed renewsOn={day(endsAt, timeZone)} />
+        ) : (
+          <ForgetReturn />
+        ))}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium text-stone-900">{LABEL[state]}</p>

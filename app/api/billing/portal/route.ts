@@ -23,6 +23,6 @@ export async function POST() {
     return NextResponse.json({ url });
   } catch (e) {
     console.error("[billing] portal failed:", e instanceof Error ? e.message : e);
-    return NextResponse.json({ error: "The billing page couldn't be opened just now. Please try again." }, { status: 502 });
+    return NextResponse.json({ error: "The billing page couldn't be opened just now. Please try again." }, { status: 500 });
   }
 }

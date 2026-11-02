@@ -40,7 +40,7 @@ export function BillingActions({
         window.location.assign(data.url);
         return;
       }
-      setError(data.error || "That didn't work just now. Please try again.");
+      setError(data.error || `Payments couldn't be reached just now. Please try again in a minute, or email ${contactEmail}.`);
     } catch {
       setError("QuoteLoop couldn't be reached. Check your connection and try again.");
     }
@@ -53,6 +53,9 @@ export function BillingActions({
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
         {mode === "subscribe" ? "Subscribe" : "Manage billing"}
       </button>
+      {mode === "manage" && !error && (
+        <p className="text-xs text-stone-500">Opens Paddle, our payment provider. Come back to quoteloop.site/settings when you're done.</p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
