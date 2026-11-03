@@ -137,6 +137,16 @@ export function QuotesClient({
   }, [newParam]);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [aiFor, setAiFor] = useState<QuoteWithLead | null>(null);
+  // A quote saved a moment ago isn't in the list until the page refreshes:
+  // "Write follow-up" on it opens the writer as soon as it arrives.
+  const [writeWhenListed, setWriteWhenListed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!writeWhenListed) return;
+    const quote = quotes.find((q) => q.id === writeWhenListed);
+    if (!quote) return;
+    setWriteWhenListed(null);
+    setAiFor(quote);
+  }, [quotes, writeWhenListed]);
   const [sendDraft, setSendDraft] = useState<QuoteWithLead | null>(null);
   const [addEmailFor, setAddEmailFor] = useState<QuoteWithLead | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -338,6 +348,10 @@ export function QuotesClient({
             closeNew();
             const quote = quotes.find((q) => q.id === quoteId);
             if (quote) setAiFor(quote);
+            else {
+              setWriteWhenListed(quoteId);
+              router.refresh();
+            }
           }}
         />
       )}
