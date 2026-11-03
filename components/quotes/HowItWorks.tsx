@@ -1,4 +1,3 @@
-import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
@@ -9,21 +8,16 @@ const STEPS = [
   "Mark the quote won or lost",
 ];
 
-/** The five-step loop, shown to accounts that have no quotes yet. */
+/** The five-step loop, shown to accounts that have no quotes yet. A real sequence, so it's numbered. */
 export function HowItWorks({ className }: { className?: string }) {
   return (
-    <div className={cn("card px-4 py-3", className)}>
-      <p className="eyebrow mb-2">How QuoteLoop works</p>
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm text-stone-600">
+    <div className={cn("ql-fade", className)}>
+      <h2 className="section-title mb-2">How QuoteLoop works</h2>
+      <ol className="mt-1 grid grid-cols-1 gap-x-4 sm:grid-cols-5">
         {STEPS.map((step, i) => (
-          <li key={step} className="flex items-center gap-2">
-            <span className="num grid h-5 w-5 shrink-0 place-items-center rounded-full bg-stone-900 text-[11px] font-semibold text-white">
-              {i + 1}
-            </span>
-            <span>{step}</span>
-            {i < STEPS.length - 1 && (
-              <ChevronRight className="hidden h-4 w-4 shrink-0 text-stone-300 sm:block" aria-hidden="true" />
-            )}
+          <li key={step} className="flex items-center gap-3 py-2 sm:block sm:py-3">
+            <span className="num grid h-7 w-7 place-items-center rounded-full bg-stone-900 text-[13px] font-semibold text-white">{i + 1}</span>
+            <span className="text-[14px] text-stone-600 sm:mt-2 sm:block">{step}</span>
           </li>
         ))}
       </ol>

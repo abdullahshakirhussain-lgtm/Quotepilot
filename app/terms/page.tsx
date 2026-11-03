@@ -9,7 +9,7 @@ import {
 import { PRICE_LABEL, TRIAL_DAYS } from "@/lib/marketing";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — QuoteLoop",
+  title: "Terms of Service | QuoteLoop",
   description: "The rules for using QuoteLoop.",
 };
 

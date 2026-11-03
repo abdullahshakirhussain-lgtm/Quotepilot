@@ -47,6 +47,11 @@ export interface DashboardMetrics {
   totalQuoted: Money[];
   acceptedValue: Money[];
   lostValue: Money[];
+  /** Quotes written but not sent yet. */
+  draftCount: number;
+  draftValue: Money[];
+  expiredCount: number;
+  expiredValue: Money[];
   /** won / (won + lost), or null until at least one quote is decided. */
   winRate: number | null;
   /** Average of quotes that have left draft, per currency. */
@@ -121,6 +126,8 @@ export function computeDashboardMetrics(input: {
   const open = quotes.filter((q) => (OPEN_QUOTE_STATUSES as readonly string[]).includes(q.status));
   const won = quotes.filter((q) => q.status === "accepted");
   const lost = quotes.filter((q) => q.status === "rejected");
+  const drafts = quotes.filter((q) => q.status === "draft");
+  const expired = quotes.filter((q) => q.status === "expired");
 
   const totalQuoted = sumByCurrency(sent, main);
   const decided = won.length + lost.length;
@@ -136,6 +143,10 @@ export function computeDashboardMetrics(input: {
     totalQuoted,
     acceptedValue: sumByCurrency(won, main),
     lostValue: sumByCurrency(lost, main),
+    draftCount: drafts.length,
+    draftValue: sumByCurrency(drafts, main),
+    expiredCount: expired.length,
+    expiredValue: sumByCurrency(expired, main),
     winRate: decided > 0 ? Math.round((won.length / decided) * 100) : null,
     avgQuote: totalQuoted.map((m) => ({
       currency: m.currency,

@@ -31,19 +31,19 @@ export function QuoteEmailPreview({
 }) {
   return (
     <div className="space-y-3">
-      <div className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
+      <div className="divide-y divide-stone-200 rounded-[6px] border border-stone-300 text-sm">
         <div className="flex items-start gap-3 px-3 py-2">
-          <span className="w-16 shrink-0 text-stone-500">To</span>
+          <span className="w-16 shrink-0 text-stone-600">To</span>
           {/* Wraps rather than truncates: the whole address must be checkable. */}
           <span className="min-w-0 font-medium text-stone-800 [overflow-wrap:anywhere]">{to}</span>
         </div>
         <div className="flex items-center gap-3 px-3 py-1.5">
-          <label htmlFor="quote-subject" className="w-16 shrink-0 text-stone-500">
+          <label htmlFor="quote-subject" className="w-16 shrink-0 text-stone-600">
             Subject
           </label>
           <input
             id="quote-subject"
-            className="w-full bg-transparent py-0.5 text-stone-800 focus:outline-none"
+            className="w-full bg-transparent py-0.5 text-base text-stone-900 focus:outline-none"
             value={subject}
             maxLength={200}
             placeholder={defaultQuoteSubject(businessName, title)}
@@ -51,10 +51,10 @@ export function QuoteEmailPreview({
           />
         </div>
         <div className="flex items-start gap-3 px-3 py-2">
-          <span className="w-16 shrink-0 text-stone-500">From</span>
+          <span className="w-16 shrink-0 text-stone-600">From</span>
           <span className="min-w-0 text-stone-700 [overflow-wrap:anywhere]">
             {businessName || "Your business"} via QuoteLoop
-            {replyTo ? ` · replies go to ${replyTo}` : ""}
+            {replyTo ? `, replies go to ${replyTo}` : ""}
           </span>
         </div>
       </div>
@@ -66,13 +66,13 @@ export function QuoteEmailPreview({
         onChange={(e) => onBodyChange(e.target.value)}
       />
 
-      <div className="rounded-md bg-stone-50 px-3 py-2 text-xs text-stone-600 ring-1 ring-inset ring-stone-200">
+      <div className="msg-info">
         <p>
-          <span className="font-medium text-stone-800">{title}</span> ·{" "}
-          <span className="num">{formatCurrency(amount, currency)}</span>
-          {description ? <span className="text-stone-500"> · {description}</span> : null}
+          <span className="font-semibold text-stone-900">{title}</span>,{" "}
+          <span className="num font-semibold">{formatCurrency(amount, currency)}</span>
+          {description ? <span className="text-stone-600">. {description}</span> : null}
         </p>
-        <p className="mt-1 text-stone-500">
+        <p className="mt-1 text-stone-600">
           A short line naming your business is added at the end. Nothing is sent until you press Send
           quote email.
         </p>

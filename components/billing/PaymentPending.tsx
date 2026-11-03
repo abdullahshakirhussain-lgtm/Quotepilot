@@ -48,7 +48,7 @@ export function PaymentPending({ contactEmail }: { contactEmail: string }) {
   }, []);
 
   return (
-    <p role="status" className="mb-4 flex items-start gap-2 rounded-md bg-stone-50 px-3 py-2 text-sm text-stone-700 ring-1 ring-inset ring-stone-200">
+    <p role="status" className="msg-info mb-4 flex items-start gap-2">
       {gaveUp ? (
         <>Your payment is taking longer than usual to confirm. It will show here once it does, usually within a few minutes. If it hasn't after an hour, email {contactEmail}.</>
       ) : (
@@ -76,23 +76,24 @@ export function PaymentConfirmed({ renewsOn }: { renewsOn: string }) {
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4" onClick={() => setOpen(false)}>
+    <div className="ql-fade fixed inset-0 z-50 flex items-center justify-center bg-stone-950/50 px-4" onClick={() => setOpen(false)}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="payment-confirmed-title"
-        className="card w-full max-w-sm p-6 text-center shadow-xl"
+        className="ql-rise w-full max-w-sm rounded-[16px] bg-white p-6 shadow-[0_18px_48px_rgba(21,24,28,0.25)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
-        <h2 id="payment-confirmed-title" className="mt-3 text-lg font-semibold text-stone-900">
-          Payment successful
+        <CheckCircle2 className="h-10 w-10 text-emerald-700" />
+        {/* The one celebration in the app: the highlighter swipes under it. */}
+        <h2 id="payment-confirmed-title" className="mt-3 text-[26px] font-semibold leading-tight text-stone-900">
+          <span className="hl -ml-1.5">Payment successful</span>
         </h2>
-        <p className="mt-1.5 text-sm text-stone-600">
+        <p className="mt-3 text-base text-stone-700">
           You're subscribed to QuoteLoop.{renewsOn ? ` Your plan renews on ${renewsOn}.` : ""} A receipt is on its way to your email.
         </p>
         <button ref={button} type="button" className="btn-primary mt-5 w-full justify-center" onClick={() => setOpen(false)}>
-          Continue
+          Close
         </button>
       </div>
     </div>

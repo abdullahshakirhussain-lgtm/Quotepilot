@@ -11,9 +11,10 @@ import {
   RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
+  PenLine,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import {
@@ -66,7 +67,8 @@ type Banner = { tone: "success" | "warning" | "error" | "info"; text: string };
 
 /** The footer is appended when sending; history shows the message itself. */
 function withoutFooter(body: string): string {
-  const i = body.lastIndexOf("\n\n—\n");
+  // "--" since November 2026; emails sent before then used an em dash line.
+  const i = Math.max(body.lastIndexOf("\n\n--\n"), body.lastIndexOf("\n\n\u2014\n"));
   return i === -1 ? body : body.slice(0, i);
 }
 
@@ -91,6 +93,7 @@ export function AIMessageModal({
 
   const [messageType, setMessageType] = useState<MessageType>(suggested);
   const canWrite = useCanWrite();
+  const [confirm, confirmDialog] = useConfirm();
   const [tone, setTone] = useState<Tone>("friendly");
   const [context, setContext] = useState("");
   const [adjusting, setAdjusting] = useState(false);
@@ -265,7 +268,7 @@ export function AIMessageModal({
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         setBanner({
           tone: "error",
-          text: "That didn't go through, so nothing was logged. You may have lost your connection, or been signed out in another tab — refresh the page and try again.",
+          text: "That didn't go through, so nothing was logged. You may have lost your connection, or been signed out in another tab. Refresh the page and try again.",
         });
         return;
       }
@@ -320,49 +323,61 @@ export function AIMessageModal({
   const visibleHistory = showAll ? history : history.slice(0, 3);
 
   const bannerStyle: Record<Banner["tone"], string> = {
-    success: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-    warning: "bg-amber-50 text-amber-900 ring-amber-200",
-    error: "bg-red-50 text-red-800 ring-red-200",
-    info: "bg-stone-100 text-stone-700 ring-stone-200",
+    success: "border-emerald-600 bg-white",
+    warning: "border-brand-400 bg-brand-50",
+    error: "border-red-600 bg-white",
+    info: "border-stone-300 bg-stone-50",
   };
 
   return (
     <Modal
       open
-      onClose={() => {
+      onClose={async () => {
         // Closing mid-send would hide whether the email went out.
         if (busy || loading) return;
-        if (edited && !emailSent && !followedUp && !window.confirm("Close without using your edited message?")) return;
+        if (
+          edited &&
+          !emailSent &&
+          !followedUp &&
+          !(await confirm({
+            title: "Close without using your message?",
+            message: "Your edited message won't be kept.",
+            confirmLabel: "Discard message",
+            cancelLabel: "Keep editing",
+            danger: true,
+          }))
+        )
+          return;
         onClose();
       }}
       size="lg"
       title={`Follow up with ${firstName}`}
       description={
-        <span>
-          {quote.title} ·{" "}
-          <span className="num font-medium text-stone-700">
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          <span className="[overflow-wrap:anywhere]">{quote.title}</span>
+          <span className="num font-semibold text-stone-900">
             {formatCurrency(quote.amount, quote.currency)}
-          </span>{" "}
-          · {QUOTE_STATUS_LABELS[quote.status]}
+          </span>
+          <span>{QUOTE_STATUS_LABELS[quote.status]}</span>
         </span>
       }
     >
       <ReadOnlyNotice />
       <div className="space-y-4">
         {/* What will be written, with options tucked away */}
-        <div className="rounded-md bg-stone-50 px-3 py-2.5 ring-1 ring-inset ring-stone-200">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="text-stone-600">
-              <span className="font-medium text-stone-900">{MESSAGE_TYPE_LABELS[messageType]}</span>
-              {" · "}
-              {TONE_LABELS[tone]}
+        <div className="border-b border-stone-200 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[15px]">
+            <span className="text-stone-700">
+              <span className="font-semibold text-stone-900">{MESSAGE_TYPE_LABELS[messageType]}</span>
+              {", "}
+              {TONE_LABELS[tone].toLowerCase()} tone
               {messageType === suggested && (
-                <span className="ml-1.5 text-xs text-stone-400">suggested for this quote</span>
+                <span className="ml-2 text-stone-500">suggested for this quote</span>
               )}
             </span>
             <button
               type="button"
-              className="btn-ghost tap px-2 py-1 text-xs"
+              className="btn-ghost tap px-2 py-1 text-[15px]"
               onClick={() => setAdjusting((a) => !a)}
               aria-expanded={adjusting}
             >
@@ -371,7 +386,7 @@ export function AIMessageModal({
             </button>
           </div>
           {adjusting && (
-            <div className="mt-3 grid gap-3 border-t border-stone-200 pt-3 sm:grid-cols-2">
+            <div className="ql-in mt-3 grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="label" htmlFor="ai-type">Message</label>
                 <select
@@ -422,45 +437,45 @@ export function AIMessageModal({
 
         {/* The draft */}
         {!content && !loading && (
-          <div className="flex flex-col items-center rounded-md border border-dashed border-stone-300 px-6 py-8 text-center">
-            <button className="btn-accent px-4 py-2" onClick={generate} disabled={!canWrite}>
-              <Sparkles className="h-4 w-4" /> Draft follow-up for {firstName}
+          <div className="ql-fade py-2">
+            <button className="btn-primary px-4 py-2.5 text-base" onClick={generate} disabled={!canWrite}>
+              <PenLine className="h-4 w-4" /> Draft follow-up for {firstName}
             </button>
-            <p className="mt-2 text-xs text-stone-500">
+            <p className="mt-2 max-w-prose text-[15px] text-stone-600">
               Written from this quote&apos;s details. You review it; nothing is sent until you choose to.
             </p>
           </div>
         )}
 
         {loading && (
-          <div className="space-y-2 rounded-md border border-stone-200 p-4" aria-live="polite">
-            <div className="flex items-center gap-2 text-sm text-stone-500">
+          <div className="ql-fade space-y-2.5 rounded-[6px] border border-stone-300 p-4" aria-live="polite">
+            <div className="flex items-center gap-2 text-[15px] text-stone-600">
               <Loader2 className="h-4 w-4 animate-spin" /> Writing a draft…
             </div>
-            <div className="h-3 w-11/12 animate-pulse rounded bg-stone-100" />
-            <div className="h-3 w-9/12 animate-pulse rounded bg-stone-100" />
-            <div className="h-3 w-10/12 animate-pulse rounded bg-stone-100" />
+            <div className="h-3.5 w-11/12 rounded-[3px] bg-stone-100" />
+            <div className="h-3.5 w-9/12 rounded-[3px] bg-stone-100" />
+            <div className="h-3.5 w-10/12 rounded-[3px] bg-stone-100" />
           </div>
         )}
 
         {content && !loading && (
-          <div className="space-y-3">
+          <div className="ql-fade space-y-3">
             {/* Where the To line goes once there's an address: add one right here. */}
             {emailEnabled && replyToReady && !recipient && customerId && (
               <InlineCustomerEmail customerId={customerId} name={firstName} onSaved={loadHistory} />
             )}
             {canEmail && (
-              <div className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
+              <div className="divide-y divide-stone-200 rounded-[6px] border border-stone-400 text-[15px]">
                 <div className="flex items-start gap-3 px-3 py-2">
-                  <span className="w-14 shrink-0 text-stone-500">To</span>
+                  <span className="w-16 shrink-0 text-stone-600">To</span>
                   {/* Wraps rather than truncates: the whole address must be checkable. */}
-                  <span className="min-w-0 font-medium text-stone-800 [overflow-wrap:anywhere]">{recipient}</span>
+                  <span className="min-w-0 font-semibold text-stone-900 [overflow-wrap:anywhere]">{recipient}</span>
                 </div>
                 <div className="flex items-center gap-3 px-3 py-1.5">
-                  <label htmlFor="ai-subject" className="w-14 shrink-0 text-stone-500">Subject</label>
+                  <label htmlFor="ai-subject" className="w-16 shrink-0 text-stone-600">Subject</label>
                   <input
                     id="ai-subject"
-                    className="w-full bg-transparent py-0.5 text-stone-800 focus:outline-none"
+                    className="w-full bg-transparent py-0.5 text-base text-stone-900 focus:outline-none"
                     value={subject}
                     maxLength={200}
                     onChange={(e) => setSubject(e.target.value)}
@@ -476,13 +491,13 @@ export function AIMessageModal({
                 onChange={(e) => setContent(e.target.value)}
               />
               {edited && (
-                <span className="absolute right-2 top-2 rounded bg-stone-900 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                <span className="ql-pop absolute right-2 top-2 rounded-[4px] bg-brand-200 px-1.5 py-0.5 text-[13px] font-semibold text-stone-900">
                   Edited
                 </span>
               )}
             </div>
-            <p className="flex items-center gap-1.5 text-xs text-stone-500">
-              <ShieldCheck className="h-3.5 w-3.5 text-stone-400" />
+            <p className="flex items-center gap-1.5 text-[15px] text-stone-600">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-stone-500" />
               {canEmail
                 ? "Review before sending. It's only emailed when you click Send email."
                 : "Review before sending. Copy it into your own email or phone."}
@@ -491,7 +506,7 @@ export function AIMessageModal({
             <div className="flex flex-wrap items-center gap-2">
               {canEmail && (
                 <button
-                  className="btn-accent"
+                  className="btn-primary"
                   onClick={sendEmail}
                   disabled={busy || !content.trim() || emailSent || followedUp || sendLocked}
                 >
@@ -518,7 +533,7 @@ export function AIMessageModal({
                 {busy && action === "log" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : followedUp ? (
-                  <Check className="h-4 w-4 text-emerald-600" />
+                  <Check className="h-4 w-4 text-emerald-700" />
                 ) : null}
                 {followedUp ? "Followed up" : "Mark as followed up"}
               </button>
@@ -529,30 +544,30 @@ export function AIMessageModal({
 
             {!canEmail &&
               (!emailEnabled ? (
-                <p className="text-xs text-stone-500">
+                <p className="text-[15px] text-stone-600">
                   Email sending isn&apos;t set up for this workspace, so copy the message and send it yourself.
                 </p>
               ) : (
                 <div className="space-y-2">
                   {!replyToReady && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[6px] border-2 border-brand-400 bg-brand-50 px-3 py-2 text-[15px] text-stone-900">
                       <span>Add your business email in Settings before sending from QuoteLoop.</span>
                       <AddBusinessEmailButton
                         unsaved={edited && !emailSent && !followedUp}
-                        className="btn-secondary px-2.5 py-1 text-xs"
+                        className="btn-secondary px-2.5 py-1.5"
                       />
                     </div>
                   )}
                   {sampleRecipient && (
-                    <p className="rounded-md bg-violet-50 px-3 py-2 text-sm text-violet-900 ring-1 ring-inset ring-violet-200">
+                    <p className="rounded-[6px] border border-stone-300 bg-stone-50 px-3 py-2 text-[15px] text-stone-800">
                       This is a sample customer from the demo data, so QuoteLoop won&apos;t email them. Copy the
                       message to try it out.
                     </p>
                   )}
                   {!recipient && !customerId && (
-                    <p className="text-xs text-stone-500">
+                    <p className="text-[15px] text-stone-600">
                       Add an email address to this customer to send from QuoteLoop.{" "}
-                      <Link href="/leads" className="font-medium text-stone-700 underline-offset-2 hover:underline">
+                      <Link href="/leads" className="font-medium text-info-700 hover:underline">
                         Open Customers
                       </Link>
                     </p>
@@ -561,7 +576,7 @@ export function AIMessageModal({
               ))}
 
             {banner && (
-              <div className={cn("rounded-md px-3 py-2 text-sm ring-1 ring-inset", bannerStyle[banner.tone])} role="status">
+              <div className={cn("ql-fade rounded-[6px] border-2 px-3 py-2 text-[15px] text-stone-900", bannerStyle[banner.tone])} role="status">
                 {banner.text}
               </div>
             )}
@@ -569,13 +584,13 @@ export function AIMessageModal({
         )}
 
         {notice && (
-          <div className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+          <div className="ql-fade flex items-start gap-2 rounded-[6px] border-2 border-brand-400 bg-brand-50 px-3 py-2 text-[15px] text-stone-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{notice}</span>
           </div>
         )}
         {error && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+          <div className="ql-fade rounded-[6px] border-2 border-red-600 px-3 py-2 text-[15px] font-medium text-red-700">
             {error}
           </div>
         )}
@@ -583,15 +598,15 @@ export function AIMessageModal({
         {/* History */}
         <div className="border-t border-stone-200 pt-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="eyebrow">History</span>
+            <h3 className="text-[16px] font-semibold text-stone-900">History</h3>
             {history.length > 3 && (
-              <button className="tap inline-flex items-center justify-end text-xs font-medium text-stone-500 hover:text-stone-900" onClick={() => setShowAll((s) => !s)}>
+              <button className="tap inline-flex items-center justify-end text-[15px] font-medium text-info-700 hover:underline" onClick={() => setShowAll((s) => !s)}>
                 {showAll ? "Show less" : `Show all ${history.length}`}
               </button>
             )}
           </div>
           {history.length === 0 ? (
-            <p className="text-sm text-stone-500">
+            <p className="text-[15px] text-stone-600">
               Messages you draft will appear here for reference. When you send or log
               one, the exact text you used is kept.
             </p>
@@ -603,45 +618,45 @@ export function AIMessageModal({
                   className={cn(
                     "border-l-2 pl-3",
                     h.kind === "emailed" || h.kind === "logged"
-                      ? "border-emerald-500"
+                      ? "border-emerald-600"
                       : h.kind === "unconfirmed"
-                        ? "border-amber-400"
+                        ? "border-brand-400"
                         : h.kind === "failed"
-                          ? "border-red-300"
-                          : "border-stone-200"
+                          ? "border-red-600"
+                          : "border-stone-300"
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-baseline justify-between gap-2 text-[14px]">
                     {h.kind === "emailed" ? (
-                      <span className="truncate font-semibold text-emerald-800">
-                        Email sent to {h.to} · final text used
-                        {h.number ? ` · follow-up #${h.number}` : ""}
+                      <span className="min-w-0 font-semibold text-emerald-700 [overflow-wrap:anywhere]">
+                        Email sent to {h.to}, final text used
+                        {h.number ? ` (follow-up ${h.number})` : ""}
                       </span>
                     ) : h.kind === "logged" ? (
-                      <span className="font-semibold text-emerald-800">
-                        Logged follow-up #{h.number} · final text used
+                      <span className="font-semibold text-emerald-700">
+                        Follow-up {h.number} logged, final text used
                       </span>
                     ) : h.kind === "unconfirmed" ? (
-                      <span className="truncate font-medium text-amber-800">
-                        Email to {h.to} · delivery not confirmed
+                      <span className="min-w-0 font-semibold text-stone-900 [overflow-wrap:anywhere]">
+                        Email to {h.to}: delivery not confirmed
                       </span>
                     ) : h.kind === "failed" ? (
-                      <span className="truncate font-medium text-red-700">
-                        Email to {h.to} failed · no follow-up recorded
+                      <span className="min-w-0 font-semibold text-red-700 [overflow-wrap:anywhere]">
+                        Email to {h.to} failed, no follow-up recorded
                       </span>
                     ) : (
-                      <span className="font-medium text-stone-500">
-                        Generated draft · {MESSAGE_TYPE_LABELS[h.type]} · {TONE_LABELS[h.tone]}
+                      <span className="font-medium text-stone-600">
+                        Draft: {MESSAGE_TYPE_LABELS[h.type]}, {TONE_LABELS[h.tone].toLowerCase()} tone
                       </span>
                     )}
-                    <span className="shrink-0 text-stone-400">{formatDate(h.at)}</span>
+                    <span className="num shrink-0 text-stone-600">{formatDate(h.at)}</span>
                   </div>
                   {h.kind !== "failed" && (
                     <>
                       <p
                         className={cn(
-                          "mt-1 line-clamp-4 whitespace-pre-wrap text-sm",
-                          h.kind === "draft" ? "text-stone-500" : "text-stone-800"
+                          "mt-1 line-clamp-4 whitespace-pre-wrap text-[15px]",
+                          h.kind === "draft" ? "text-stone-600" : "text-stone-900"
                         )}
                       >
                         {h.text}
@@ -651,7 +666,7 @@ export function AIMessageModal({
                         text={h.text}
                         label="Copy"
                         showTextOnFail
-                        className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-xs"
+                        className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-[14px]"
                       />
                     </>
                   )}
@@ -661,6 +676,7 @@ export function AIMessageModal({
           )}
         </div>
       </div>
+      {confirmDialog}
     </Modal>
   );
 }
@@ -700,8 +716,8 @@ function InlineCustomerEmail({
   }
 
   return (
-    <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-      <label htmlFor="ai-add-email" className="text-sm font-medium text-stone-800">
+    <div className="rounded-[6px] border-2 border-stone-900 p-3">
+      <label htmlFor="ai-add-email" className="label">
         Add {name}&apos;s email to send this from QuoteLoop
       </label>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -725,9 +741,9 @@ function InlineCustomerEmail({
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Save email
         </button>
       </div>
-      <p className="mt-1 text-xs text-stone-500">Saved to this customer, so later follow-ups can be emailed too.</p>
+      <p className="mt-1 text-[15px] text-stone-600">Saved to this customer, so later follow-ups can be emailed too.</p>
       {error && (
-        <p role="alert" className="mt-1 text-sm text-red-700">
+        <p role="alert" className="mt-1 text-[15px] font-medium text-red-700">
           {error}
         </p>
       )}

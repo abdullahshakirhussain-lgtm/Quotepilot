@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { BusinessForm } from "@/components/BusinessForm";
 import { createBusiness } from "@/app/(app)/settings/actions";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 export const dynamic = "force-dynamic";
 
@@ -19,36 +20,28 @@ export default async function OnboardingPage() {
   if (business) redirect("/dashboard");
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10">
-      <div className="w-full max-w-2xl">
-        <div className="mb-6 flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-          QuoteLoop
-        </div>
-        <div className="card p-6 sm:p-8">
-          <p className="eyebrow text-brand-700">Welcome to QuoteLoop</p>
-          <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-900">
-            Tell us about your business
-          </h1>
-          <p className="mt-1 text-sm text-stone-500">
-            Your name and business sign the follow-ups QuoteLoop drafts. You can
-            change any of this later in Settings.
-          </p>
-          <div className="mt-6">
-            <BusinessForm
-              action={createBusiness}
-              submitLabel="Create workspace"
-              suggested={{
-                // Google sign-in provides a name; email/password users type theirs.
-                owner_name:
-                  (user.user_metadata?.full_name as string | undefined) ??
-                  (user.user_metadata?.name as string | undefined) ??
-                  "",
-                email: user.email ?? "",
-              }}
-            />
-          </div>
+    <AuthShell wide>
+      <div className="ql-in">
+        <p className="text-[15px] font-semibold text-stone-700">Welcome to QuoteLoop</p>
+        <h1 className="page-title mt-2">Tell us about your business</h1>
+        <p className="mt-3 max-w-prose text-base text-stone-700">
+          Your name and business sign the follow-ups QuoteLoop drafts. You can change any of this later in Settings.
+        </p>
+        <div className="mt-6 border-t border-[#ECEEF1] pt-6">
+          <BusinessForm
+            action={createBusiness}
+            submitLabel="Create workspace"
+            suggested={{
+              // Google sign-in provides a name; email/password users type theirs.
+              owner_name:
+                (user.user_metadata?.full_name as string | undefined) ??
+                (user.user_metadata?.name as string | undefined) ??
+                "",
+              email: user.email ?? "",
+            }}
+          />
         </div>
       </div>
-    </main>
+    </AuthShell>
   );
 }

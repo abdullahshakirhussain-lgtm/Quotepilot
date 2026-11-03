@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
@@ -85,9 +86,21 @@ export function SendDraftQuoteModal({
   }
 
   // Closing mid-send would hide whether the email went out; edits ask first.
-  function requestClose() {
+  const [confirm, confirmDialog] = useConfirm();
+  async function requestClose() {
     if (busy) return;
-    if (edited && !locked && !window.confirm("Close without sending? Your changes to the email won't be kept.")) return;
+    if (
+      edited &&
+      !locked &&
+      !(await confirm({
+        title: "Close without sending?",
+        message: "Your changes to the email won't be kept.",
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        danger: true,
+      }))
+    )
+      return;
     onClose();
   }
 
@@ -121,7 +134,7 @@ export function SendDraftQuoteModal({
         />
 
         {error && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+          <div className="msg-error">
             {error}
             {locked && (
               <div className="mt-2">
@@ -158,6 +171,7 @@ export function SendDraftQuoteModal({
           </button>
         </div>
       </div>
+      {confirmDialog}
     </Modal>
   );
 }

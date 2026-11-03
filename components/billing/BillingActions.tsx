@@ -54,7 +54,7 @@ export function BillingActions({
         {mode === "subscribe" ? "Subscribe" : "Manage billing"}
       </button>
       {mode === "manage" && !error && (
-        <p className="text-xs text-stone-500">Opens Paddle, our payment provider. Come back to quoteloop.site/settings when you're done.</p>
+        <p className="hint">Opens Paddle, our payment provider. Come back to quoteloop.site/settings when you're done.</p>
       )}
       {error && (
         <p role="alert" className="text-sm text-red-700">

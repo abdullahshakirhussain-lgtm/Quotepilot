@@ -80,7 +80,7 @@ export function CopyButton({
       </button>
       {state === "failed" && (
         // Last in a row of buttons, on a line of its own.
-        <div role="alert" className="order-last w-full basis-full text-xs text-red-700">
+        <div role="alert" className="order-last w-full basis-full text-[15px] font-medium text-red-700">
           {COPY_FAILED}
           {showTextOnFail && (
             <textarea

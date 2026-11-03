@@ -39,16 +39,12 @@ export default function ResetPasswordForm({ email }: { email: string | null }) {
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <Link href="/" className="tap mb-8 flex items-center justify-center gap-2.5 text-[15px] font-semibold tracking-tight">
-        QuoteLoop
-      </Link>
-
-      <div className="card p-7">
+    <div className="w-full">
+      <div className="ql-in">
         {done ? (
           <>
-            <h1 className="text-lg font-semibold text-stone-900">Password changed</h1>
-            <p className="mt-2 text-sm text-stone-600">
+            <h1 className="page-title">Password changed</h1>
+            <p className="mt-3 text-base text-stone-800">
               Your new password is saved and you&apos;re logged in. Use it next time you log in with your email.
             </p>
             <Link href="/dashboard" className="btn-primary mt-6 w-full">
@@ -57,8 +53,8 @@ export default function ResetPasswordForm({ email }: { email: string | null }) {
           </>
         ) : (
           <>
-            <h1 className="text-xl font-semibold tracking-tight text-stone-900">Choose a new password</h1>
-            <p className="mt-1 text-sm text-stone-500">
+            <h1 className="page-title">Choose a new password</h1>
+            <p className="mt-3 text-base text-stone-700">
               {email ? (
                 <>
                   For <span className="break-all font-medium text-stone-700">{email}</span>.
@@ -103,13 +99,13 @@ export default function ResetPasswordForm({ email }: { email: string | null }) {
               {error && (
                 <div
                   role="alert"
-                  className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200"
+                  className="msg-error"
                 >
                   {error}
                 </div>
               )}
 
-              <button type="submit" className="btn-primary w-full py-2" disabled={loading}>
+              <button type="submit" className="btn-primary w-full py-3 text-base" disabled={loading}>
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Save new password
               </button>

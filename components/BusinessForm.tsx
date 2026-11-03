@@ -157,7 +157,7 @@ export function BusinessForm({
 
         <div
           id="business-email"
-          className={cn("sm:col-span-2", highlightEmail && "-m-3 rounded-lg bg-brand-50 p-3 ring-2 ring-brand-500")}
+          className={cn("sm:col-span-2", highlightEmail && "-m-3 rounded-[6px] bg-brand-50 p-3 ring-2 ring-stone-900")}
         >
           <label htmlFor="email" className="label">
             Business email
@@ -171,7 +171,7 @@ export function BusinessForm({
             defaultValue={initial?.email ?? suggested?.email ?? ""}
             placeholder="hello@yourbusiness.com"
           />
-          <p className="mt-1 text-xs text-stone-500">
+          <p className="hint mt-1">
             Needed to send emails from QuoteLoop: your customers&apos; replies come here.
           </p>
         </div>
@@ -179,7 +179,7 @@ export function BusinessForm({
 
       <div>
         <span className="label">Default follow-up schedule</span>
-        <p className="mb-2 text-xs text-stone-500">
+        <p className="hint mb-2">
           Once a quote goes out, QuoteLoop schedules follow-ups on these days
           after it was sent.
         </p>
@@ -187,14 +187,14 @@ export function BusinessForm({
           {FOLLOW_UP_DAY_OPTIONS.map((d) => (
             <label
               key={d}
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-stone-300 px-3 py-1.5 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
+              className="tap flex cursor-pointer items-center gap-2 rounded-full border border-stone-300 px-3.5 py-1.5 text-[14px] font-medium text-stone-600 transition-colors duration-150 ease-board has-[:checked]:border-stone-900 has-[:checked]:bg-stone-900 has-[:checked]:text-white has-[:focus-visible]:outline has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-stone-900"
             >
               <input
                 type="checkbox"
                 name="default_follow_up_days"
                 value={d}
                 defaultChecked={selectedDays.includes(d)}
-                className="accent-brand-600"
+                className="h-4 w-4 accent-white"
               />
               Day {d}
             </label>
@@ -203,12 +203,12 @@ export function BusinessForm({
       </div>
 
       {state.error && (
-        <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div role="alert" className="msg-error">
           {state.error}
         </div>
       )}
       {notice && (
-        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div role="status" className="msg-success">
           {notice}
         </div>
       )}

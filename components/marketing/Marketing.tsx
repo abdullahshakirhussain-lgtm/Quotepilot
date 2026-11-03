@@ -1,40 +1,65 @@
 // Sections shared by the landing page and the trade pages. Server components
-// only: the public pages stay static.
+// only: the public pages stay static. Same look as the app: white page,
+// black-marker rules between sections, condensed display type for headings.
 
 import Link from "next/link";
-import { ArrowRight, Check, Mail, Reply } from "lucide-react";
 import { CONTACT_EMAIL, FOUNDER, LIMITS, PLAN_INCLUDES, PRICE_LABEL, PRICE_LINE, PRICE_MONTHLY, TRIAL_DAYS } from "@/lib/marketing";
 
-export const h2 = "text-balance text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl";
+export const h2 = "text-balance text-[27px] font-semibold leading-tight text-stone-900 sm:text-[34px]";
+
+/** Page width and side gutters, shared by every public section. */
+export const wrap = "mx-auto w-full max-w-[1240px] px-4 sm:px-6 lg:px-10";
 
 /** The main call to action, worded the same everywhere. */
 export const START_LABEL = `Start ${TRIAL_DAYS}-day free trial`;
 
+/** A section under a black-marker rule. */
+export function Band({
+  id,
+  labelledBy,
+  className = "",
+  children,
+}: {
+  id?: string;
+  labelledBy?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} aria-labelledby={labelledBy} className={`${wrap} ${className}`}>
+      <div className="card mb-5 px-5 py-8 sm:px-10 sm:py-12">{children}</div>
+    </section>
+  );
+}
+
 export function MarketingHeader({ onHome = false }: { onHome?: boolean }) {
   // On the landing page the links scroll; elsewhere they go back to it.
   const at = (id: string) => (onHome ? `#${id}` : `/#${id}`);
+  const link = "tap hidden items-center px-2 text-[14px] font-medium text-stone-200 hover:text-white lg:px-3";
   return (
-    <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-5">
-      <Link href="/" className="tap inline-flex items-center text-[15px] font-semibold tracking-tight text-stone-950">
-        QuoteLoop
-      </Link>
-      <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
-        <a href={at("how-it-works")} className="btn-ghost hidden md:inline-flex">
-          How it works
-        </a>
-        <a href={at("pricing")} className="btn-ghost hidden sm:inline-flex">
-          Pricing
-        </a>
-        <a href={at("faq")} className="btn-ghost hidden md:inline-flex">
-          FAQ
-        </a>
-        <Link href="/login" className="btn-ghost">
-          Log in
+    <header className="bg-stone-900 text-white">
+      <div className={`${wrap} flex items-center justify-between gap-4 py-3`}>
+        <Link href="/" className="tap inline-flex items-center text-[20px] font-bold leading-none text-white">
+          QuoteLoop
         </Link>
-        <Link href="/signup" className="btn-primary">
-          Start free
-        </Link>
-      </nav>
+        <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
+          <a href={at("how-it-works")} className={`${link} md:inline-flex`}>
+            How it works
+          </a>
+          <a href={at("pricing")} className={`${link} sm:inline-flex`}>
+            Pricing
+          </a>
+          <a href={at("faq")} className={`${link} md:inline-flex`}>
+            FAQ
+          </a>
+          <Link href="/login" className="tap inline-flex items-center px-2 text-[14px] font-medium text-stone-200 hover:text-white">
+            Log in
+          </Link>
+          <Link href="/signup" className="btn tap bg-white py-2.5 text-stone-900 hover:bg-stone-100">
+            Start free
+          </Link>
+        </nav>
+      </div>
     </header>
   );
 }
@@ -42,16 +67,16 @@ export function MarketingHeader({ onHome = false }: { onHome?: boolean }) {
 /** Phones only: the sign-up button stays in reach while scrolling. */
 export function MobileCta() {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:hidden">
-      <Link href="/signup" className="btn-accent w-full justify-center py-2.5 text-base">
-        {START_LABEL} <ArrowRight className="h-4 w-4" />
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:hidden">
+      <Link href="/signup" className="btn-primary w-full justify-center py-3 text-base">
+        {START_LABEL}
       </Link>
-      <p className="mt-1.5 text-center text-xs text-stone-500">Then {PRICE_LABEL}/month. No credit card to start.</p>
+      <p className="mt-1.5 text-center text-[14px] text-stone-600">Then {PRICE_LABEL}/month. No credit card to start.</p>
     </div>
   );
 }
 
-/** A screenshot of the real app in a simple window frame. */
+/** A screenshot of the real app, framed by a plain black border (no fake window chrome). */
 export function Screenshot({
   src,
   alt,
@@ -71,15 +96,8 @@ export function Screenshot({
 }) {
   return (
     <div
-      className={`overflow-hidden border border-stone-200 bg-white shadow-xl shadow-stone-900/10 ${phone ? "rounded-[1.75rem] p-1.5" : "rounded-xl"} ${className}`}
+      className={`overflow-hidden border border-line bg-white shadow-[0_8px_24px_rgba(16,24,40,0.08)] ${phone ? "rounded-[22px]" : "rounded-[12px]"} ${className}`}
     >
-      {!phone && (
-        <div aria-hidden className="flex gap-1.5 border-b border-stone-200 bg-stone-50 px-3 py-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-stone-300" />
-          <span className="h-2.5 w-2.5 rounded-full bg-stone-300" />
-          <span className="h-2.5 w-2.5 rounded-full bg-stone-300" />
-        </div>
-      )}
       {/* Plain img: the files are already sized WebP, and the public pages stay static. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -89,7 +107,7 @@ export function Screenshot({
         height={height}
         loading={priority ? "eager" : "lazy"}
         decoding="async"
-        className={`block h-auto w-full ${phone ? "rounded-[1.4rem]" : ""}`}
+        className="block h-auto w-full"
       />
     </div>
   );
@@ -122,39 +140,50 @@ const STATS = [
   },
 ];
 
+/** The sums, set like lines on a ledger: figure on the left, what it means on the right. */
 export function LostQuoteStats() {
   return (
-    <section aria-labelledby="lost-quote" className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-      <h2 id="lost-quote" className={h2}>
-        What a lost quote really costs
-      </h2>
-      <p className="mt-3 max-w-2xl leading-relaxed text-stone-600">
-        A quote that goes quiet isn&apos;t always a &quot;no&quot;. Often the customer just got busy, and the
-        job goes to whoever checks in first.
-      </p>
-      <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {STATS.map((stat) => (
-          <li key={stat.value} className="card flex flex-col p-5">
-            <p className="num text-4xl font-semibold tracking-tight text-stone-950">{stat.value}</p>
-            <p className="mt-1 text-sm font-semibold text-brand-700">{stat.label}</p>
-            <p className="mt-3 text-sm leading-relaxed text-stone-600">{stat.body}</p>
-            {stat.source && (
-              <a
-                href={stat.source.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="tap mt-auto inline-flex items-center self-start pt-1 text-xs text-stone-400 underline-offset-2 hover:text-stone-600 hover:underline"
-              >
-                Source: {stat.source.label}
-              </a>
-            )}
-          </li>
-        ))}
-      </ul>
-      <p className="mt-4 text-xs text-stone-400">
-        Examples use a $2,500 job. Your numbers will differ, but the sums work the same way.
-      </p>
-    </section>
+    <Band labelledBy="lost-quote">
+      <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr] lg:gap-16">
+        <div>
+          <h2 id="lost-quote" className={h2}>
+            What a lost quote really costs
+          </h2>
+          <p className="mt-4 max-w-md text-lg leading-relaxed text-stone-700">
+            A quote that goes quiet isn&apos;t always a &quot;no&quot;. Often the customer just got busy, and the job goes
+            to whoever checks in first.
+          </p>
+        </div>
+        <div>
+          <dl className="divide-y divide-stone-200 border-y border-stone-300">
+            {STATS.map((stat) => (
+              <div key={stat.value} className="grid grid-cols-1 gap-x-6 gap-y-1 py-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-baseline">
+                <dt className="num text-[31px] font-semibold leading-none text-stone-900">{stat.value}</dt>
+                <dd className="text-base leading-relaxed text-stone-700">
+                  <span className="font-semibold text-stone-900">{stat.label}</span> {stat.body}
+                  {stat.source && (
+                    <>
+                      {" "}
+                      <a
+                        href={stat.source.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tap inline-flex items-center text-[14px] text-stone-600 underline decoration-stone-300 underline-offset-4 hover:text-stone-900 hover:decoration-stone-900"
+                      >
+                        Source: {stat.source.label}
+                      </a>
+                    </>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 text-[14px] text-stone-600">
+            Examples use a $2,500 job. Your numbers will differ, but the sums work the same way.
+          </p>
+        </div>
+      </div>
+    </Band>
   );
 }
 
@@ -163,7 +192,7 @@ const TOUR = [
     src: "/screens/follow-ups.webp",
     width: 2560,
     height: 1600,
-    alt: "The Follow-ups page: one overdue follow-up, two due today and four coming up, each with Write follow-up and Mark followed up buttons",
+    alt: "The Follow-ups page: overdue, due today and coming up, each with Write follow-up and Mark followed up buttons",
     title: "See who to follow up with today",
     body: "Overdue, due today and coming up, in that order. One tap to write the message, one tap to mark it done.",
   },
@@ -171,15 +200,15 @@ const TOUR = [
     src: "/screens/follow-up-writer.webp",
     width: 2560,
     height: 1600,
-    alt: "The follow-up writer with a drafted email to Marcus about his AC service quote, and Send email and Copy message buttons",
+    alt: "The follow-up writer with a drafted message to a customer about their quote, and Send email and Copy message buttons",
     title: "A draft in seconds, sent when you say so",
     body: "QuoteLoop writes a first draft from the quote. Edit it, then send it from QuoteLoop or copy it anywhere.",
   },
   {
     src: "/screens/pipeline.webp",
-    width: 2880,
-    height: 1280,
-    alt: "The Pipeline page showing customers by stage, from quote sent to won and lost",
+    width: 2560,
+    height: 1200,
+    alt: "The Pipeline page showing customers by stage, from new to won and lost",
     title: "Know where every job stands",
     body: "Every customer by stage, with what's still waiting and what you've won.",
   },
@@ -187,180 +216,207 @@ const TOUR = [
 
 export function ProductTour() {
   return (
-    <section id="tour" aria-labelledby="tour-heading" className="border-y border-stone-200 bg-white">
-      <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <h2 id="tour-heading" className={h2}>
-          See it in action
-        </h2>
-        <p className="mt-3 max-w-2xl leading-relaxed text-stone-600">
-          Real screens from QuoteLoop, with a made-up business. After you sign up you can load the same kind
-          of sample data in one click and try everything before adding your own.
-        </p>
-        <div className="mt-10 grid gap-12">
-          {TOUR.map((item) => (
-            <div key={item.src} className="grid items-center gap-6 lg:grid-cols-[1fr_2fr] lg:gap-10">
-              <div>
-                <h3 className="text-lg font-semibold text-stone-900">{item.title}</h3>
-                <p className="mt-2 leading-relaxed text-stone-600">{item.body}</p>
-              </div>
-              <Screenshot src={item.src} alt={item.alt} width={item.width} height={item.height} />
+    <Band id="tour" labelledBy="tour-heading">
+      <h2 id="tour-heading" className={h2}>
+        See it in action
+      </h2>
+      <p className="mt-4 max-w-2xl text-lg leading-relaxed text-stone-700">
+        Real screens from QuoteLoop, with a made-up business. After you sign up you can load the same kind of sample
+        data in one click and try everything before adding your own.
+      </p>
+      <div className="mt-12 grid gap-14">
+        {TOUR.map((item) => (
+          <div key={item.src} className="grid items-start gap-6 lg:grid-cols-[1fr_2.2fr] lg:gap-12">
+            <div className="lg:border-t lg:border-stone-300 lg:pt-4">
+              <h3 className="text-[20px] font-semibold leading-tight text-stone-900">{item.title}</h3>
+              <p className="mt-2 text-base leading-relaxed text-stone-700">{item.body}</p>
             </div>
-          ))}
-          <div className="grid items-center gap-6 sm:grid-cols-[1fr_1fr] lg:grid-cols-[1fr_2fr] lg:gap-10">
-            <div>
-              <h3 className="text-lg font-semibold text-stone-900">Made for your phone</h3>
-              <p className="mt-2 leading-relaxed text-stone-600">
-                Follow up from the van or between jobs. QuoteLoop works in your phone&apos;s browser, with every
-                page one tap away. Nothing to install.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4 sm:max-w-md">
-              <Screenshot src="/screens/phone-dashboard.webp" alt="The QuoteLoop home screen on a phone" width={780} height={1688} phone />
-              <Screenshot src="/screens/phone-follow-ups.webp" alt="The Follow-ups page on a phone" width={780} height={1688} phone />
-            </div>
+            <Screenshot src={item.src} alt={item.alt} width={item.width} height={item.height} />
+          </div>
+        ))}
+        <div className="grid items-start gap-6 lg:grid-cols-[1fr_2.2fr] lg:gap-12">
+          <div className="lg:border-t lg:border-stone-300 lg:pt-4">
+            <h3 className="text-[20px] font-semibold leading-tight text-stone-900">Made for your phone</h3>
+            <p className="mt-2 text-base leading-relaxed text-stone-700">
+              Follow up from the van or between jobs. QuoteLoop works in your phone&apos;s browser, with every page one
+              tap away. Nothing to install.
+            </p>
+          </div>
+          <div className="grid max-w-lg grid-cols-2 gap-4">
+            <Screenshot src="/screens/phone-dashboard.webp" alt="The QuoteLoop home screen on a phone" width={780} height={1688} phone />
+            <Screenshot src="/screens/phone-follow-ups.webp" alt="The Follow-ups page on a phone" width={780} height={1688} phone />
           </div>
         </div>
       </div>
-    </section>
+    </Band>
   );
 }
 
 /** What the customer receives when a follow-up is sent from QuoteLoop. */
 export function CustomerEmailPreview() {
+  const facts = [
+    <>It arrives from &quot;Your Business via QuoteLoop&quot;, sent from QuoteLoop&apos;s verified mail domain.</>,
+    <>When they reply, it goes straight to your own inbox.</>,
+    <>
+      One message to one customer, only when you click Send. Up to {LIMITS.emailsPerMonth} a month, or copy the message
+      to WhatsApp, text or your own email as often as you like.
+    </>,
+  ];
   return (
-    <section aria-labelledby="customer-sees" className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:py-20 lg:grid-cols-2 lg:items-center lg:gap-16">
-      <div>
-        <h2 id="customer-sees" className={h2}>
-          What your customer receives
-        </h2>
-        <p className="mt-4 leading-relaxed text-stone-600">
-          A plain, personal email with your business name on it, not a newsletter.
-        </p>
-        <ul className="mt-6 space-y-3 text-stone-700">
-          <li className="flex gap-3">
-            <Mail className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" aria-hidden />
-            It arrives from &quot;Your Business via QuoteLoop&quot;, sent from QuoteLoop&apos;s verified mail domain.
-          </li>
-          <li className="flex gap-3">
-            <Reply className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" aria-hidden />
-            When they reply, it goes straight to your own inbox.
-          </li>
-          <li className="flex gap-3">
-            <Check className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" aria-hidden />
-            One message to one customer, only when you click Send. Up to {LIMITS.emailsPerMonth} a month, or copy the
-            message to WhatsApp, text or your own email as often as you like.
-          </li>
-        </ul>
-      </div>
-      <figure className="card overflow-hidden text-sm">
-        <figcaption className="sr-only">Example of a follow-up email as the customer sees it</figcaption>
-        <dl className="divide-y divide-stone-100 border-b border-stone-200 bg-stone-50 text-stone-600">
-          <div className="flex gap-3 px-4 py-2">
-            <dt className="w-16 shrink-0 text-stone-400">From</dt>
-            <dd className="min-w-0 truncate font-medium text-stone-900">Northside Home Services via QuoteLoop</dd>
-          </div>
-          <div className="flex gap-3 px-4 py-2">
-            <dt className="w-16 shrink-0 text-stone-400">Reply to</dt>
-            <dd className="min-w-0 truncate">hello@northsidehome.com</dd>
-          </div>
-          <div className="flex gap-3 px-4 py-2">
-            <dt className="w-16 shrink-0 text-stone-400">Subject</dt>
-            <dd className="min-w-0 truncate">Following up on your quote: AC service, 3 units</dd>
-          </div>
-        </dl>
-        <div className="space-y-3 px-4 py-4 leading-relaxed text-stone-800">
-          <p>Hi Marcus,</p>
-          <p>
-            Just checking you received our quote for servicing your three AC units. Happy to answer any questions, or
-            line up a weekend slot if that&apos;s easier.
+    <Band labelledBy="customer-sees">
+      <div className="grid gap-10 lg:grid-cols-2 lg:items-start lg:gap-16">
+        <div>
+          <h2 id="customer-sees" className={h2}>
+            What your customer receives
+          </h2>
+          <p className="mt-4 text-lg leading-relaxed text-stone-700">
+            A plain, personal email with your business name on it, not a newsletter.
           </p>
-          <p>
-            Best,
-            <br />
-            Ana Rivera, Northside Home Services
-          </p>
-          <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">
-            You&apos;re receiving this because you requested a quote from Northside Home Services. Just reply to this
-            email to respond.
-          </p>
+          <ul className="mt-6 divide-y divide-stone-200 border-y border-stone-300">
+            {facts.map((fact, i) => (
+              <li key={i} className="py-3 text-base leading-relaxed text-stone-800">
+                {fact}
+              </li>
+            ))}
+          </ul>
         </div>
-      </figure>
-    </section>
+        <figure className="overflow-hidden rounded-[8px] border border-line bg-white text-base">
+          <figcaption className="sr-only">Example of a follow-up email as the customer sees it</figcaption>
+          <dl className="divide-y divide-stone-200 border-b border-line text-[15px]">
+            <div className="flex gap-3 px-4 py-2">
+              <dt className="w-20 shrink-0 text-stone-600">From</dt>
+              <dd className="min-w-0 font-semibold text-stone-900 [overflow-wrap:anywhere]">Northside Home Services via QuoteLoop</dd>
+            </div>
+            <div className="flex gap-3 px-4 py-2">
+              <dt className="w-20 shrink-0 text-stone-600">Reply to</dt>
+              <dd className="min-w-0 text-stone-800 [overflow-wrap:anywhere]">hello@northsidehome.com</dd>
+            </div>
+            <div className="flex gap-3 px-4 py-2">
+              <dt className="w-20 shrink-0 text-stone-600">Subject</dt>
+              <dd className="min-w-0 text-stone-800 [overflow-wrap:anywhere]">Following up on your quote: AC service, 3 units</dd>
+            </div>
+          </dl>
+          <div className="space-y-3 px-4 py-5 leading-relaxed text-stone-900">
+            <p>Hi Marcus,</p>
+            <p>
+              Just checking you received our quote for servicing your three AC units. Happy to answer any questions, or
+              line up a weekend slot if that&apos;s easier.
+            </p>
+            <p>
+              Best,
+              <br />
+              Ana Rivera, Northside Home Services
+            </p>
+            <p className="border-t border-stone-200 pt-3 text-[14px] text-stone-600">
+              You&apos;re receiving this because you requested a quote from Northside Home Services. Just reply to this
+              email to respond.
+            </p>
+          </div>
+        </figure>
+      </div>
+    </Band>
   );
 }
 
 export function Pricing() {
   return (
-    <section id="pricing" aria-labelledby="pricing-heading" className="border-y border-stone-200 bg-white">
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:py-20 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:gap-16">
+    <Band id="pricing" labelledBy="pricing-heading">
+      <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:items-start lg:gap-16">
         <div>
           <h2 id="pricing-heading" className={h2}>
             One simple price
           </h2>
-          <p className="mt-4 max-w-xl leading-relaxed text-stone-600">
+          <p className="mt-4 max-w-xl text-lg leading-relaxed text-stone-700">
             Try everything free for {TRIAL_DAYS} days. No credit card to start, no setup fee and no contract.
           </p>
-          <p className="mt-3 max-w-xl leading-relaxed text-stone-600">
+          <p className="mt-3 max-w-xl text-lg leading-relaxed text-stone-700">
             If QuoteLoop helps you win back even one job a month, it has paid for itself many times over.
           </p>
         </div>
-        <div className="rounded-xl border-2 border-stone-900 p-6 sm:p-8">
-          <p className="text-sm font-semibold text-brand-700">QuoteLoop</p>
-          <p className="mt-2 flex items-baseline gap-1.5">
-            <span className="num text-5xl font-semibold tracking-tight text-stone-950">{PRICE_LABEL}</span>
-            <span className="text-stone-500">/ month</span>
+        {/* The plan is a real object, so it gets the one box on the page. */}
+        <div className="rounded-[8px] border border-line bg-white p-6 sm:p-8">
+          <p className="text-[19px] font-semibold text-stone-900">QuoteLoop</p>
+          <p className="mt-1 flex items-baseline gap-2">
+            <span className="num text-[45px] font-semibold leading-none text-stone-900">{PRICE_LABEL}</span>
+            <span className="text-lg text-stone-700">a month</span>
           </p>
-          <p className="mt-1 text-sm text-stone-600">{PRICE_LINE}</p>
-          <ul className="mt-6 grid gap-2.5 text-sm text-stone-700 sm:grid-cols-2">
+          <p className="mt-2 text-base text-stone-700">{PRICE_LINE}</p>
+          <ul className="mt-6 grid gap-x-6 border-t border-stone-300 text-base text-stone-800 sm:grid-cols-2">
             {PLAN_INCLUDES.map((item) => (
-              <li key={item} className="flex gap-2">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+              <li key={item} className="border-b border-stone-200 py-2">
                 {item}
               </li>
             ))}
           </ul>
-          <Link href="/signup" className="btn-accent mt-7 w-full justify-center px-5 py-2.5 text-base">
-            {START_LABEL} <ArrowRight className="h-4 w-4" />
+          <Link href="/signup" className="btn-primary mt-7 w-full justify-center py-3 text-base">
+            {START_LABEL}
           </Link>
-          <p className="mt-3 text-center text-xs text-stone-500">No credit card needed to start your trial.</p>
+          <p className="mt-3 text-[14px] text-stone-600">No credit card needed to start your trial.</p>
         </div>
       </div>
-    </section>
+    </Band>
   );
 }
 
 export function FounderNote() {
   return (
-    <section aria-labelledby="who" className="mx-auto max-w-3xl px-6 py-16 sm:py-20">
-      <h2 id="who" className={h2}>
-        Who&apos;s behind QuoteLoop
-      </h2>
-      <p className="mt-4 leading-relaxed text-stone-600">
-        QuoteLoop is built and run by {FOUNDER}, an independent developer. It does one job, following up on
-        quotes, and it&apos;s built to stay simple, private and fairly priced.
-      </p>
-      <p className="mt-3 leading-relaxed text-stone-600">
-        Questions, ideas or something not working? Email{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`} className="font-medium text-stone-900 underline underline-offset-2">
-          {CONTACT_EMAIL}
-        </a>{" "}
-        and you&apos;ll hear back from a real person.
-      </p>
-    </section>
+    <Band labelledBy="who">
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr] lg:gap-16">
+        <h2 id="who" className={h2}>
+          Who&apos;s behind QuoteLoop
+        </h2>
+        <div className="max-w-2xl text-lg leading-relaxed text-stone-700">
+          <p>
+            QuoteLoop is built and run by {FOUNDER}, an independent developer. It does one job, following up on quotes,
+            and it&apos;s built to stay simple, private and fairly priced.
+          </p>
+          <p className="mt-3">
+            Questions, ideas or something not working? Email{" "}
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="font-medium text-info-700 hover:underline"
+            >
+              {CONTACT_EMAIL}
+            </a>{" "}
+            and you&apos;ll hear back from a real person.
+          </p>
+        </div>
+      </div>
+    </Band>
   );
 }
 
 export function FinalCta({ heading, body }: { heading: string; body: string }) {
   return (
-    <section className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-      <div className="rounded-xl bg-stone-950 px-6 py-12 text-center sm:px-12">
-        <h2 className="text-balance text-2xl font-semibold tracking-tight text-white sm:text-3xl">{heading}</h2>
-        <p className="mx-auto mt-3 max-w-xl text-balance leading-relaxed text-stone-300">{body}</p>
-        <Link href="/signup" className="btn-accent mt-7 px-5 py-2.5 text-base">
-          {START_LABEL} <ArrowRight className="h-4 w-4" />
+    <Band>
+      <div className="max-w-3xl">
+        <h2 className="text-balance text-[34px] font-semibold leading-[1.08] text-stone-900 sm:text-[45px]">
+          {heading}
+        </h2>
+        <p className="mt-4 max-w-xl text-lg leading-relaxed text-stone-700">{body}</p>
+        <Link href="/signup" className="btn-primary mt-7 px-6 py-3 text-base">
+          {START_LABEL}
         </Link>
-        <p className="mt-4 text-balance text-sm text-stone-400">{PRICE_LINE} No credit card to start.</p>
+        <p className="mt-3 text-[15px] text-stone-600">{PRICE_LINE} No credit card to start.</p>
       </div>
-    </section>
+    </Band>
+  );
+}
+
+/** Links to the trade pages, as plain underlined words (not pill chips). */
+export function TradeLinks({ trades }: { trades: { slug: string; industry: string }[] }) {
+  return (
+    <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-1">
+      {trades.map((trade) => (
+        <li key={trade.slug}>
+          <Link
+            href={`/for/${trade.slug}`}
+            className="tap inline-flex items-center text-[19px] font-semibold text-stone-900 underline decoration-stone-300 decoration-2 underline-offset-4 hover:decoration-stone-900"
+          >
+            {trade.industry}
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

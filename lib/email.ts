@@ -75,7 +75,7 @@ export function composeEmailText(message: string, businessName: string): string 
   const name = businessName.trim() || "this business";
   return (
     `${message.trim()}\n\n` +
-    `—\nYou're receiving this because you requested a quote from ${name}. ` +
+    `--\nYou're receiving this because you requested a quote from ${name}. ` +
     `Just reply to this email to respond.`
   );
 }

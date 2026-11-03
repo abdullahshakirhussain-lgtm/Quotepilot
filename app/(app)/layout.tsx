@@ -5,7 +5,7 @@ import { getRequestTimeZone, requestToday } from "@/lib/request-time";
 import { getAccess } from "@/lib/billing-server";
 import { BillingBanner } from "@/components/billing/BillingBanner";
 import { AccessFlag } from "@/components/billing/AccessContext";
-import { Sidebar } from "@/components/Sidebar";
+import { Sidebar, TabBar, TopBar } from "@/components/Sidebar";
 import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -49,16 +49,24 @@ export default async function AppLayout({
   // No workspace yet -> send them through onboarding first.
   if (!business) redirect("/onboarding");
 
+  // A trial with more than three days left isn't news: a quiet line in the
+  // navigation instead of a banner on every page.
+  const quietTrial = access.state === "trial" && (access.daysLeft ?? 0) > 3;
+
+  const attentionCount = new Set(attention.map((f) => f.quote_id)).size;
+
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="flex min-h-screen flex-col">
       <AccessFlag canWrite={access.canWrite} />
-      <Sidebar
+      <TopBar
         businessName={business.business_name}
-        attentionCount={new Set(attention.map((f) => f.quote_id)).size}
+        trialNote={quietTrial ? `Free trial: ${access.daysLeft} days left` : null}
       />
-      {/* On phones the tab bar is fixed along the bottom: keep the page clear of it. */}
-      <main className="min-w-0 flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      {/* Menu down the left from laptop width; a tab bar along the bottom below it. */}
+      <div className="mx-auto flex w-full max-w-[1440px] flex-1 gap-5 px-4 py-5 sm:px-6 lg:px-5">
+        <Sidebar attentionCount={attentionCount} />
+        {/* On phones the tab bar is fixed along the bottom: keep the page clear of it. */}
+        <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
           <BillingBanner
             state={access.state}
             canWrite={access.canWrite}
@@ -67,8 +75,9 @@ export default async function AppLayout({
             timeZone={timeZone}
           />
           {children}
-        </div>
-      </main>
+        </main>
+      </div>
+      <TabBar attentionCount={attentionCount} />
     </div>
   );
 }

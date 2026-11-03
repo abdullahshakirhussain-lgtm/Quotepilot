@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BellRing,
-  Check,
-  ClipboardList,
-  Coins,
-  Download,
-  KanbanSquare,
-  Send,
-  Sparkles,
-  Trophy,
-  Users,
-} from "lucide-react";
+import { Check } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
+  Band,
   CustomerEmailPreview,
   FinalCta,
   FounderNote,
@@ -26,13 +15,15 @@ import {
   ProductTour,
   Screenshot,
   START_LABEL,
+  TradeLinks,
+  wrap,
 } from "@/components/marketing/Marketing";
 import { LIMITS, PRICE_LABEL, PRICE_LINE, PRICE_MONTHLY, SITE_URL, TRADES, TRIAL_DAYS } from "@/lib/marketing";
 
 // Only signed-out visitors see this page: middleware sends anyone signed in
 // straight into the app, so it stays static and always offers sign-up.
 
-const TITLE = "QuoteLoop — Quote Follow-Up Software for Small Service Businesses";
+const TITLE = "QuoteLoop | Quote follow-up software for small service businesses";
 const DESCRIPTION =
   `Track quotes, get follow-up reminders and send AI-drafted follow-ups before quotes go cold. For contractors, cleaners, installers and small service businesses. ${PRICE_LINE}`;
 
@@ -51,10 +42,10 @@ export const metadata: Metadata = {
 };
 
 const HIGHLIGHTS = [
-  { icon: BellRing, text: "Reminders for every open quote" },
-  { icon: Sparkles, text: "AI drafts, you review" },
-  { icon: Send, text: "Send from QuoteLoop or copy" },
-  { icon: Trophy, text: "Track won and lost work" },
+  "Reminders for every open quote",
+  "AI drafts, you review",
+  "Send from QuoteLoop or copy",
+  "Track won and lost work",
 ];
 
 const STEPS = [
@@ -78,47 +69,38 @@ const STEPS = [
 
 const FEATURES = [
   {
-    icon: ClipboardList,
     title: "Quote tracking",
     body: "Every sent quote in one place, instead of scattered across email, WhatsApp, notes or memory.",
   },
   {
-    icon: BellRing,
     title: "Follow-up reminders",
     body: "See what needs attention today, what's overdue and what's coming up. You choose the schedule.",
   },
   {
-    icon: Sparkles,
     title: "The right message for each stage",
     body: "Drafts for a first check-in, a second nudge, a last call, a price that's about to expire, or a thank-you after a win.",
   },
   {
-    icon: Send,
     title: "Send or copy",
     body: "Send a reviewed email from QuoteLoop, or copy the message into WhatsApp, a text or your own email.",
   },
   {
-    icon: Trophy,
     title: "Won/lost tracking",
     body: "See which quotes turned into jobs, your win rate and the value still waiting.",
   },
   {
-    icon: KanbanSquare,
     title: "Pipeline",
     body: "Every customer by stage, from quote sent to won, so nothing sits forgotten in the middle.",
   },
   {
-    icon: Users,
     title: "Customer list",
     body: "Names, emails and phone numbers with their quotes, ready when you need to call back.",
   },
   {
-    icon: Coins,
     title: "Any currency",
     body: "Quote in your own currency. Amounts in different currencies are never added together.",
   },
   {
-    icon: Download,
     title: "CSV export",
     body: "Your data is yours. Export customers, quotes and follow-ups whenever you like.",
   },
@@ -213,168 +195,158 @@ const JSON_LD = [
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen pb-24 sm:pb-0">
+    <main className="min-h-screen bg-canvas pb-28 sm:pb-0">
       <MarketingHeader onHome />
 
       {/* grid-cols-1 (minmax(0, 1fr)) lets the column shrink to the screen. */}
-      <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 pb-20 pt-10 lg:grid-cols-[1fr_1.15fr] lg:pt-16">
-        <div>
-          <p className="text-sm font-semibold text-brand-700">Quote follow-up software for small service businesses</p>
-          <h1 className="mt-3 text-balance text-[2.25rem] font-semibold leading-[1.08] tracking-tight text-stone-950 sm:text-5xl lg:text-[3.4rem]">
+      <section className={`${wrap} grid grid-cols-1 items-start gap-10 pb-14 pt-10 lg:grid-cols-[1fr_1.25fr] lg:gap-14 lg:pt-16`}>
+        <div className="ql-in">
+          <p className="text-[15px] font-semibold text-stone-700">Quote follow-up software for small service businesses</p>
+          <h1 className="mt-3 text-balance text-[41px] font-semibold leading-[1.05] text-stone-900 sm:text-[50px] lg:text-[59px]">
             Win more of the jobs you quote
           </h1>
-          <p className="mt-5 max-w-xl text-lg text-stone-600">
-            QuoteLoop reminds you which quotes to chase, drafts the follow-up for you, and keeps every open quote in
-            view until it&apos;s won or lost.
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-stone-700">
+            QuoteLoop reminds you which quotes to chase, drafts the follow-up for you, and keeps every open quote in view
+            until it&apos;s won or lost.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/signup" className="btn-accent px-5 py-2.5 text-base">
-              {START_LABEL} <ArrowRight className="h-4 w-4" />
+            <Link href="/signup" className="btn-primary px-6 py-3 text-base">
+              {START_LABEL}
             </Link>
-            <a href="#tour" className="btn-secondary px-5 py-2.5 text-base">
+            <a href="#tour" className="btn-secondary px-6 py-3 text-base">
               See it in action
             </a>
           </div>
-          <p className="mt-4 text-sm text-stone-500">
-            {PRICE_LINE} No credit card to start.
-          </p>
+          <p className="mt-4 text-[15px] text-stone-600">{PRICE_LINE} No credit card to start.</p>
         </div>
         <Screenshot
+          className="ql-fade"
           src="/screens/dashboard.webp"
-          alt="The QuoteLoop dashboard: 3 follow-ups need attention, $19,140 waiting in open quotes, and a list of customers to follow up with"
+          alt="The QuoteLoop dashboard: follow-ups that need attention in Overdue, Due today and Coming up lanes, with the money waiting in open quotes"
           width={2560}
           height={1600}
           priority
         />
       </section>
 
-      <div className="border-y border-stone-200 bg-white">
-        <ul className="mx-auto grid max-w-6xl gap-x-8 gap-y-4 px-6 py-6 sm:grid-cols-2 lg:grid-cols-4">
-          {HIGHLIGHTS.map(({ icon: Icon, text }) => (
-            <li key={text} className="flex items-center gap-2.5 text-sm font-medium text-stone-800">
-              <Icon className="h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+      {/* The four promises, written large on one ruled line. */}
+      <div className={wrap}>
+        <ul className="grid grid-cols-1 border-y border-line sm:grid-cols-2 lg:grid-cols-4">
+          {HIGHLIGHTS.map((text) => (
+            <li
+              key={text}
+              className="border-t border-stone-200 py-4 pr-4 text-[19px] font-semibold leading-tight text-stone-900 first:border-t-0 sm:[&:nth-child(2)]:border-t-0 lg:border-l lg:border-t-0 lg:pl-4 lg:first:border-l-0 lg:first:pl-0"
+            >
               {text}
             </li>
           ))}
         </ul>
       </div>
 
+      <div className="pt-16 sm:pt-20" />
       <LostQuoteStats />
 
-      <section id="how-it-works" className="border-y border-stone-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-          <h2 className={h2}>How QuoteLoop works</h2>
-          <p className="mt-3 max-w-2xl leading-relaxed text-stone-600">
-            Every open quote stays visible until it&apos;s won, lost or followed up.
-          </p>
-          <ol className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((step, i) => (
-              <li key={step.title} className="flex gap-4 sm:block">
-                <span
-                  aria-hidden
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700 ring-1 ring-brand-200"
-                >
-                  {i + 1}
-                </span>
-                <div>
-                  <h3 className="mt-1 font-semibold text-stone-900 sm:mt-4">{step.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-stone-600">{step.body}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
+      <Band id="how-it-works" labelledBy="how-heading">
+        <h2 id="how-heading" className={h2}>
+          How QuoteLoop works
+        </h2>
+        <p className="mt-4 max-w-2xl text-lg leading-relaxed text-stone-700">
+          Every open quote stays visible until it&apos;s won, lost or followed up.
+        </p>
+        {/* A real sequence, so it's numbered. */}
+        <ol className="mt-10 grid grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-4">
+          {STEPS.map((step, i) => (
+            <li key={step.title} className="border-t border-stone-300 py-4">
+              <span aria-hidden className="num text-[34px] font-semibold leading-none text-stone-900">
+                {i + 1}
+              </span>
+              <h3 className="mt-2 text-[18px] font-semibold leading-tight text-stone-900">{step.title}</h3>
+              <p className="mt-1.5 text-base leading-relaxed text-stone-700">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </Band>
 
       <ProductTour />
 
-      <section className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <h2 className={h2}>Everything you need to follow up, nothing you don&apos;t</h2>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map(({ icon: Icon, title, body }) => (
-            <div key={title} className="card p-5">
-              <Icon className="h-5 w-5 text-brand-600" aria-hidden />
-              <h3 className="mt-3 font-semibold text-stone-900">{title}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-stone-600">{body}</p>
+      <Band labelledBy="features-heading">
+        <h2 id="features-heading" className={`${h2} max-w-3xl`}>
+          Everything you need to follow up, nothing you don&apos;t
+        </h2>
+        {/* A ruled list in two columns: name on the left, what it does on the right. */}
+        <dl className="mt-10 grid grid-cols-1 gap-x-12 lg:grid-cols-2">
+          {FEATURES.map(({ title, body }) => (
+            <div key={title} className="grid grid-cols-1 gap-x-6 gap-y-1 border-t border-stone-300 py-4 sm:grid-cols-[13rem_minmax(0,1fr)]">
+              <dt className="text-[19px] font-semibold leading-tight text-stone-900">{title}</dt>
+              <dd className="text-base leading-relaxed text-stone-700">{body}</dd>
             </div>
           ))}
+        </dl>
+      </Band>
+
+      <CustomerEmailPreview />
+
+      <Band>
+        <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
+          <section>
+            <h2 className={h2}>Keep quoting the way you do now</h2>
+            <p className="mt-4 text-lg leading-relaxed text-stone-700">
+              QuoteLoop doesn&apos;t replace your quoting tool. Quote in Jobber, Housecall Pro, QuickBooks, Word, Excel or
+              on paper, then add the quote to QuoteLoop so the follow-up happens.
+            </p>
+            <p className="mt-3 text-lg leading-relaxed text-stone-700">
+              There are no invoices, job schedules or email campaigns to set up. If your follow-ups live in a notebook, a
+              spreadsheet or your head, QuoteLoop is the simple step up.
+            </p>
+          </section>
+          <section>
+            <h2 className={h2}>Built for businesses that send quotes</h2>
+            <p className="mt-4 text-lg leading-relaxed text-stone-700">
+              For any small business that gives prices, estimates or proposals, including installers, studios and
+              freelancers. See how it works for your trade:
+            </p>
+            <TradeLinks trades={TRADES} />
+          </section>
         </div>
-      </section>
+      </Band>
 
-      <div className="border-y border-stone-200 bg-white">
-        <CustomerEmailPreview />
-      </div>
-
-      <div className="mx-auto grid max-w-6xl gap-12 px-6 py-16 sm:py-20 lg:grid-cols-2 lg:gap-16">
-        <section>
-          <h2 className={h2}>Keep quoting the way you do now</h2>
-          <p className="mt-4 leading-relaxed text-stone-600">
-            QuoteLoop doesn&apos;t replace your quoting tool. Quote in Jobber, Housecall Pro, QuickBooks, Word, Excel or
-            on paper, then add the quote to QuoteLoop so the follow-up happens.
-          </p>
-          <p className="mt-3 leading-relaxed text-stone-600">
-            There are no invoices, job schedules or email campaigns to set up. If your follow-ups live in a notebook, a
-            spreadsheet or your head, QuoteLoop is the simple step up.
-          </p>
-        </section>
-        <section>
-          <h2 className={h2}>Built for businesses that send quotes</h2>
-          <p className="mt-4 leading-relaxed text-stone-600">
-            For any small business that gives prices, estimates or proposals, including installers, studios and
-            freelancers. See how it works for your trade:
-          </p>
-          <ul className="mt-5 flex flex-wrap gap-2">
-            {TRADES.map((trade) => (
-              <li key={trade.slug}>
-                <Link
-                  href={`/for/${trade.slug}`}
-                  className="tap inline-flex items-center rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:border-stone-400 hover:text-stone-950"
-                >
-                  {trade.industry}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
-      <section className="border-y border-stone-200 bg-white">
-        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:py-20 lg:grid-cols-2 lg:items-center lg:gap-16">
+      <Band>
+        <div className="grid gap-10 lg:grid-cols-2 lg:items-start lg:gap-16">
           <div>
             <h2 className={h2}>AI drafts. You decide what gets sent.</h2>
-            <p className="mt-4 max-w-xl leading-relaxed text-stone-600">
+            <p className="mt-4 max-w-xl text-lg leading-relaxed text-stone-700">
               QuoteLoop writes a follow-up draft from the quote, the customer and your business details. You edit it
               before it goes anywhere. Nothing is sent automatically.
             </p>
           </div>
-          <ul className="card divide-y divide-stone-100 px-5 py-1">
+          <ul className="divide-y divide-stone-200 border-y border-line">
             {YOU_DECIDE.map((line) => (
-              <li key={line} className="flex items-start gap-3 py-3.5 text-stone-800">
-                <Check className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" aria-hidden />
+              <li key={line} className="flex items-start gap-3 py-3.5 text-[19px] font-semibold leading-tight text-stone-900">
+                <Check className="mt-0.5 h-6 w-6 shrink-0 text-emerald-700" aria-hidden />
                 {line}
               </li>
             ))}
           </ul>
         </div>
-      </section>
+      </Band>
 
       <Pricing />
 
       <FounderNote />
 
-      <section id="faq" className="border-y border-stone-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-          <h2 className={h2}>Questions</h2>
-          <div className="mt-10 grid gap-x-12 gap-y-8 md:grid-cols-2">
-            {FAQS.map(({ q, a }) => (
-              <div key={q}>
-                <h3 className="font-semibold text-stone-900">{q}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-stone-600">{a}</p>
-              </div>
-            ))}
-          </div>
+      <Band id="faq" labelledBy="faq-heading">
+        <h2 id="faq-heading" className={h2}>
+          Questions
+        </h2>
+        <div className="mt-10 grid gap-x-12 md:grid-cols-2">
+          {FAQS.map(({ q, a }) => (
+            <div key={q} className="border-t border-stone-300 py-4">
+              <h3 className="text-[19px] font-semibold leading-tight text-stone-900">{q}</h3>
+              <p className="mt-1.5 text-base leading-relaxed text-stone-700">{a}</p>
+            </div>
+          ))}
         </div>
-      </section>
+      </Band>
       <script
         type="application/ld+json"
         // Static text; "<" is escaped so the JSON can never close the tag early.

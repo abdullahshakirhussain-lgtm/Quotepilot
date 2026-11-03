@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PaddleCheckout } from "@/components/billing/PaddleCheckout";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 export const metadata: Metadata = {
-  title: "Checkout — QuoteLoop",
+  title: "Checkout | QuoteLoop",
   robots: { index: false, follow: false },
 };
 
@@ -16,16 +17,19 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
   const { _ptxn } = await searchParams;
   const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN ?? "";
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
-      <p className="text-[15px] font-semibold tracking-tight">QuoteLoop</p>
+    <AuthShell>
+      <h1 className="page-title">Checkout</h1>
       {token && typeof _ptxn === "string" && _ptxn ? (
         <PaddleCheckout token={token} />
       ) : (
-        <p className="mt-3 max-w-sm text-sm text-stone-600">There's no checkout to open here. Subscribe from Settings → Billing.</p>
+        <p className="mt-3 text-base text-stone-700">There&apos;s no checkout to open here. Subscribe from Settings, under Billing.</p>
       )}
-      <Link href="/settings#billing" className="tap mt-6 inline-flex items-center text-sm text-stone-500 hover:text-stone-800">
+      <Link
+        href="/settings#billing"
+        className="tap mt-6 inline-flex items-center font-medium text-info-700 hover:underline"
+      >
         Back to Settings
       </Link>
-    </main>
+    </AuthShell>
   );
 }

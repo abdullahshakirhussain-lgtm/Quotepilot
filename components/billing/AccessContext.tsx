@@ -33,7 +33,7 @@ export function useCanWrite(): boolean {
 export function ReadOnlyNotice() {
   if (useCanWrite()) return null;
   return (
-    <div role="alert" className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900 ring-1 ring-inset ring-red-200">
+    <div role="alert" className="mb-4 msg-error">
       {READ_ONLY_MESSAGE}{" "}
       <Link href="/settings#billing" className="font-medium underline underline-offset-2">
         Go to billing

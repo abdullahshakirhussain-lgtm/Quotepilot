@@ -163,22 +163,18 @@ export default function AuthForm({
   const busy = loading || googleLoading;
 
   return (
-    <div className="w-full max-w-sm">
-      <Link href="/" className="tap mb-8 flex items-center justify-center gap-2.5 text-[15px] font-semibold tracking-tight">
-        QuoteLoop
-      </Link>
-
+    <div className="w-full">
       {checkEmail ? (
-        <div className="card p-7 text-center">
-          <h1 className="text-lg font-semibold text-stone-900">Check your email</h1>
-          <p className="mt-2 text-sm text-stone-600">
+        <div className="ql-in">
+          <h1 className="page-title">Check your email</h1>
+          <p className="mt-3 text-base text-stone-800">
             We sent a confirmation link to <strong>{email}</strong>. Click it to
             activate your account. Open it in this browser to be signed in straight away.
           </p>
-          <p className="mt-2 text-sm text-stone-500">
+          <p className="mt-2 text-base text-stone-700">
             No email after a few minutes? Check your spam folder. If you already have an account with
             this address, log in instead, or use{" "}
-            <Link href="/forgot-password" className="font-medium text-stone-800 underline-offset-2 hover:underline">
+            <Link href="/forgot-password" className="font-medium text-info-700 hover:underline">
               Forgot password
             </Link>
             .
@@ -188,11 +184,11 @@ export default function AuthForm({
           </Link>
         </div>
       ) : (
-        <div className="card p-7">
-          <h1 className="text-xl font-semibold tracking-tight text-stone-900">
+        <div className="ql-in">
+          <h1 className="page-title">
             {isSignup ? "Start following up" : "Welcome back"}
           </h1>
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-3 text-base text-stone-700">
             {isSignup
               ? "Create your account. Setup takes about a minute."
               : "Log in to see who needs a follow-up today."}
@@ -202,16 +198,16 @@ export default function AuthForm({
             type="button"
             onClick={continueWithGoogle}
             disabled={busy}
-            className="btn-secondary mt-6 w-full py-2"
+            className="btn-secondary mt-8 w-full py-3 text-base"
           >
             {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleLogo />}
             Continue with Google
           </button>
 
-          <div className="my-5 flex items-center gap-3 text-xs text-stone-400">
-            <span className="h-px flex-1 bg-stone-200" />
+          <div className="my-6 flex items-center gap-3 text-[15px] text-stone-600">
+            <span className="h-px flex-1 bg-stone-300" />
             or with email
-            <span className="h-px flex-1 bg-stone-200" />
+            <span className="h-px flex-1 bg-stone-300" />
           </div>
 
           <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -238,7 +234,7 @@ export default function AuthForm({
                 {!isSignup && (
                   <Link
                     href="/forgot-password"
-                    className="tap -my-2 inline-flex items-center text-xs font-medium text-stone-500 underline-offset-2 hover:text-stone-900 hover:underline"
+                    className="tap -my-2 inline-flex items-center text-[15px] font-medium text-stone-700 underline decoration-stone-300 decoration-2 underline-offset-4 hover:text-stone-900 hover:decoration-stone-900"
                   >
                     Forgot password?
                   </Link>
@@ -257,12 +253,12 @@ export default function AuthForm({
             </div>
 
             {error && (
-              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+              <div className="msg-error">
                 {error}
               </div>
             )}
 
-            <button type="submit" className="btn-primary w-full py-2" disabled={busy}>
+            <button type="submit" className="btn-primary w-full py-3 text-base" disabled={busy}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {isSignup ? "Create account" : "Log in"}
             </button>
@@ -270,18 +266,18 @@ export default function AuthForm({
         </div>
       )}
 
-      <p className="mt-6 text-center text-sm text-stone-500">
+      <p className="mt-8 border-t border-stone-200 pt-4 text-base text-stone-700">
         {isSignup ? (
           <>
             Already have an account?{" "}
-            <Link href="/login" className="font-medium text-stone-900 underline-offset-2 hover:underline">
+            <Link href="/login" className="font-medium text-info-700 hover:underline">
               Log in
             </Link>
           </>
         ) : (
           <>
             New to QuoteLoop?{" "}
-            <Link href="/signup" className="font-medium text-stone-900 underline-offset-2 hover:underline">
+            <Link href="/signup" className="font-medium text-info-700 hover:underline">
               Create an account
             </Link>
           </>

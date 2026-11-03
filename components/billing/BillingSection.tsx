@@ -1,4 +1,5 @@
 import { BillingActions } from "@/components/billing/BillingActions";
+import { SettingsSection } from "@/components/ui/SettingsSection";
 import { ForgetReturn, PaymentConfirmed, PaymentPending } from "@/components/billing/PaymentPending";
 import { CONTACT_EMAIL, PRICE_LABEL, TRIAL_DAYS } from "@/lib/marketing";
 import type { AccessState } from "@/lib/billing";
@@ -40,7 +41,7 @@ export function BillingSection({
 }) {
   const detail =
     state === "trial"
-      ? `${daysLeft ?? 0} day${daysLeft === 1 ? "" : "s"} left · ends ${day(endsAt, timeZone)}`
+      ? `${daysLeft ?? 0} day${daysLeft === 1 ? "" : "s"} left, ends ${day(endsAt, timeZone)}`
       : state === "active"
         ? endsAt
           ? `${hasPaymentAccount ? "Renews" : "Active until"} ${day(endsAt, timeZone)}`
@@ -60,11 +61,11 @@ export function BillingSection({
   const showAction = state !== "comped" && state !== "unknown" && !(mode === "manage" && providerReady && !hasPaymentAccount);
 
   return (
-    <section id="billing" className="card scroll-mt-6 p-5">
-      <h2 className="text-[15px] font-semibold text-stone-900">Billing</h2>
-      <p className="mb-4 mt-0.5 text-sm text-stone-500">
-        One plan: {PRICE_LABEL} a month after a {TRIAL_DAYS}-day free trial. No card needed for the trial.
-      </p>
+    <SettingsSection
+      id="billing"
+      title="Billing"
+      description={`One plan: ${PRICE_LABEL} a month after a ${TRIAL_DAYS}-day free trial. No card needed for the trial.`}
+    >
       {/* Back from checkout: wait for the provider's notice, confirm it once, then forget it. */}
       {justReturned &&
         (state === "trial" || state === "expired" ? (
@@ -76,11 +77,11 @@ export function BillingSection({
         ))}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-stone-900">{LABEL[state]}</p>
-          {detail && <p className="mt-0.5 text-sm text-stone-500">{detail}</p>}
+          <p className="text-[18px] font-medium leading-tight text-stone-900">{LABEL[state]}</p>
+          {detail && <p className="mt-0.5 text-[14px] text-stone-500">{detail}</p>}
         </div>
         {showAction && <BillingActions mode={mode} providerReady={providerReady} contactEmail={CONTACT_EMAIL} />}
       </div>
-    </section>
+    </SettingsSection>
   );
 }

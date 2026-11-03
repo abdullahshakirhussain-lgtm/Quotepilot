@@ -87,12 +87,12 @@ export function templateFallback(ctx: MessageContext): string {
 
   const bodyByType: Record<MessageType, string> = {
     first_follow_up: `Just checking you received our quote for "${ctx.quoteTitle}" (${amount}). Happy to answer any questions or walk you through the details whenever suits you.`,
-    second_follow_up: `Following up on the quote for "${ctx.quoteTitle}" (${amount}). We'd love to help with this — is there anything you'd like clarified before moving forward?`,
-    final_follow_up: `I don't want to crowd your inbox, so this is my last check-in on the "${ctx.quoteTitle}" quote (${amount}) for now. If the timing isn't right, no problem at all — just let me know and I'll leave it with you.`,
+    second_follow_up: `Following up on the quote for "${ctx.quoteTitle}" (${amount}). We'd love to help with this. Is there anything you'd like clarified before moving forward?`,
+    final_follow_up: `I don't want to crowd your inbox, so this is my last check-in on the "${ctx.quoteTitle}" quote (${amount}) for now. If the timing isn't right, no problem at all. Just let me know and I'll leave it with you.`,
     quote_expiring: `A quick heads-up that our quote for "${ctx.quoteTitle}" (${amount}) is coming up on its validity date. If you'd like to go ahead at this price, just reply and we'll get it locked in.`,
-    objection_response: `Thanks for sharing your thoughts on the "${ctx.quoteTitle}" quote${ctx.objection ? ` — I hear you on ${ctx.objection.toLowerCase()}` : ""}. Let's find something that works: happy to talk options or adjust the scope so it fits what you need.`,
-    lost_lead_recovery: `It's been a little while since we shared the quote for "${ctx.quoteTitle}". No pressure at all — I just wanted to check in and see if the timing is better now or if your needs have changed. Always glad to help.`,
-    thank_you_after_acceptance: `Thank you for going ahead with "${ctx.quoteTitle}" — we really appreciate it! I'll be in touch shortly with the next steps so we can get started.`,
+    objection_response: `Thanks for sharing your thoughts on the "${ctx.quoteTitle}" quote${ctx.objection ? `. I hear you on ${ctx.objection.toLowerCase()}` : ""}. Let's find something that works: happy to talk options or adjust the scope so it fits what you need.`,
+    lost_lead_recovery: `It's been a little while since we shared the quote for "${ctx.quoteTitle}". No pressure at all. I just wanted to check in and see if the timing is better now or if your needs have changed. Always glad to help.`,
+    thank_you_after_acceptance: `Thank you for going ahead with "${ctx.quoteTitle}". We really appreciate it! I'll be in touch shortly with the next steps so we can get started.`,
   };
 
   return `Hi ${first},\n\n${bodyByType[ctx.messageType]}\n\nBest,\n${sign}`;

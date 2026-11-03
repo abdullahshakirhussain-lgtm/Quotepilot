@@ -2,7 +2,7 @@ import { unstable_rethrow } from "next/navigation";
 
 /** Shown when a form's request never got an answer (connection lost, signed out elsewhere). */
 export const FORM_UNREACHABLE =
-  "QuoteLoop couldn't be reached, so this may not have been saved. Check your connection and try again — what you typed is still here.";
+  "QuoteLoop couldn't be reached, so this may not have been saved. Check your connection and try again. What you typed is still here.";
 
 /**
  * Wraps a form's server action for useActionState. A request that never gets

@@ -1,24 +1,42 @@
 import Link from "next/link";
-import { ArrowRight, BellRing, CalendarCheck, Plus } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
 import { HowItWorks } from "@/components/quotes/HowItWorks";
-import { LoadSampleDataButton, SampleDataBanner } from "@/components/SampleData";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadSampleDataButton, SampleBadge, SampleDataBanner } from "@/components/SampleData";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttentionList } from "./AttentionList";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { TypedGreeting } from "./TypedGreeting";
+import { formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import { formatMoney, type DashboardMetrics, type Money } from "@/lib/metrics";
+import type { QuoteStatus } from "@/lib/constants";
 import type { FollowUpWithContext } from "@/lib/types";
 
-/** The first currency's total, and any others as a short "+ €300.00" line. */
-function splitMoney(list: Money[], currency: string): { main: string; others: string | null } {
-  if (!list.length) return { main: formatCurrency(0, currency), others: null };
-  const [first, ...rest] = list;
-  return {
-    main: formatCurrency(first.amount, first.currency),
-    others: rest.length ? `+ ${formatMoney(rest, currency)}` : null,
-  };
+/** One row of the "Latest quotes" list. */
+export interface LatestQuote {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  status: QuoteStatus;
+  quoteDate: string;
+  customerName: string;
+  companyName: string | null;
+  sample: boolean;
 }
 
-/** The dashboard's presentation. Data is loaded by the page. */
+/** Quote statuses in the overview ring, in a fixed order with fixed colours. */
+const RING: { key: string; label: string; color: string; money: string }[] = [
+  { key: "open", label: "Open", color: "#2A78D6", money: "text-stone-900" },
+  { key: "draft", label: "Not sent", color: "#EDA100", money: "text-stone-900" },
+  { key: "won", label: "Won", color: "#23692A", money: "text-emerald-700" },
+  { key: "lost", label: "Lost", color: "#8A949C", money: "text-stone-500" },
+  { key: "expired", label: "Expired", color: "#C9CED4", money: "text-stone-500" },
+];
+
+/**
+ * The dashboard, laid out like the owner's reference: an overview card (quotes
+ * by status, and the totals), what to follow up now, and the newest quotes.
+ * Every figure appears once. Data is loaded by the page.
+ */
 export function DashboardView({
   m,
   currency,
@@ -29,6 +47,8 @@ export function DashboardView({
   upcoming,
   hasData,
   hasSampleData = false,
+  customers,
+  latest,
 }: {
   m: DashboardMetrics;
   currency: string;
@@ -40,210 +60,257 @@ export function DashboardView({
   hasData: boolean;
   /** Made-up demo customers are in the workspace. */
   hasSampleData?: boolean;
+  /** Every customer in the workspace. */
+  customers: number;
+  latest: LatestQuote[];
 }) {
-  const needAttention = m.dueToday + m.overdue;
-  const open = splitMoney(m.openValue, currency);
-  const won = splitMoney(m.acceptedValue, currency);
-  const lost = splitMoney(m.lostValue, currency);
-  const average = splitMoney(m.avgQuote, currency);
+  const hello = `${greeting}${firstName ? `, ${firstName}` : ""}`;
 
   // A brand-new workspace: one clear next step, not a page of zeros.
   if (!hasData) {
     return (
-      <div className="space-y-4">
-        <section className="card px-5 py-6 sm:px-7 sm:py-7">
-          <p className="text-sm text-stone-500">
-            {greeting}
-            {firstName ? `, ${firstName}` : ""}
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-stone-900">Welcome to QuoteLoop</h1>
-          <p className="mt-1.5 max-w-xl text-stone-600">
+      <div className="flex flex-col gap-5">
+        <section className="card flex flex-col gap-3 p-6 sm:p-8">
+          <TypedGreeting text={hello} className="text-[17px] text-stone-600" />
+          <h1 className="ql-in page-title">Welcome to QuoteLoop</h1>
+          <p className="ql-in max-w-xl text-base text-stone-600" style={{ animationDelay: "60ms" }}>
             Add a quote you&apos;ve sent, or send one from here, and QuoteLoop reminds you when it&apos;s time to
             follow up.
           </p>
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <Link href="/quotes?new=1" className="btn-accent px-4 py-2 text-[15px]">
-              <Plus className="h-4 w-4" /> Add your first quote
+          <div className="ql-in mt-2 flex flex-wrap items-center gap-3" style={{ animationDelay: "120ms" }}>
+            <Link href="/quotes?new=1" className="btn-primary px-5 py-2.5">
+              <Plus className="h-4 w-4" strokeWidth={2.4} /> Add your first quote
             </Link>
             <LoadSampleDataButton />
           </div>
-          <p className="mt-3 text-xs text-stone-500">
-            Not ready yet? Sample data is made up, so you can click around safely and remove it any time.
-          </p>
+          <p className="hint">Not ready yet? Sample data is made up, so you can click around safely and remove it any time.</p>
         </section>
-        <HowItWorks />
+        <section className="card p-6">
+          <HowItWorks />
+        </section>
       </div>
     );
   }
 
+  const counts: Record<string, number> = {
+    open: m.openCount,
+    draft: m.draftCount,
+    won: m.wonCount,
+    lost: m.lostCount,
+    expired: m.expiredCount,
+  };
+  const money: Record<string, Money[]> = {
+    open: m.openValue,
+    draft: m.draftValue,
+    won: m.acceptedValue,
+    lost: m.lostValue,
+    expired: m.expiredValue,
+  };
+  // Expired only appears once there is one.
+  const ring = RING.filter((r) => r.key !== "expired" || counts.expired > 0);
+  const total = ring.reduce((n, r) => n + counts[r.key], 0);
+  const next = upcoming[0];
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       {hasSampleData && <SampleDataBanner />}
 
-      {/* Hero: what needs doing, and how much money is riding on it */}
-      <section className="overflow-hidden rounded-lg bg-stone-950 text-stone-300">
-        {/* min-w-0: a very long amount must wrap, not widen the column past a phone screen. */}
-        <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1.4fr_1fr] lg:p-7">
-          <div className="min-w-0">
-            <p className="text-xs text-stone-500">
-              {greeting}
-              {firstName ? `, ${firstName}` : ""} · {formatDate(today)}
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-[28px]">
-              {needAttention > 0
-                ? `${needAttention} follow-up${needAttention === 1 ? " needs" : "s need"} attention`
-                : "You're all caught up"}
-            </h1>
-            <p className="mt-1.5 text-sm">
-              {needAttention > 0 ? (
-                <>
-                  {m.overdue > 0 && <span className="font-medium text-red-400">{m.overdue} overdue</span>}
-                  {m.overdue > 0 && m.dueToday > 0 && " · "}
-                  {m.dueToday > 0 && <span className="font-medium text-brand-400">{m.dueToday} due today</span>}
-                  <span className="text-stone-500"> — follow up before the customer goes cold.</span>
-                </>
-              ) : (
-                "No follow-ups are due today."
-              )}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Link href="/follow-ups" className="btn-accent">
-                Review follow-ups <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/quotes?new=1"
-                className="btn border border-white/15 bg-white/5 text-white hover:bg-white/10"
-              >
-                <Plus className="h-4 w-4" /> New quote
-              </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[20px] font-medium text-stone-900">
+          <TypedGreeting text={hello} />
+        </h1>
+        <Link href="/leads?new=1" className="btn bg-stone-600 text-white hover:bg-stone-700">
+          <UserPlus className="h-4 w-4" /> Add customer
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* Overview: quotes by status, then the totals */}
+        <section className="card ql-in" aria-labelledby="overview">
+          <div className="card-head">
+            <h2 id="overview" className="card-title">Overview</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-6 p-5 2xl:grid-cols-[auto_minmax(0,1fr)] 2xl:items-center">
+            <div className="flex min-w-0 flex-wrap items-center gap-6 2xl:border-r 2xl:border-[#ECEEF1] 2xl:pr-6">
+              <StatusRing segments={ring.map((r) => ({ ...r, value: counts[r.key] }))} total={total} />
+              <dl className="grid min-w-0 max-w-full grid-cols-[auto_auto_minmax(0,auto)] items-center gap-x-4 gap-y-2.5 text-[14px]">
+                {ring.map((r) => (
+                  <div key={r.key} className="contents">
+                    <dt className="flex items-center gap-2 text-stone-700">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} aria-hidden="true" />
+                      {r.label}
+                    </dt>
+                    <dd className="num text-right text-stone-500">{counts[r.key]}</dd>
+                    <dd className={`num text-right font-medium [overflow-wrap:anywhere] ${r.money}`}>{formatMoney(money[r.key], currency)}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
+            <dl className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(9.5rem,100%),1fr))] gap-x-5 gap-y-4 border-t border-[#ECEEF1] pt-5 2xl:border-t-0 2xl:pt-0">
+              <Figure label="Quoted in total" value={formatMoney(m.totalQuoted, currency)} />
+              <div className="min-w-0">
+                <dt className="text-[13px] text-stone-500">Win rate</dt>
+                <dd className="flex items-center gap-2.5">
+                  {m.winRate === null ? (
+                    <span className="text-[14px] text-stone-500">Nothing won or lost yet</span>
+                  ) : (
+                    <>
+                      <span className="num text-[24px] font-medium leading-tight">{m.winRate}%</span>
+                      <span
+                        className="h-1.5 max-w-24 flex-1 overflow-hidden rounded-full bg-stone-200"
+                        role="img"
+                        aria-label={`${m.wonCount} won, ${m.lostCount} lost`}
+                      >
+                        <span className="block h-full bg-emerald-600" style={{ width: `${m.winRate}%` }} />
+                      </span>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <Figure label="Average quote" value={formatMoney(m.avgQuote, currency)} />
+              <Figure label="Customers" value={String(customers)} />
+            </dl>
           </div>
-
-          <div className="min-w-0 border-t border-white/10 pt-5 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
-              Waiting in open quotes
+          {m.mixedCurrencies && (
+            <p className="border-t border-[#ECEEF1] px-5 py-3 text-[13px] text-stone-500">
+              Your quotes use more than one currency, so each currency is totalled separately.
             </p>
-            <p className="num mt-2 text-3xl font-semibold tracking-tight text-white [overflow-wrap:anywhere] sm:text-4xl">
-              {open.main}
-            </p>
-            {open.others && (
-              <p className="num mt-1 text-sm font-medium text-white [overflow-wrap:anywhere]">{open.others}</p>
-            )}
-            <p className="mt-1 text-sm text-stone-400 [overflow-wrap:anywhere]">
-              {m.openCount} open {m.openCount === 1 ? "quote" : "quotes"} ·{" "}
-              <span className="num">{formatMoney(m.totalQuoted, currency)}</span> quoted in total
-            </p>
-            {m.mixedCurrencies && (
-              <p className="mt-1 text-xs text-stone-500">
-                Your quotes use more than one currency, so each currency is totalled separately.
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Supporting numbers: one strip, not a grid of cards */}
-      <section className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-stone-100">
-        <Metric
-          label="Won"
-          value={won.main}
-          extra={won.others}
-          hint={`${m.wonCount} quote${m.wonCount === 1 ? "" : "s"}`}
-          tone="won"
-        />
-        <Metric
-          label="Lost"
-          value={lost.main}
-          extra={lost.others}
-          hint={`${m.lostCount} quote${m.lostCount === 1 ? "" : "s"}`}
-          tone="lost"
-        />
-        <Metric
-          label="Win rate"
-          value={m.winRate === null ? "—" : `${m.winRate}%`}
-          hint={m.winRate === null ? "Nothing won or lost yet" : `${m.wonCount} won / ${m.lostCount} lost`}
-        />
-        <Metric
-          label="Average quote"
-          value={average.main}
-          extra={average.others}
-          hint={m.mixedCurrencies ? "Per currency, across quotes sent" : "Across quotes sent"}
-        />
-        <Metric label="Quotes sent" value={String(m.quotesSent)} hint={`${m.activeLeads} active customer${m.activeLeads === 1 ? "" : "s"}`} />
-      </section>
-
-      {/* The work */}
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <section className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-stone-900">
-              <BellRing className="h-4 w-4 text-brand-600" /> Needs attention
-            </h2>
-            <Link
-              href="/follow-ups"
-              className="tap -my-2 inline-flex items-center justify-end text-xs font-medium text-stone-500 hover:text-stone-900"
-            >
-              All follow-ups →
-            </Link>
-          </div>
-          {attention.length === 0 ? (
-            <div className="p-4">
-              <EmptyState
-                compact
-                icon={<CalendarCheck className="h-5 w-5" />}
-                title="Nothing due right now"
-                description="When a quote's next follow-up comes due, it appears here, ready to write."
-              />
-            </div>
-          ) : (
-            <AttentionList items={attention} today={today} />
           )}
         </section>
 
-        <section className="card overflow-hidden">
-          <div className="border-b border-stone-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-stone-900">Coming up</h2>
+        {/* What to do now */}
+        {/* First on phones and tablets, beside the overview on wide screens. */}
+        <section className="card ql-in order-first flex flex-col xl:order-none" style={{ animationDelay: "60ms" }} aria-labelledby="follow-up-now">
+          <div className="card-head">
+            <h2 id="follow-up-now" className="card-title">Follow up now</h2>
+            {attention.length > 0 && (
+              <span className="num rounded-full bg-red-500 px-2.5 text-[13px] font-medium leading-6 text-white">{attention.length}</span>
+            )}
           </div>
-          {upcoming.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-stone-500">
-              No follow-ups scheduled yet. Add a quote and QuoteLoop schedules them.
-            </p>
+          {attention.length ? (
+            <AttentionList items={attention} today={today} />
           ) : (
-            <AttentionList items={upcoming} today={today} compact />
+            <p className="px-5 py-5 text-[14px] text-stone-500">You&apos;re all caught up. Nothing is due right now.</p>
+          )}
+          {next && (
+            <p className="mt-auto border-t border-[#ECEEF1] px-5 py-3 text-[13px] text-stone-500">
+              Next: {next.lead?.customer_name ?? "a customer"}, {relativeDay(next.due_date, today)}
+            </p>
           )}
         </section>
       </div>
+
+      {/* The newest quotes, in the space a chart would take */}
+      <section className="card ql-in" style={{ animationDelay: "120ms" }} aria-labelledby="latest">
+        <div className="card-head">
+          <h2 id="latest" className="card-title">Latest quotes</h2>
+          <Link href="/quotes?tab=all" className="tap inline-flex items-center text-[14px] font-medium text-info-700 hover:underline">
+            See all quotes
+          </Link>
+        </div>
+        {latest.length ? (
+          <div className="relative overflow-x-auto">
+            <table className="w-full min-w-[640px] text-[14px]">
+              <thead>
+                <tr className="text-left text-[13px] text-stone-500">
+                  <th className="px-5 py-2.5 font-medium">Customer</th>
+                  <th className="px-5 py-2.5 font-medium">Job</th>
+                  <th className="px-5 py-2.5 font-medium">Date</th>
+                  <th className="px-5 py-2.5 font-medium">Status</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {latest.map((q) => (
+                  <tr key={q.id} className="border-t border-[#ECEEF1] transition-colors hover:bg-stone-50">
+                    <td className="px-5 py-3 align-middle">
+                      <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-stone-900 [overflow-wrap:anywhere]">
+                        {q.customerName}
+                        {q.sample && <SampleBadge />}
+                      </div>
+                      {q.companyName && <div className="text-[12px] text-stone-500 [overflow-wrap:anywhere]">{q.companyName}</div>}
+                    </td>
+                    <td className="px-5 py-3 align-middle text-stone-700 [overflow-wrap:anywhere]">{q.title}</td>
+                    <td className="num whitespace-nowrap px-5 py-3 align-middle text-stone-500">{formatDate(q.quoteDate)}</td>
+                    <td className="px-5 py-3 align-middle">
+                      <StatusBadge kind="quote" value={q.status} />
+                    </td>
+                    <td className="num whitespace-nowrap px-5 py-3 text-right align-middle font-medium text-stone-900">
+                      {formatCurrency(q.amount, q.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="px-5 py-5 text-[14px] text-stone-500">No quotes yet.</p>
+        )}
+      </section>
     </div>
   );
 }
 
-function Metric({
-  label,
-  value,
-  extra,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  /** Totals in other currencies, e.g. "+ €300.00". */
-  extra?: string | null;
-  hint?: string;
-  tone?: "won" | "lost";
-}) {
+function Figure({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 border-b border-stone-100 px-4 py-3.5 lg:border-b-0">
-      <p className="eyebrow">{label}</p>
-      <p
-        className={cn(
-          "num mt-1 text-lg font-semibold [overflow-wrap:anywhere]",
-          tone === "won" ? "text-emerald-700" : tone === "lost" ? "text-red-700" : "text-stone-900"
-        )}
-      >
-        {value}
-      </p>
-      {extra && <p className="num text-xs font-medium text-stone-700 [overflow-wrap:anywhere]">{extra}</p>}
-      {hint && <p className="text-xs text-stone-500">{hint}</p>}
+    <div className="min-w-0">
+      <dt className="text-[13px] text-stone-500">{label}</dt>
+      <dd className="num text-[24px] font-medium leading-tight text-stone-900 [overflow-wrap:anywhere]">{value}</dd>
     </div>
+  );
+}
+
+/** Quotes by status as a ring, with the total in the middle. */
+function StatusRing({
+  segments,
+  total,
+}: {
+  segments: { key: string; label: string; color: string; value: number }[];
+  total: number;
+}) {
+  const r = 60;
+  const c = 2 * Math.PI * r;
+  const shown = segments.filter((s) => s.value > 0);
+  // A small gap of page colour between segments, when there's more than one.
+  const gap = shown.length > 1 ? 3 : 0;
+  let start = 0;
+  return (
+    <svg
+      viewBox="0 0 160 160"
+      className="h-[132px] w-[132px] shrink-0"
+      role="img"
+      aria-label={`${total} quotes: ${segments.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(", ")}`}
+    >
+      <g transform="rotate(-90 80 80)" fill="none" strokeWidth="16">
+        {total === 0 ? (
+          <circle cx="80" cy="80" r={r} stroke="#E4E7EB" />
+        ) : (
+          shown.map((s) => {
+            const len = (s.value / total) * c;
+            const el = (
+              <circle
+                key={s.key}
+                cx="80"
+                cy="80"
+                r={r}
+                stroke={s.color}
+                strokeDasharray={`${Math.max(len - gap, 0.5)} ${c}`}
+                strokeDashoffset={-start}
+              >
+                <title>{`${s.label}: ${s.value}`}</title>
+              </circle>
+            );
+            start += len;
+            return el;
+          })
+        )}
+      </g>
+      <text x="80" y="80" textAnchor="middle" fontSize="30" fontWeight="500" fill="#1F2328">
+        {total}
+      </text>
+      <text x="80" y="102" textAnchor="middle" fontSize="13" fill="#5F6872">
+        {total === 1 ? "quote" : "quotes"}
+      </text>
+    </svg>
   );
 }

@@ -46,20 +46,16 @@ export default function ForgotPasswordForm({ linkFailed = false }: { linkFailed?
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <Link href="/" className="tap mb-8 flex items-center justify-center gap-2.5 text-[15px] font-semibold tracking-tight">
-        QuoteLoop
-      </Link>
-
-      <div className="card p-7">
+    <div className="w-full">
+      <div className="ql-in">
         {sentTo ? (
           <>
-            <h1 className="text-lg font-semibold text-stone-900">Check your email</h1>
-            <p className="mt-2 text-sm text-stone-600">
+            <h1 className="page-title">Check your email</h1>
+            <p className="mt-3 text-base text-stone-800">
               If there&apos;s a QuoteLoop account for <strong className="break-all">{sentTo}</strong>, we&apos;ve
               emailed it a link to choose a new password.
             </p>
-            <p className="mt-2 text-sm text-stone-500">
+            <p className="mt-2 text-base text-stone-700">
               Open the link in this browser. It only works once. Nothing arrived after a few minutes? Check your
               spam folder, then try again.
             </p>
@@ -69,8 +65,8 @@ export default function ForgotPasswordForm({ linkFailed = false }: { linkFailed?
           </>
         ) : (
           <>
-            <h1 className="text-xl font-semibold tracking-tight text-stone-900">Reset your password</h1>
-            <p className="mt-1 text-sm text-stone-500">
+            <h1 className="page-title">Reset your password</h1>
+            <p className="mt-3 text-base text-stone-700">
               Enter the email you log in with and we&apos;ll send you a link to choose a new password.
             </p>
             <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
@@ -93,13 +89,13 @@ export default function ForgotPasswordForm({ linkFailed = false }: { linkFailed?
               {error && (
                 <div
                   role="alert"
-                  className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200"
+                  className="msg-error"
                 >
                   {error}
                 </div>
               )}
 
-              <button type="submit" className="btn-primary w-full py-2" disabled={loading}>
+              <button type="submit" className="btn-primary w-full py-3 text-base" disabled={loading}>
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Email me a reset link
               </button>
@@ -108,9 +104,9 @@ export default function ForgotPasswordForm({ linkFailed = false }: { linkFailed?
         )}
       </div>
 
-      <p className="mt-6 text-center text-sm text-stone-500">
+      <p className="mt-8 border-t border-stone-200 pt-4 text-base text-stone-700">
         Remembered it?{" "}
-        <Link href="/login" className="font-medium text-stone-900 underline-offset-2 hover:underline">
+        <Link href="/login" className="font-medium text-info-700 hover:underline">
           Log in
         </Link>
       </p>

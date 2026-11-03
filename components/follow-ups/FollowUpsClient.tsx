@@ -3,17 +3,22 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
-import { BellRing, Check, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { BellRing, Check, ChevronRight, Loader2, PenLine } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DueChip } from "@/components/ui/DueChip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Menu, MenuItem } from "@/components/ui/Menu";
+import { Menu, MenuDivider, MenuItem, MenuLabel } from "@/components/ui/Menu";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import type { ActionResult, FollowUpWithContext } from "@/lib/types";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
-import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
-import { classifyFollowUp, onePerQuote, type FollowUpBucket } from "@/lib/follow-up-state";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import {
+  classifyFollowUp,
+  onePerQuote,
+  type FollowUpBucket,
+} from "@/lib/follow-up-state";
 import {
   completeFollowUp,
   reopenFollowUp,
@@ -32,15 +37,20 @@ const SNOOZE_CHOICES: { days: number; label: string }[] = [
 
 /** A request that never reached the server: usually a dropped connection, or a session that ended in another tab. */
 const OFFLINE_OR_SIGNED_OUT =
-  "That didn't go through, so nothing changed. You may have lost your connection, or been signed out in another tab — refresh the page and try again.";
+  "That didn't go through, so nothing changed. You may have lost your connection, or been signed out in another tab. Refresh the page and try again.";
 
 /** Quote statuses whose reminders can't be reopened. */
 const CLOSED_QUOTE = ["accepted", "rejected", "expired"];
 
-const SECTIONS: { key: Exclude<FollowUpBucket, "done">; title: string; accent: string }[] = [
-  { key: "overdue", title: "Overdue", accent: "text-red-700" },
-  { key: "today", title: "Due today", accent: "text-brand-700" },
-  { key: "upcoming", title: "Upcoming", accent: "text-stone-700" },
+const SECTIONS: {
+  key: Exclude<FollowUpBucket, "done">;
+  title: string;
+  /** The count's chip: red late, amber today, blue coming up. */
+  chip: string;
+}[] = [
+  { key: "overdue", title: "Overdue", chip: "chip-late" },
+  { key: "today", title: "Due today", chip: "chip-today" },
+  { key: "upcoming", title: "Coming up", chip: "chip-soon" },
 ];
 
 export function FollowUpsClient({
@@ -69,7 +79,7 @@ export function FollowUpsClient({
   // Only one quote's reminders when opened from that quote, if it has any here.
   const forQuote = useMemo(
     () => (quoteId ? followUps.filter((f) => f.quote_id === quoteId) : []),
-    [followUps, quoteId]
+    [followUps, quoteId],
   );
   const filtered = forQuote.length > 0;
   const shown = filtered ? forQuote : followUps;
@@ -84,9 +94,14 @@ export function FollowUpsClient({
     };
     // One row per quote: its due reminder, or else its next one. Opened for a
     // single quote ("View follow-ups"), its whole schedule is listed instead.
-    for (const f of filtered ? shown : onePerQuote(shown, today)) buckets[classifyFollowUp(f, today)].push(f);
+    for (const f of filtered ? shown : onePerQuote(shown, today))
+      buckets[classifyFollowUp(f, today)].push(f);
     // Most recently completed first.
-    buckets.done.sort((a, b) => (b.completed_at ?? b.due_date).localeCompare(a.completed_at ?? a.due_date));
+    buckets.done.sort((a, b) =>
+      (b.completed_at ?? b.due_date).localeCompare(
+        a.completed_at ?? a.due_date,
+      ),
+    );
     return buckets;
   }, [shown, filtered, today]);
 
@@ -99,18 +114,26 @@ export function FollowUpsClient({
         subtitle={
           followUps.length === 0
             ? "Reminders for every quote you've sent."
-            : `${needAttention} need${needAttention === 1 ? "s" : ""} attention · ${groups.upcoming.length} coming up`
+            : `${needAttention} need${needAttention === 1 ? "s" : ""} attention, ${groups.upcoming.length} coming up`
         }
       />
 
-      {followUps.some((f) => isSampleAddress(f.lead?.email)) && <SampleDataBanner />}
+      {followUps.some((f) => isSampleAddress(f.lead?.email)) && (
+        <SampleDataBanner />
+      )}
 
       {filtered && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md bg-stone-900/[0.04] px-3 py-2 text-sm text-stone-700 ring-1 ring-inset ring-stone-200">
+        <div className="msg-info mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <span className="min-w-0 [overflow-wrap:anywhere]">
-            Showing reminders for <span className="font-medium text-stone-900">{quoteTitle ?? "one quote"}</span>
+            Showing reminders for{" "}
+            <span className="font-semibold text-stone-900">
+              {quoteTitle ?? "one quote"}
+            </span>
           </span>
-          <Link href="/follow-ups" className="btn-ghost tap shrink-0 px-2 text-xs">
+          <Link
+            href="/follow-ups"
+            className="tap inline-flex shrink-0 items-center font-medium text-info-700 hover:underline"
+          >
             Show all follow-ups
           </Link>
         </div>
@@ -119,10 +142,13 @@ export function FollowUpsClient({
       {notice && (
         <div
           role="alert"
-          className="mb-4 flex items-start justify-between gap-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200"
+          className="ql-fade mb-4 flex items-start justify-between gap-3 rounded-[6px] border-2 border-brand-400 bg-brand-50 px-4 py-2.5 text-[15px] text-stone-900"
         >
           <span>{notice}</span>
-          <button className="btn-ghost tap -my-1 shrink-0 px-2 text-xs" onClick={() => setNotice(null)}>
+          <button
+            className="tap -my-1 shrink-0 font-medium text-info-700 hover:underline"
+            onClick={() => setNotice(null)}
+          >
             Dismiss
           </button>
         </div>
@@ -140,21 +166,22 @@ export function FollowUpsClient({
           }
         />
       ) : (
-        <div className="space-y-6">
-          {SECTIONS.map((s) =>
+        <div className="flex flex-col gap-4">
+          {SECTIONS.map((s, si) =>
             groups[s.key].length === 0 ? null : (
-              <section key={s.key}>
-                <h2 className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", s.accent)}>
-                  {s.title}
-                  <span className="num rounded bg-stone-900/5 px-1.5 text-xs text-stone-500">
-                    {groups[s.key].length}
-                  </span>
-                </h2>
-                <ul className="card divide-y divide-stone-100">
-                  {groups[s.key].map((f) => (
+              <section key={s.key} aria-labelledby={`fu-${s.key}`} className="card ql-in" style={{ animationDelay: `${si * 60}ms` }}>
+                <div className="card-head">
+                  <h2 id={`fu-${s.key}`} className="card-title">
+                    {s.title}
+                  </h2>
+                  <span className={cn("num", s.chip)}>{groups[s.key].length}</span>
+                </div>
+                <ul className="divide-y divide-[#ECEEF1]">
+                  {groups[s.key].map((f, i) => (
                     <FollowUpRow
                       key={f.id}
                       f={f}
+                      index={si * 2 + i}
                       today={today}
                       emailEnabled={emailEnabled}
                       onWrite={() => setAiFor(f)}
@@ -163,37 +190,45 @@ export function FollowUpsClient({
                   ))}
                 </ul>
               </section>
-            )
+            ),
           )}
 
           {needAttention === 0 && groups.upcoming.length === 0 && (
-            <p className="card px-4 py-6 text-sm text-stone-500">
-              You&apos;re all caught up. New follow-ups appear when you add your next quote.
+            <p className="card ql-fade px-5 py-6 text-[14px] text-stone-500">
+              You&apos;re all caught up. New follow-ups appear when you add your
+              next quote.
             </p>
           )}
 
           {groups.done.length > 0 && (
-            <section>
+            <section className="card">
               <button
-                className="tap mb-2 flex items-center gap-1 text-sm font-semibold text-stone-500 hover:text-stone-900"
+                className="tap flex w-full items-center gap-2 px-5 py-4 text-left text-[16px] font-medium text-stone-700 hover:text-stone-900"
                 onClick={() => setShowDone((v) => !v)}
                 aria-expanded={showDone}
               >
-                <ChevronRight className={cn("h-4 w-4 transition-transform", showDone && "rotate-90")} />
-                Completed & skipped
-                <span className="num rounded bg-stone-900/5 px-1.5 text-xs">{groups.done.length}</span>
+                <ChevronRight
+                  className={cn(
+                    "h-5 w-5 transition-transform duration-200 ease-board",
+                    showDone && "rotate-90",
+                  )}
+                />
+                Completed and skipped
+                <span className="num chip-muted">{groups.done.length}</span>
               </button>
               {showDone && moreDone && (
-                <p className="mb-2 text-xs text-stone-500">
-                  Showing the latest {groups.done.length}. Export follow-ups in Settings for the full history.
+                <p className="px-5 pb-3 text-[14px] text-stone-500">
+                  Showing the latest {groups.done.length}. Export follow-ups in
+                  Settings for the full history.
                 </p>
               )}
               {showDone && (
-                <ul className="card divide-y divide-stone-100">
-                  {groups.done.map((f) => (
+                <ul className="divide-y divide-[#ECEEF1] border-t border-[#ECEEF1]">
+                  {groups.done.map((f, i) => (
                     <FollowUpRow
                       key={f.id}
                       f={f}
+                      index={i}
                       today={today}
                       emailEnabled={emailEnabled}
                       onWrite={() => setAiFor(f)}
@@ -229,12 +264,15 @@ export function FollowUpsClient({
 
 function FollowUpRow({
   f,
+  index,
   today,
   emailEnabled,
   onWrite,
   onLostMessage,
 }: {
   f: Row;
+  /** Position in the list, for the staggered entrance. */
+  index: number;
   today: string;
   emailEnabled: boolean;
   onWrite: () => void;
@@ -251,12 +289,12 @@ function FollowUpRow({
     setRowError(message);
   };
   // A refused "Mark followed up" can refresh the page and move this reminder into the closed
-  // "Completed & skipped" list; its explanation then moves to the top.
+  // "Completed and skipped" list; its explanation then moves to the top.
   useEffect(
     () => () => {
       if (shownError.current) onLostMessage(shownError.current);
     },
-    [onLostMessage]
+    [onLostMessage],
   );
 
   // A failed "Mark followed up" / Skip / Reopen is shown on this row, not as an error page.
@@ -274,85 +312,86 @@ function FollowUpRow({
   const isPending = f.status === "pending";
   const canEmail = emailEnabled && Boolean(f.lead?.email?.trim());
   const urgent = bucket === "overdue" || bucket === "today";
+  const extra = [
+    (f.dueCount ?? 1) > 1 ? `${f.dueCount} reminders missed` : null,
+    (f.laterCount ?? 0) > 0 ? `then ${f.laterCount} more scheduled` : null,
+  ].filter(Boolean);
+  const menuLabel = `More actions for ${f.lead?.customer_name ?? "this follow-up"}`;
 
   return (
-    // Side by side from laptop width; below that the sidebar leaves too little room.
-    <li className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-medium text-stone-900">
-            {f.lead?.customer_name ?? "—"}
+    // Side by side from laptop width; stacked on phones and tablets.
+    <li
+      className="ql-in relative grid grid-cols-1 gap-x-6 gap-y-3 px-4 py-4 transition-colors hover:bg-stone-50/60 sm:px-5 lg:grid-cols-[minmax(0,1fr)_8rem_auto] lg:items-center"
+      style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
+    >
+      {/* Room on the right for the ⋯ menu, which sits in the corner on phones. */}
+      <div className="min-w-0 pr-12 lg:pr-0">
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <span className="text-[16px] font-medium leading-snug text-stone-900 [overflow-wrap:anywhere]">
+            {f.lead?.customer_name ?? "Customer"}
           </span>
-          <span className="shrink-0 whitespace-nowrap text-xs text-stone-400">follow-up #{f.follow_up_number}</span>
+          <span className="whitespace-nowrap text-[13px] text-stone-500">
+            Follow-up {f.follow_up_number}
+          </span>
           {!isPending && <StatusBadge kind="followup" value={f.status} />}
           {isSampleAddress(f.lead?.email) && <SampleBadge />}
         </div>
-        {/* A long title is cut short; the amount always stays in view. */}
-        <div className="flex min-w-0 items-baseline gap-1 text-sm text-stone-500">
-          <span className="min-w-0 truncate" title={f.quote?.title}>
+        <p className="mt-0.5 flex flex-wrap items-baseline gap-x-3 text-[14px] text-stone-600">
+          <span className="min-w-0 [overflow-wrap:anywhere]">
             {f.quote?.title ?? "Quote"}
           </span>
           {f.quote && (
-            <span className="num shrink-0 whitespace-nowrap">
-              · {formatCurrency(Number(f.quote.amount), f.quote.currency)}
+            <span className="num whitespace-nowrap font-semibold text-stone-900">
+              {formatCurrency(Number(f.quote.amount), f.quote.currency)}
             </span>
           )}
-        </div>
-        {/* On its own line, so it wraps on a narrow phone instead of widening the row. */}
-        {((f.dueCount ?? 1) > 1 || (f.laterCount ?? 0) > 0) && (
-          <p className="mt-0.5 text-xs text-stone-500" title="One follow-up covers all the missed reminders.">
-            {[
-              (f.dueCount ?? 1) > 1 ? `${f.dueCount} reminders missed` : null,
-              (f.laterCount ?? 0) > 0 ? `then ${f.laterCount} more scheduled` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+        </p>
+        {extra.length > 0 && (
+          <p
+            className="mt-0.5 text-[13px] text-stone-500"
+            title="One follow-up covers all the missed reminders."
+          >
+            {extra.join(", ")}
           </p>
         )}
         {isPending && !canEmail && (
-          <p className="mt-0.5 text-xs text-stone-500">
+          <p className="mt-0.5 text-[13px] text-stone-500">
             Add an email address to send from QuoteLoop, or copy the message.
           </p>
         )}
         {rowError && (
-          <p role="alert" className="mt-1 text-sm text-red-700">
+          <p role="alert" className="mt-1 text-[14px] font-medium text-red-700">
             {rowError}
           </p>
         )}
         {f.status === "completed" && f.message_snapshot && (
-          <p className="mt-1 line-clamp-1 border-l-2 border-emerald-400 pl-2 text-xs italic text-stone-500">
+          <p className="mt-1 line-clamp-1 border-l-2 border-emerald-500 pl-2 text-[13px] text-stone-500">
             Final text used: {f.message_snapshot}
           </p>
         )}
       </div>
 
-      <div className="text-sm lg:w-36 lg:text-right">
-        <div
-          className={cn(
-            bucket === "overdue"
-              ? "font-medium text-red-700"
-              : bucket === "today"
-                ? "font-medium text-brand-700"
-                : "text-stone-600"
-          )}
-        >
-          {isPending
-            ? bucket === "today"
-              ? "Due today"
-              : relativeDay(f.due_date, today).replace(/^./, (c) => c.toUpperCase())
-            : f.completed_at
-              ? `Followed up ${formatDate(f.completed_at)}`
-              : "Skipped"}
-        </div>
-        <div className="text-xs text-stone-400">{formatDate(f.due_date)}</div>
+      {/* When: a chip while it's waiting (exact date on hover), plain words once done. */}
+      <div className="flex items-center lg:justify-end">
+        {isPending ? (
+          <DueChip dueDate={f.due_date} today={today} />
+        ) : (
+          <span className="text-[13px] text-stone-500">
+            {f.completed_at ? `Followed up ${formatDate(f.completed_at)}` : "Skipped"}
+          </span>
+        )}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-1 lg:justify-end">
-        {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 lg:flex-nowrap lg:justify-end">
+        {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-500" />}
         {isPending ? (
           <>
-            <button className={urgent ? "btn-accent" : "btn-secondary"} disabled={pending} onClick={onWrite}>
-              <Sparkles className="h-4 w-4" /> Write follow-up
+            <button
+              className={urgent ? "btn-primary" : "btn-secondary"}
+              disabled={pending}
+              onClick={onWrite}
+            >
+              <PenLine className="h-4 w-4" /> Write follow-up
             </button>
             {/* Records a follow-up the user made themselves; nothing is sent.
                 A plain outlined button with the full label, so it reads as
@@ -365,16 +404,25 @@ function FollowUpRow({
             >
               <Check className="h-4 w-4" /> Mark followed up
             </button>
-            <Menu>
-              {SNOOZE_CHOICES.map((c) => (
-                <MenuItem key={c.days} onClick={() => run(() => snoozeFollowUp(f.id, c.days))}>
-                  {c.label}
+            <div className="absolute right-3 top-3 lg:static">
+              <Menu label={menuLabel}>
+                <MenuLabel>Remind me later</MenuLabel>
+                {SNOOZE_CHOICES.map((c) => (
+                  <MenuItem
+                    key={c.days}
+                    onClick={() => run(() => snoozeFollowUp(f.id, c.days))}
+                  >
+                    {c.label}
+                  </MenuItem>
+                ))}
+                <MenuDivider />
+                <MenuItem onClick={() => run(() => skipFollowUp(f.id))}>
+                  {(f.dueCount ?? 1) > 1
+                    ? "Skip these reminders"
+                    : "Skip this reminder"}
                 </MenuItem>
-              ))}
-              <MenuItem onClick={() => run(() => skipFollowUp(f.id))}>
-                {(f.dueCount ?? 1) > 1 ? "Skip these reminders" : "Skip this reminder"}
-              </MenuItem>
-            </Menu>
+              </Menu>
+            </div>
           </>
         ) : (
           <>
@@ -383,7 +431,7 @@ function FollowUpRow({
             </button>
             {/* A won, lost or expired quote's reminders stay closed. */}
             {!CLOSED_QUOTE.includes(f.quote?.status ?? "") && (
-              <Menu>
+              <Menu label={menuLabel}>
                 <MenuItem onClick={() => run(() => reopenFollowUp(f.id))}>
                   Reopen reminder
                 </MenuItem>

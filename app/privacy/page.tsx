@@ -9,7 +9,7 @@ import {
 } from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — QuoteLoop",
+  title: "Privacy Policy | QuoteLoop",
   description: "What information QuoteLoop collects, how it is used, and the choices you have.",
 };
 
@@ -185,13 +185,13 @@ export default function PrivacyPage() {
         <p>We use these providers to run QuoteLoop:</p>
         <LegalList
           items={[
-            "Railway — hosting",
-            "Supabase — database and login",
-            "Resend — email delivery, including account emails such as sign-up confirmations",
-            "DeepSeek — AI text generation",
-            "Google — sign-in with Google",
-            "Cloudflare — domain and DNS",
-            "Our payment provider (when you subscribe) — sells you the subscription as the reseller, and handles your card details, billing address and sales tax. We never see your full card number.",
+            "Railway: hosting",
+            "Supabase: database and login",
+            "Resend: email delivery, including account emails such as sign-up confirmations",
+            "DeepSeek: AI text generation",
+            "Google: sign-in with Google",
+            "Cloudflare: domain and DNS",
+            "Our payment provider (when you subscribe): sells you the subscription as the reseller, and handles your card details, billing address and sales tax. We never see your full card number.",
           ]}
         />
         <p>

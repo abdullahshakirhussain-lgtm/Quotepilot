@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/constants";
 import type { Lead } from "@/lib/types";
 import { reportUnreachable } from "@/lib/form-action";
@@ -50,14 +51,25 @@ export function LeadFormModal({
 
   // Set once anything is typed, so closing by accident asks first.
   const dirty = useRef(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     if (state.ok) onClose();
   }, [state.ok, onClose]);
 
-  function requestClose() {
+  async function requestClose() {
     if (pending) return;
-    if (dirty.current && !window.confirm("Close without saving? What you typed will be lost.")) return;
+    if (
+      dirty.current &&
+      !(await confirm({
+        title: "Close without saving?",
+        message: "What you typed will be lost.",
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        danger: true,
+      }))
+    )
+      return;
     onClose();
   }
 
@@ -196,7 +208,7 @@ export function LeadFormModal({
         </div>
 
         {state.error && !state.duplicate && !editedSinceSubmit && (
-          <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div role="alert" className="msg-error">
             {state.error}
           </div>
         )}
@@ -204,7 +216,7 @@ export function LeadFormModal({
         {warned && (
           <div
             role="alert"
-            className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200"
+            className="msg-warn"
           >
             {state.error}
           </div>
@@ -220,6 +232,7 @@ export function LeadFormModal({
           </button>
         </div>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

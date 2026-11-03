@@ -1,10 +1,26 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Open dialogs; the page stays locked from scrolling until the last one closes. */
+let openCount = 0;
+
+/** False on the server and while hydrating, true after: dialogs render into <body>. */
+const noop = () => () => {};
+function useMounted() {
+  return useSyncExternalStore(noop, () => true, () => false);
+}
+
+/** Whether `el` is the top dialog when one opens another (e.g. a confirmation). */
+function isTop(el: HTMLElement | null) {
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  return el !== null && dialogs[dialogs.length - 1] === el;
+}
 
 /** The controls a keyboard can reach inside the dialog, in order. */
 function focusables(root: HTMLElement): HTMLElement[] {
@@ -28,24 +44,33 @@ export function Modal({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const mounted = useMounted();
+  const shown = open && mounted;
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
+    if (!shown) return;
+    openCount += 1;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      openCount -= 1;
+      if (openCount === 0) document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [shown]);
+
+  useEffect(() => {
+    if (!shown) return;
+    // Escape closes only the top dialog, never the one underneath too.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isTop(dialogRef.current)) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [shown, onClose]);
 
   // Keyboard focus belongs to the open dialog: move it in, keep Tab inside,
   // and hand it back to whatever opened the dialog when it closes.
   useEffect(() => {
-    if (!open) return;
+    if (!shown) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = requestAnimationFrame(() => {
       const dialog = dialogRef.current;
@@ -56,8 +81,7 @@ export function Modal({
       const dialog = dialogRef.current;
       if (e.key !== "Tab" || !dialog) return;
       // Only the top dialog traps focus when one opens another.
-      const dialogs = document.querySelectorAll('[role="dialog"]');
-      if (dialogs[dialogs.length - 1] !== dialog) return;
+      if (!isTop(dialog)) return;
       const items = focusables(dialog);
       if (!items.length) {
         e.preventDefault();
@@ -81,13 +105,15 @@ export function Modal({
       document.removeEventListener("keydown", onTab);
       if (opener?.isConnected) opener.focus();
     };
-  }, [open]);
+  }, [shown]);
 
-  if (!open) return null;
+  if (!shown) return null;
 
-  return (
+  // Rendered into <body>, so a dialog opened from inside another (or from a
+  // row with its own animation) is never clipped or positioned by its parent.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/50 p-4 sm:p-8"
+      className="ql-fade fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-stone-950/50 sm:items-start sm:p-8"
       onMouseDown={(e) => {
         // Only a press on the dimmed backdrop itself closes the dialog — not
         // one on this layer's scrollbar, which a tall dialog scrolls with.
@@ -103,16 +129,16 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`my-6 w-full overflow-hidden rounded-lg border outline-none border-stone-200 bg-white shadow-2xl shadow-stone-950/20 ${
-          size === "lg" ? "max-w-2xl" : "max-w-lg"
+        className={`ql-rise max-h-[92dvh] w-full overflow-y-auto rounded-t-[16px] bg-white shadow-[0_18px_48px_rgba(21,24,28,0.25)] outline-none sm:my-6 sm:max-h-none sm:overflow-hidden sm:rounded-[16px] ${
+          size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg"
         }`}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-[#ECEEF1] px-5 py-4">
           <div className="min-w-0">
-            <h2 id={titleId} className="text-base font-semibold text-stone-900">{title}</h2>
+            <h2 id={titleId} className="text-[20px] font-semibold leading-tight text-stone-900">{title}</h2>
             {description && (
-              <div className="mt-0.5 text-sm text-stone-500">{description}</div>
+              <div className="mt-1 text-[15px] text-stone-600">{description}</div>
             )}
           </div>
           <button
@@ -126,6 +152,7 @@ export function Modal({
         </div>
         <div className="px-5 py-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

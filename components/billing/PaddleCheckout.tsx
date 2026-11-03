@@ -40,7 +40,7 @@ export function PaddleCheckout({ token }: { token: string }) {
   return (
     <>
       <Script src="https://cdn.paddle.com/paddle/v2/paddle.js" strategy="afterInteractive" onReady={start} onError={() => setState("failed")} />
-      <p role="status" className="mt-3 inline-flex max-w-sm items-center gap-2 text-sm text-stone-600">
+      <p role="status" className="mt-3 inline-flex items-center gap-2 text-base text-stone-700">
         {state === "loading" && (
           <>
             <Loader2 className="h-4 w-4 animate-spin" /> Opening secure checkout…

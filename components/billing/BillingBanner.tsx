@@ -44,7 +44,9 @@ export function BillingBanner({
 
   if (state === "trial") {
     const left = daysLeft ?? 0;
-    tone = left <= 3 ? "warn" : "info";
+    // More than three days left: shown quietly in the navigation instead.
+    if (left > 3) return null;
+    tone = "warn";
     text =
       left <= 1 ? (
         <>Your free trial ends {when(endsAt, timeZone)}. Subscribe to keep adding quotes and following up.</>
@@ -84,14 +86,14 @@ export function BillingBanner({
       data-billing-banner
       role={tone === "danger" ? "alert" : "status"}
       className={cn(
-        "mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg px-4 py-3 text-sm ring-1 ring-inset",
-        tone === "info" && "bg-stone-50 text-stone-700 ring-stone-200",
-        tone === "warn" && "bg-amber-50 text-amber-900 ring-amber-200",
-        tone === "danger" && "bg-red-50 text-red-900 ring-red-200"
+        "ql-fade mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[12px] border px-4 py-3 text-[14px]",
+        tone === "info" && "border-line bg-white text-stone-900",
+        tone === "warn" && "border-[#F3DFA2] bg-due-50 text-stone-900",
+        tone === "danger" && "border-red-200 bg-red-50 text-red-800"
       )}
     >
       <p className="min-w-0 [overflow-wrap:anywhere]">{text}</p>
-      <Link href="/settings#billing" className="btn-secondary shrink-0 px-3 py-1.5 text-xs">
+      <Link href="/settings#billing" className={cn("shrink-0 px-3 py-1.5", tone === "danger" ? "btn-danger" : "btn-primary")}>
         {action}
       </Link>
     </div>

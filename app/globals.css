@@ -13,56 +13,189 @@ body {
 
 /* Money and counts line up in columns. */
 .num {
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* One visible focus ring everywhere. */
+:focus-visible {
+  outline: 3px solid #2a78d6;
+  outline-offset: 2px;
 }
 
 /* Reusable component classes ---------------------------------------------
-   Ink-black primary buttons, bordered (not shadowed) surfaces, one accent.
-   Buttons never wrap their label onto two lines. */
+   White cards on a light grey page; 8px controls, 12px cards; colour kept for
+   meaning (chips). Buttons never wrap their label onto two lines. */
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[8px] px-3.5 py-2 text-[14px] font-medium transition-[transform,background-color,color,border-color] duration-150 ease-board active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-stone-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply btn bg-stone-900 text-white hover:bg-stone-700;
   }
   .btn-accent {
-    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply btn bg-stone-900 text-white hover:bg-stone-700;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 transition-colors hover:border-stone-400 hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply btn border border-stone-300 bg-white py-[7px] text-stone-900 hover:border-stone-400 hover:bg-stone-50;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply btn border border-red-200 bg-white py-[7px] text-red-700 hover:bg-red-50;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-900/5 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply btn px-2.5 text-stone-600 hover:bg-stone-100 hover:text-stone-900;
   }
+  /* 16px text: phones don't zoom in when a field is tapped. */
   .input {
-    @apply w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none focus:ring-2 focus:ring-stone-900/10;
+    @apply w-full rounded-[8px] border border-stone-300 bg-white px-3 py-2.5 text-[16px] leading-6 text-stone-900 placeholder:text-stone-400 focus:border-info-500 focus:outline-none focus:ring-2 focus:ring-info-500/20;
+  }
+  /* Dropdowns look like the other fields, with a drawn arrow, not the browser's box. */
+  select.input {
+    @apply cursor-pointer appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%235f6872' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
   }
   .label {
-    @apply mb-1 block text-[13px] font-medium text-stone-700;
+    @apply mb-1.5 block text-[14px] font-medium text-stone-800;
   }
+  /* A white card. Lists inside it are separated by hairlines, never by more cards. */
   .card {
-    @apply rounded-lg border border-stone-200 bg-white;
+    @apply rounded-[12px] border border-line bg-white shadow-[0_1px_2px_rgba(16,24,40,0.05)];
+  }
+  /* A card's title bar. */
+  .card-head {
+    @apply flex items-center justify-between gap-3 border-b border-[#ECEEF1] px-5 py-4;
+  }
+  .card-title {
+    @apply text-[18px] font-medium leading-tight text-stone-900;
   }
   .badge {
-    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-medium leading-5;
   }
+  /* Status chips: the colour carries the meaning, the words say it too. */
+  .chip {
+    @apply inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium;
+  }
+  .chip-late {
+    @apply chip bg-red-50 text-red-700;
+  }
+  .chip-today {
+    @apply chip bg-due-50 text-due-800;
+  }
+  .chip-soon {
+    @apply chip bg-info-50 text-info-700;
+  }
+  .chip-won {
+    @apply chip bg-emerald-50 text-emerald-700;
+  }
+  .chip-muted {
+    @apply chip bg-stone-100 text-stone-600;
+  }
+  /* A small label in sentence case (never tracked capitals). */
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500;
+    @apply text-[13px] font-medium text-stone-500;
   }
   .page-title {
-    @apply text-[22px] font-semibold tracking-tight text-stone-900;
+    @apply text-[24px] font-semibold leading-tight text-stone-900 sm:text-[26px];
+  }
+  /* A group heading inside a form or dialog ("Customer", "Quote"). */
+  .section-title {
+    @apply text-[16px] font-semibold leading-tight text-stone-900;
+  }
+  /* Help under a field or control. */
+  .hint {
+    @apply text-[14px] text-stone-500;
+  }
+  /* Inline messages: one look per meaning. */
+  .msg {
+    @apply rounded-[8px] border px-3 py-2 text-[14px] text-stone-900;
+    animation: ql-fade 160ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+  .msg-error {
+    @apply msg border-red-200 bg-red-50 text-red-800;
+  }
+  .msg-warn {
+    @apply msg border-[#F3DFA2] bg-due-50 text-stone-900;
+  }
+  .msg-success {
+    @apply msg border-emerald-200 bg-emerald-50 text-emerald-800;
+  }
+  .msg-info {
+    @apply msg border-line bg-stone-50;
+  }
+  /* Highlighter behind a word: swipes in once, left to right. */
+  .hl {
+    @apply relative isolate inline-block px-1.5;
+  }
+  .hl::before {
+    content: "";
+    position: absolute;
+    inset: 14% 0 6%;
+    z-index: -1;
+    background: #ffe45c;
+    border-radius: 2px 7px 3px 8px;
+    animation: ql-swipe 420ms 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 }
 
-/* Buttons and small controls (icon buttons, "View all" links, toggles) keep
-   their compact look with a mouse, but get a finger-sized target (40px) on
-   touch screens and phones. A .tap element must be flex or inline-flex for the
-   height to apply. Its 40px minimum width replaces a flex item's usual minimum
-   (its content), so a .tap item in a row that must not squeeze needs shrink-0. */
+/* Motion -------------------------------------------------------------------
+   One curve everywhere (quick start, soft stop, no bounce). Content eases in
+   once when a page loads; menus and dialogs fade in. Nothing moves when the
+   device asks for reduced motion. */
+@keyframes ql-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ql-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ql-pop {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ql-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ql-sheet {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ql-swipe {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+/* "backwards": the starting look holds through any delay, and nothing is left
+   behind afterwards. A leftover transform would trap menus opened inside a
+   row under the rows after it. */
+.ql-in { animation: ql-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.ql-fade { animation: ql-fade 160ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.ql-pop { animation: ql-pop 140ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ql-rise { animation: ql-rise 180ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@media (max-width: 639px) {
+  .ql-rise { animation: ql-sheet 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* At most one account banner at a time: a billing banner hides the
+   sample-data one. */
+body:has([data-billing-banner]) [data-sample-banner] {
+  display: none;
+}
+
+/* Buttons and small controls keep their size with a mouse, but get a
+   finger-sized target (44px) on touch screens and phones. A .tap element must
+   be flex or inline-flex for the height to apply; a .tap item in a row that
+   must not squeeze needs shrink-0. */
 @layer components {
   @media (pointer: coarse), (max-width: 639px) {
     .btn,
@@ -72,11 +205,11 @@ body {
     .btn-danger,
     .btn-ghost,
     .input {
-      min-height: 40px;
+      min-height: 44px;
     }
     .tap {
-      min-height: 40px;
-      min-width: 40px;
+      min-height: 44px;
+      min-width: 44px;
     }
   }
 }

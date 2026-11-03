@@ -38,7 +38,7 @@ export function AddCustomerEmailModal({
       } catch (e) {
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         setError(
-          "QuoteLoop couldn't be reached, so the email address may not have been saved. You may have lost your connection, or been signed out in another tab — refresh the page and try again."
+          "QuoteLoop couldn't be reached, so the email address may not have been saved. You may have lost your connection, or been signed out in another tab. Refresh the page and try again."
         );
       }
     });
@@ -66,13 +66,13 @@ export function AddCustomerEmailModal({
             onKeyDown={(e) => e.key === "Enter" && save()}
             placeholder="name@example.com"
           />
-          <p className="mt-1 text-xs text-stone-500">
+          <p className="mt-1 hint">
             It is saved to this customer, so future follow-ups can be emailed too.
           </p>
         </div>
 
         {error && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+          <div className="msg-error">
             {error}
           </div>
         )}

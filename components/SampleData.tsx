@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { Database, Loader2, Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { removeSampleData, seedDemoData, type ActionState } from "@/app/(app)/settings/actions";
 
 const UNREACHABLE = "QuoteLoop couldn't be reached. Check your connection, refresh the page and try again.";
@@ -19,7 +20,7 @@ async function attempt(action: () => Promise<ActionState>): Promise<ActionState>
 /** Marks a made-up demo customer or quote. */
 export function SampleBadge() {
   return (
-    <span className="badge shrink-0 bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200" title="Made-up demo data. Nothing is ever emailed to it.">
+    <span className="shrink-0 text-[13px] font-medium text-stone-500" title="Made-up demo data. Nothing is ever emailed to it.">
       Sample
     </span>
   );
@@ -31,21 +32,35 @@ export function SampleBadge() {
  */
 export function SampleDataBanner() {
   const [busy, start] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="mb-5 rounded-lg bg-violet-50 px-4 py-3 text-sm text-violet-900 ring-1 ring-inset ring-violet-200">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div data-sample-banner className="msg-info mb-4 text-[14px] text-stone-700">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <p>
-          <span className="font-semibold">You&apos;re looking at sample data.</span> These customers are made up,
-          so nothing is ever emailed to them. Remove them when you&apos;re ready to add your own quotes.
+          <span className="font-medium text-stone-900">You&apos;re looking at sample data.</span>{" "}
+          <span className="hidden sm:inline">
+            These customers are made up, so nothing is ever emailed to them. Remove them when you&apos;re ready to add
+            your own quotes.
+          </span>
+          <span className="sm:hidden">Nothing is emailed to these customers.</span>
         </p>
         <button
           type="button"
-          className="btn-secondary shrink-0"
+          className="tap inline-flex shrink-0 items-center gap-1.5 font-medium text-info-700 hover:underline disabled:opacity-50"
           disabled={busy}
-          onClick={() => {
-            if (!window.confirm("Remove the sample customers and their quotes? Anything you added yourself stays.")) return;
+          onClick={async () => {
+            if (
+              !(await confirm({
+                title: "Remove sample data?",
+                message: "The sample customers and their quotes are removed. Anything you added yourself stays.",
+                confirmLabel: "Remove sample data",
+                cancelLabel: "Keep sample data",
+                danger: true,
+              }))
+            )
+              return;
             setError(null);
             start(async () => {
               const result = await attempt(removeSampleData);
@@ -66,6 +81,7 @@ export function SampleDataBanner() {
           {error}
         </p>
       )}
+      {confirmDialog}
     </div>
   );
 }

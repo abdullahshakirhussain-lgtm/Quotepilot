@@ -2,9 +2,12 @@ import { ImageResponse } from "next/og";
 import { PRICE_LABEL, TRIAL_DAYS } from "@/lib/marketing";
 
 // The card shown when a QuoteLoop link is shared (WhatsApp, Facebook, LinkedIn, X...).
+// The app's look: white board, black-marker rules, one yellow highlight.
 export const alt = "QuoteLoop: win more of the jobs you quote";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+
+const INK = "#1F2328";
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -15,35 +18,35 @@ export default function OpengraphImage() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "space-between",
-          padding: "72px 80px",
-          background: "#0C0A09",
-          color: "#FAFAF9",
+          background: "#FFFFFF",
+          color: INK,
+          padding: "56px 72px 60px",
         }}
       >
-        <div style={{ display: "flex", fontSize: 40, fontWeight: 700, letterSpacing: -1 }}>QuoteLoop</div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", fontSize: 84, fontWeight: 700, lineHeight: 1.05, letterSpacing: -3 }}>
+        <div style={{ display: "flex", fontSize: 44, fontWeight: 800, letterSpacing: -1.5 }}>QuoteLoop</div>
+        <div style={{ display: "flex", height: 8, background: INK, marginTop: 22 }} />
+        <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
+          <div style={{ display: "flex", fontSize: 96, fontWeight: 800, lineHeight: 0.98, letterSpacing: -4 }}>
             Win more of the jobs you quote
           </div>
-          <div style={{ display: "flex", marginTop: 28, fontSize: 34, color: "#D6D3D1" }}>
+          <div style={{ display: "flex", marginTop: 26, fontSize: 34, color: "#363D45" }}>
             Follow-up reminders and AI-drafted follow-ups for small service businesses
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center" }}>
+        <div style={{ display: "flex", height: 3, background: INK, marginBottom: 22 }} />
+        <div style={{ display: "flex", alignItems: "center", fontSize: 32 }}>
           <div
             style={{
               display: "flex",
-              padding: "14px 28px",
-              borderRadius: 12,
-              background: "#D24A12",
-              fontSize: 30,
-              fontWeight: 700,
+              padding: "6px 14px",
+              background: "#FFE45C",
+              borderRadius: "3px 10px 4px 12px",
+              fontWeight: 800,
             }}
           >
             {`${TRIAL_DAYS}-day free trial`}
           </div>
-          <div style={{ display: "flex", marginLeft: 24, fontSize: 30, color: "#A8A29E" }}>{`then ${PRICE_LABEL}/month · quoteloop.site`}</div>
+          <div style={{ display: "flex", marginLeft: 22, color: "#4B535C" }}>{`then ${PRICE_LABEL} a month. quoteloop.site`}</div>
         </div>
       </div>
     ),

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BellRing, Check, Sparkles } from "lucide-react";
+import { BellRing, Check, PenLine } from "lucide-react";
 import { formatDate, relativeDay } from "@/lib/utils";
 import type { QuoteFlowOutcome } from "@/lib/quote-flows";
 
@@ -20,7 +20,7 @@ export function QuoteDonePanel({
   onAnother,
 }: {
   result: QuoteSuccess;
-  /** What was saved, e.g. "Deep clean · $1,250.00". */
+  /** What was saved, e.g. "Deep clean, $1,250.00". */
   summary?: string;
   /** Viewer's local date from the server. */
   today: string;
@@ -32,26 +32,26 @@ export function QuoteDonePanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start gap-3 rounded-md bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
-        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+      <div className="flex items-start gap-3 msg-success">
+        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
         {/* min-w-0 + anywhere: a long unbroken title wraps instead of running out of the dialog. */}
         <span className="min-w-0 [overflow-wrap:anywhere]">
           {result.recipient ? (
             <>
-              Sent to <span className="font-medium">{result.recipient}</span>. {result.customerName} has your
-              quote{summary ? <>: <span className="num font-medium">{summary}</span></> : null}.
+              Sent to <span className="font-semibold">{result.recipient}</span>. {result.customerName} has your
+              quote{summary ? <>: <span className="num font-semibold">{summary}</span></> : null}.
             </>
           ) : (
             <>
               Saved for {result.customerName}
               {summary ? (
                 <>
-                  : <span className="num font-medium">{summary}</span>
+                  : <span className="num font-semibold">{summary}</span>
                 </>
               ) : null}
               .
               {firstDue && !result.followUpDueNow
-                ? ` Follow-up #${firstDue.follow_up_number} is scheduled for ${formatDate(
+                ? ` Follow-up ${firstDue.follow_up_number} is scheduled for ${formatDate(
                     firstDue.due_date,
                   )}.`
                 : ""}
@@ -61,8 +61,8 @@ export function QuoteDonePanel({
       </div>
 
       {result.followUpDueNow && (
-        <div className="flex items-start gap-3 rounded-md bg-amber-50 px-3 py-2.5 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
-          <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="flex items-start gap-3 msg-warn">
+          <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-stone-900" />
           <span>
             This quote already needs a follow-up.{" "}
             {overdueCount > 1
@@ -73,22 +73,22 @@ export function QuoteDonePanel({
       )}
 
       {result.warning && (
-        <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        <div className="msg-warn">
           {result.warning}
         </div>
       )}
 
       {result.schedule.length > 0 && (
         <div>
-          <p className="eyebrow mb-2">Follow-up schedule</p>
-          <ul className="divide-y divide-stone-100 rounded-md border border-stone-200 text-sm">
+          <p className="section-title mb-2">Follow-up schedule</p>
+          <ul className="divide-y divide-[#ECEEF1] rounded-[10px] border border-line px-3 text-[14px]">
             {result.schedule.map((f) => {
               const due = f.due_date.slice(0, 10) <= today;
               return (
-                <li key={f.follow_up_number} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <span className="text-stone-700">Follow-up #{f.follow_up_number}</span>
-                  <span className={due ? "font-medium text-amber-700" : "text-stone-500"}>
-                    {formatDate(f.due_date)} ·{" "}
+                <li key={f.follow_up_number} className="flex items-baseline justify-between gap-3 py-2">
+                  <span className="font-semibold text-stone-900">Follow-up {f.follow_up_number}</span>
+                  <span className={due ? "num font-semibold text-red-700" : "num text-stone-700"}>
+                    {formatDate(f.due_date)},{" "}
                     {f.due_date.slice(0, 10) < today ? "overdue" : relativeDay(f.due_date, today)}
                   </span>
                 </li>
@@ -99,7 +99,7 @@ export function QuoteDonePanel({
       )}
 
       {!result.hasCustomerEmail && (
-        <p className="text-sm text-stone-500">
+        <p className="hint">
           Add an email address to this customer to send follow-ups from QuoteLoop. For now you can copy each
           message.
         </p>
@@ -109,8 +109,8 @@ export function QuoteDonePanel({
         <div className="flex flex-wrap items-center gap-2">
           {result.followUpDueNow ? (
             <>
-              <button type="button" className="btn-accent" onClick={onWriteFollowUp}>
-                <Sparkles className="h-4 w-4" /> Write follow-up now
+              <button type="button" className="btn-primary" onClick={onWriteFollowUp}>
+                <PenLine className="h-4 w-4" /> Write follow-up now
               </button>
               <Link href={`/follow-ups?quote=${result.quoteId}`} className="btn-secondary">
                 View follow-ups
@@ -122,7 +122,7 @@ export function QuoteDonePanel({
                 View follow-ups
               </Link>
               <button type="button" className="btn-secondary" onClick={onWriteFollowUp}>
-                <Sparkles className="h-4 w-4" /> Write early follow-up
+                <PenLine className="h-4 w-4" /> Write early follow-up
               </button>
             </>
           )}
@@ -131,7 +131,7 @@ export function QuoteDonePanel({
           </button>
         </div>
         {!result.followUpDueNow && firstDue && (
-          <p className="mt-2 text-xs text-stone-500">
+          <p className="mt-2 hint">
             Your first reminder is scheduled for {formatDate(firstDue.due_date)}, but you can write a
             follow-up early if you want.
           </p>

@@ -14,12 +14,12 @@ import { deleteLead } from "@/app/(app)/leads/actions";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
 
-export function LeadsClient({ leads }: { leads: Lead[] }) {
+export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startNew?: boolean }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [editing, setEditing] = useState<Lead | null>(null);
   const [focusEmail, setFocusEmail] = useState(false);
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew] = useState(startNew);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -33,20 +33,24 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
     });
   }, [leads, query, statusFilter]);
 
+  const deleteOptions = (lead: Lead) => ({
+    title: "Delete this customer?",
+    message: `Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too. Records of emails QuoteLoop already sent are kept.`,
+    confirmLabel: "Delete customer",
+    cancelLabel: "Keep customer",
+    danger: true,
+  });
+
   return (
     <div>
       <PageHeader
         title="Customers"
         subtitle="Created automatically when you add a quote."
         actions={
-          <>
-            <button className="btn-secondary" onClick={() => setShowNew(true)}>
-              <UserPlus className="h-4 w-4" /> Add customer
-            </button>
-            <Link href="/quotes?new=1" className="btn-primary">
-              <Plus className="h-4 w-4" /> New quote
-            </Link>
-          </>
+          // "New quote" lives in the navigation, once per screen.
+          <button className="btn-secondary" onClick={() => setShowNew(true)}>
+            <UserPlus className="h-4 w-4" /> Add customer
+          </button>
         }
       />
 
@@ -67,16 +71,17 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
         <>
           <div className="mb-3 flex flex-wrap gap-2">
             <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-stone-400" />
+              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-stone-500" />
               <input
-                className="input py-1.5 pl-8"
+                className="input pl-9"
                 placeholder="Search name, company, email or phone"
+                aria-label="Search customers"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             <select
-              className="input tap w-auto py-1.5"
+              className="input tap w-auto"
               aria-label="Filter by stage"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "all")}
@@ -91,141 +96,144 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
           </div>
 
           {deleteError && (
-            <div
-              role="alert"
-              className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200"
-            >
+            <div role="alert" className="msg-error mb-3">
               {deleteError}
             </div>
           )}
 
           {filtered.length === 0 ? (
-            <p className="card px-4 py-8 text-center text-sm text-stone-500">
-              No customers match your search.
-            </p>
+            <p className="card px-5 py-6 text-[14px] text-stone-500">No customers match your search.</p>
           ) : (
             <>
-            {/* Phones: one card per customer, every action labelled and in view. */}
-            <ul className="space-y-3 md:hidden">
-              {filtered.map((lead) => (
-                <li key={lead.id} className="card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-stone-900 [overflow-wrap:anywhere]">{lead.customer_name}</span>
-                        {isSampleAddress(lead.email) && <SampleBadge />}
+              {/* Phones: one entry per customer, every action labelled and in view. */}
+              <ul className="card divide-y divide-[#ECEEF1] md:hidden">
+                {filtered.map((lead, i) => (
+                  <li key={lead.id} className="ql-in px-4 py-4" style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                          <span className="text-[16px] font-medium leading-snug text-stone-900 [overflow-wrap:anywhere]">
+                            {lead.customer_name}
+                          </span>
+                          {isSampleAddress(lead.email) && <SampleBadge />}
+                        </div>
+                        {lead.company_name && (
+                          <div className="text-[14px] text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>
+                        )}
                       </div>
-                      {lead.company_name && <div className="text-sm text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>}
+                      <StatusBadge kind="lead" value={lead.status} />
                     </div>
-                    <StatusBadge kind="lead" value={lead.status} />
-                  </div>
-                  <div className="mt-2 space-y-0.5 text-sm text-stone-600">
-                    {lead.email ? (
-                      <div className="[overflow-wrap:anywhere]">{lead.email}</div>
-                    ) : (
-                      <div className="text-stone-400">No email yet</div>
-                    )}
-                    {lead.phone && <div className="[overflow-wrap:anywhere]">{lead.phone}</div>}
-                    {lead.source && <div className="text-xs text-stone-400 [overflow-wrap:anywhere]">Source: {lead.source}</div>}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {!lead.email && (
+                    <div className="mt-1.5 space-y-0.5 text-[14px] text-stone-600">
+                      {lead.email ? (
+                        <div className="[overflow-wrap:anywhere]">{lead.email}</div>
+                      ) : (
+                        <div className="text-stone-600">No email yet</div>
+                      )}
+                      {lead.phone && <div className="num [overflow-wrap:anywhere]">{lead.phone}</div>}
+                      {lead.source && <div className="text-stone-600 [overflow-wrap:anywhere]">Source: {lead.source}</div>}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {!lead.email && (
+                        <button
+                          className="btn-primary"
+                          onClick={() => {
+                            setFocusEmail(true);
+                            setEditing(lead);
+                          }}
+                        >
+                          <Mail className="h-4 w-4" /> Add email
+                        </button>
+                      )}
                       <button
-                        className="btn-primary"
+                        className="btn-secondary"
                         onClick={() => {
-                          setFocusEmail(true);
+                          setFocusEmail(false);
                           setEditing(lead);
                         }}
                       >
-                        <Mail className="h-4 w-4" /> Add email
+                        <Pencil className="h-4 w-4" /> Edit
                       </button>
-                    )}
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        setFocusEmail(false);
-                        setEditing(lead);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" /> Edit
-                    </button>
-                    <Link href={`/quotes?lead=${lead.id}`} className="btn-secondary">
-                      <FilePlus2 className="h-4 w-4" /> New quote
-                    </Link>
-                    <ConfirmButton
-                      className="btn-ghost text-stone-500 hover:bg-red-50 hover:text-red-700"
-                      title="Delete customer"
-                      confirmMessage={`Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too. Records of emails QuoteLoop already sent are kept.`}
-                      action={() => deleteLead(lead.id)}
-                      onError={setDeleteError}
-                    >
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </ConfirmButton>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <div className="card hidden overflow-hidden md:block">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-sm">
+                      <Link href={`/quotes?lead=${lead.id}`} className="btn-secondary">
+                        <FilePlus2 className="h-4 w-4" /> New quote
+                      </Link>
+                      <ConfirmButton
+                        className="btn-ghost text-red-700 hover:bg-red-50"
+                        title="Delete customer"
+                        confirm={deleteOptions(lead)}
+                        action={() => deleteLead(lead.id)}
+                        onError={setDeleteError}
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete
+                      </ConfirmButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Tablets and up: a ruled table, like a ledger page. */}
+              {/* relative: keeps the screen-reader-only header label inside this scroll box. */}
+              <div className="card ql-fade relative hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[720px] text-[14px]">
                   <thead>
-                    <tr className="border-b border-stone-200 bg-stone-50/60 text-left">
-                      <th className="eyebrow px-4 py-2.5">Customer</th>
-                      <th className="eyebrow px-4 py-2.5">Contact</th>
-                      <th className="eyebrow px-4 py-2.5">Source</th>
-                      <th className="eyebrow px-4 py-2.5">Stage</th>
-                      <th className="px-4 py-2.5" />
+                    <tr className="border-b border-[#ECEEF1] text-left text-[13px] text-stone-500">
+                      <th className="py-3 pl-5 pr-4 font-medium">Customer</th>
+                      <th className="px-4 py-3 font-medium">Contact</th>
+                      <th className="px-4 py-3 font-medium">Source</th>
+                      <th className="px-4 py-3 font-medium">Stage</th>
+                      <th className="py-3 pl-4 pr-5">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-[#ECEEF1]">
+                    {/* No row-by-row entrance here: on table rows it left them invisible in Chrome. */}
                     {filtered.map((lead) => (
-                      <tr key={lead.id} className="hover:bg-stone-50/60">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 font-medium text-stone-900">
+                      <tr key={lead.id} className="transition-colors hover:bg-stone-50">
+                        <td className="py-3 pl-5 pr-4 align-top">
+                          <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-stone-900 [overflow-wrap:anywhere]">
                             {lead.customer_name}
                             {isSampleAddress(lead.email) && <SampleBadge />}
                           </div>
                           {lead.company_name && (
-                            <div className="text-xs text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>
+                            <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>
                           )}
-                          {lead.notes && (
-                            <div className="mt-0.5 line-clamp-1 max-w-xs text-xs text-stone-400">
-                              {lead.notes}
-                            </div>
-                          )}
+                          {lead.notes && <div className="mt-0.5 line-clamp-1 max-w-xs text-[14px] text-stone-600">{lead.notes}</div>}
                         </td>
-                        <td className="px-4 py-3 text-stone-600">
-                          {lead.email && <div>{lead.email}</div>}
-                          {lead.phone && <div className="text-xs text-stone-500">{lead.phone}</div>}
-                          {!lead.email && !lead.phone && <span className="text-stone-300">—</span>}
+                        <td className="px-4 py-3 align-top text-stone-700">
+                          {lead.email && <div className="[overflow-wrap:anywhere]">{lead.email}</div>}
+                          {lead.phone && <div className="num text-[13px] text-stone-500">{lead.phone}</div>}
+                          {!lead.email && !lead.phone && <span className="text-stone-600">None yet</span>}
                         </td>
-                        <td className="px-4 py-3 text-stone-600">
-                          {lead.source || <span className="text-stone-300">—</span>}
+                        <td className="px-4 py-3 align-top text-stone-700">
+                          {lead.source || <span className="text-stone-600">Not recorded</span>}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 align-top">
                           <StatusBadge kind="lead" value={lead.status} />
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-0.5">
+                        <td className="py-2 pl-4 pr-5 align-top">
+                          <div className="flex items-center justify-end gap-1">
                             <Link
                               href={`/quotes?lead=${lead.id}`}
-                              className="btn-ghost tap px-2 py-1 text-xs"
+                              className="btn-ghost tap whitespace-nowrap px-2 py-1.5"
                               title="New quote for this customer"
                             >
-                              <FilePlus2 className="h-4 w-4" /> Quote
+                              <FilePlus2 className="h-4 w-4" /> New quote
                             </Link>
                             <button
-                              className="btn-ghost tap px-2 py-1"
+                              className="btn-ghost tap px-2 py-1.5"
                               title="Edit customer"
                               aria-label="Edit customer"
-                              onClick={() => { setFocusEmail(false); setEditing(lead); }}
+                              onClick={() => {
+                                setFocusEmail(false);
+                                setEditing(lead);
+                              }}
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
                             <ConfirmButton
-                              className="btn-ghost tap px-2 py-1 text-stone-400 hover:bg-red-50 hover:text-red-700"
+                              className="btn-ghost tap px-2 py-1.5 text-stone-600 hover:bg-red-50 hover:text-red-700"
                               title="Delete customer"
-                              confirmMessage={`Delete ${lead.customer_name}? Their quotes and follow-ups are deleted too. Records of emails QuoteLoop already sent are kept.`}
+                              confirm={deleteOptions(lead)}
                               action={() => deleteLead(lead.id)}
                               onError={setDeleteError}
                             >
@@ -238,7 +246,6 @@ export function LeadsClient({ leads }: { leads: Lead[] }) {
                   </tbody>
                 </table>
               </div>
-            </div>
             </>
           )}
         </>

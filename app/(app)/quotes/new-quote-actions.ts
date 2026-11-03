@@ -40,7 +40,7 @@ function missingColumn(error: { message: string; code?: string }, column: string
 
 /** The customer picked in the form was deleted meanwhile (e.g. in another tab). */
 const CUSTOMER_GONE =
-  "The customer you picked no longer exists — they may have been deleted in another tab. Choose another customer, or add them as a new one.";
+  "The customer you picked no longer exists. They may have been deleted in another tab. Choose another customer, or add them as a new one.";
 
 /** A send that stopped before anything went out; says whether a draft was kept. */
 function stoppedBeforeSending(e: unknown): QuoteFlowOutcome {

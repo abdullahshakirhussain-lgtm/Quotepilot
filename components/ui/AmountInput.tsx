@@ -58,7 +58,7 @@ export function AmountInput({
         aria-describedby={text.trim() ? hintId : undefined}
       />
       {text.trim() !== "" && (
-        <p id={hintId} className={amount === null ? "mt-1 text-xs text-red-700" : "mt-1 text-xs text-stone-500"} aria-live="polite">
+        <p id={hintId} className={amount === null ? "mt-1 text-[15px] font-medium text-red-700" : "mt-1 hint"} aria-live="polite">
           {notPositive ? (
             "Enter an amount greater than zero."
           ) : amount === null ? (

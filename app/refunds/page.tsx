@@ -3,7 +3,7 @@ import { ContactEmail, InternalLink, LegalList, LegalPage, LegalSection } from "
 import { PRICE_LABEL, TRIAL_DAYS } from "@/lib/marketing";
 
 export const metadata: Metadata = {
-  title: "Refund Policy — QuoteLoop",
+  title: "Refund Policy | QuoteLoop",
   description: "QuoteLoop's 14-day money-back guarantee.",
 };
 

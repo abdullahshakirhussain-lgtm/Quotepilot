@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CURRENCIES } from "@/lib/constants";
 import type { Lead, Quote } from "@/lib/types";
 import { updateQuote, type QuoteActionState } from "@/app/(app)/quotes/actions";
@@ -58,6 +59,7 @@ export function QuoteFormModal({
   const done = useRef(false);
   // Set once anything is changed, so closing by accident asks first.
   const dirty = useRef(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     if (state.ok && !done.current) {
@@ -67,9 +69,19 @@ export function QuoteFormModal({
     }
   }, [state.ok, state.message, onSaved, onClose]);
 
-  function requestClose() {
+  async function requestClose() {
     if (pending) return;
-    if (dirty.current && !window.confirm("Close without saving your changes to this quote?")) return;
+    if (
+      dirty.current &&
+      !(await confirm({
+        title: "Close without saving?",
+        message: "Your changes to this quote will be lost.",
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        danger: true,
+      }))
+    )
+      return;
     onClose();
   }
 
@@ -100,7 +112,7 @@ export function QuoteFormModal({
         className="flex flex-col gap-6"
       >
         <section>
-          <span className="eyebrow">Customer</span>
+          <span className="section-title">Customer</span>
           <select
             name="lead_id"
             required
@@ -114,14 +126,14 @@ export function QuoteFormModal({
             {leads.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.customer_name}
-                {l.company_name ? ` — ${l.company_name}` : ""}
+                {l.company_name ? `, ${l.company_name}` : ""}
               </option>
             ))}
           </select>
         </section>
 
         <section className="space-y-3">
-          <span className="eyebrow">Quote</span>
+          <span className="section-title">Quote</span>
           <div>
             <label className="label" htmlFor="title">
               What did you quote for?
@@ -162,7 +174,7 @@ export function QuoteFormModal({
             </div>
           </div>
           {quote.status !== "draft" && quote.status !== "accepted" && quote.status !== "rejected" && quote.status !== "expired" && (
-            <p className="text-xs text-stone-500">
+            <p className="hint">
               Changing the sent date moves this quote&apos;s upcoming follow-up reminders with it.
             </p>
           )}
@@ -215,7 +227,7 @@ export function QuoteFormModal({
         </section>
 
         {state.error && (
-          <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+          <div role="alert" className="msg-error">
             {state.error}
           </div>
         )}
@@ -231,6 +243,7 @@ export function QuoteFormModal({
         </div>
         <input type="hidden" name="id" value={quote.id} />
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

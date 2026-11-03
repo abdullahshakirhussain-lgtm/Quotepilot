@@ -7,11 +7,16 @@ import { getRequestTimeZone } from "@/lib/request-time";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { isSampleAddress } from "@/lib/email-address";
 import type { Business, FollowUpWithContext } from "@/lib/types";
+import type { QuoteStatus } from "@/lib/constants";
+import type { LatestQuote } from "@/components/dashboard/DashboardView";
 
 export const dynamic = "force-dynamic";
 
+/** How many of the newest quotes the dashboard lists. */
+const LATEST_SHOWN = 8;
+
 const FOLLOW_UP_SELECT =
-  "*, quote:quotes(id, title, amount, currency, status, follow_up_count, valid_until, next_follow_up_at), lead:leads(id, customer_name, company_name)";
+  "*, quote:quotes(id, title, amount, currency, status, follow_up_count, valid_until, next_follow_up_at), lead:leads(id, customer_name, company_name, email)";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -23,7 +28,7 @@ export default async function DashboardPage() {
   // Every row, not just the API's first page: these feed totals and counts.
   // A failed query throws, and is never rendered as zeros — that would read as
   // "you lost your data".
-  const [businessRes, leads, quotes, followUps] = await Promise.all([
+  const [businessRes, leads, quotes, followUps, latestRes] = await Promise.all([
     supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
     fetchAllRows<{ status: string; email: string | null }>((from, to) =>
       supabase.from("leads").select("status, email").eq("user_id", user.id).order("id").range(from, to)
@@ -41,8 +46,31 @@ export default async function DashboardPage() {
         .order("id", { ascending: true })
         .range(from, to)
     ),
+    // The newest quotes, for the list at the bottom of the dashboard.
+    supabase
+      .from("quotes")
+      .select("id, title, amount, currency, status, quote_date, lead:leads(customer_name, company_name, email)")
+      .eq("user_id", user.id)
+      .order("quote_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(LATEST_SHOWN),
   ]);
   if (businessRes.error) throw new Error(`Could not load dashboard: ${businessRes.error.message}`);
+  if (latestRes.error) throw new Error(`Could not load dashboard: ${latestRes.error.message}`);
+  const latest: LatestQuote[] = (latestRes.data ?? []).map((q) => {
+    const lead = Array.isArray(q.lead) ? (q.lead[0] ?? null) : q.lead;
+    return {
+      id: q.id as string,
+      title: q.title as string,
+      amount: Number(q.amount),
+      currency: q.currency as string,
+      status: q.status as QuoteStatus,
+      quoteDate: q.quote_date as string,
+      customerName: lead?.customer_name ?? "Customer",
+      companyName: lead?.company_name ?? null,
+      sample: isSampleAddress(lead?.email),
+    };
+  });
 
   const business = businessRes.data;
   const currency = business?.currency ?? "USD";
@@ -68,6 +96,8 @@ export default async function DashboardPage() {
       upcoming={perQuote.filter((f) => classifyFollowUp(f, today) === "upcoming").slice(0, 5)}
       hasData={leads.length > 0 || quotes.length > 0}
       hasSampleData={leads.some((l) => isSampleAddress(l.email))}
+      customers={leads.length}
+      latest={latest}
     />
   );
 }

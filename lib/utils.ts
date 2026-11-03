@@ -27,12 +27,12 @@ export function formatCurrency(amount: number, currency = "USD"): string {
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "Not set";
   // Date-only values (quote_date, valid_until, due_date) are calendar dates, not
   // instants. `new Date("2026-09-13")` is UTC midnight, which renders as Sep 12
   // anywhere west of UTC — so parse them as local midnight instead.
   const d = DATE_ONLY.test(value) ? new Date(value + "T00:00:00") : new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "Not set";
   return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -125,7 +125,7 @@ export function daysSince(dateISO: string | null | undefined, today = todayISO()
  * server's `today` from client components so SSR and the browser agree.
  */
 export function relativeDay(dateISO: string | null | undefined, today = todayISO()): string {
-  if (!dateISO) return "—";
+  if (!dateISO) return "not set";
   const diff = daysBetween(today, dateISO.slice(0, 10));
   if (diff === 0) return "today";
   if (diff === 1) return "tomorrow";

@@ -157,34 +157,34 @@ export const TONE_LABELS: Record<Tone, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Status pill colors. Orange = needs attention, green = won money,
-// red = lost. Everything else stays neutral.
+// Status chips, filled pills: blue while a quote is in play, amber when it
+// hasn't been sent or a follow-up is due, green for won, grey for lost or idle.
 // ---------------------------------------------------------------------------
 
-const NEUTRAL = "bg-stone-100 text-stone-600 ring-1 ring-inset ring-stone-200";
-const ACTIVE = "bg-white text-stone-800 ring-1 ring-inset ring-stone-300";
-const ATTENTION = "bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200";
-const TALKING = "bg-sky-50 text-sky-800 ring-1 ring-inset ring-sky-200";
-const WON = "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200";
-const LOST = "bg-red-50 text-red-800 ring-1 ring-inset ring-red-200";
-const MUTED = "bg-stone-100 text-stone-400 ring-1 ring-inset ring-stone-200";
+const NEUTRAL = "bg-stone-100 text-stone-700";
+const NOT_SENT = "bg-due-50 text-due-800";
+const ACTIVE = "bg-info-50 text-info-700";
+const ATTENTION = "bg-due-50 text-due-800";
+const WON = "bg-emerald-50 text-emerald-700";
+const LOST = "bg-stone-100 text-stone-600";
+const MUTED = "bg-stone-100 text-stone-500";
 
 export const LEAD_STATUS_COLORS: Record<LeadStatus, string> = {
   new: NEUTRAL,
   contacted: NEUTRAL,
   quote_sent: ACTIVE,
   follow_up_due: ATTENTION,
-  negotiating: TALKING,
+  negotiating: ACTIVE,
   won: WON,
   lost: LOST,
   cold: MUTED,
 };
 
 export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: NEUTRAL,
+  draft: NOT_SENT,
   sent: ACTIVE,
-  follow_up_due: ATTENTION,
-  negotiating: TALKING,
+  follow_up_due: ACTIVE,
+  negotiating: ACTIVE,
   accepted: WON,
   rejected: LOST,
   expired: MUTED,

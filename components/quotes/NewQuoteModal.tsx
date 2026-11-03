@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
-import { ArrowRight, CalendarCheck, ChevronRight, Loader2, Mail, Send } from "lucide-react";
+import { CalendarCheck, ChevronRight, Loader2, Mail, Send } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CURRENCIES } from "@/lib/constants";
 import { cn, formatCurrency } from "@/lib/utils";
 import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
@@ -64,7 +65,7 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && <p className="mt-1 text-xs text-stone-500">{hint}</p>}
+      {hint && <p className="mt-1 hint">{hint}</p>}
     </div>
   );
 }
@@ -233,14 +234,32 @@ export function NewQuoteModal({
     [customerName, email, phone, companyName, title, amount, description, notes, validUntil].some((v) => v.trim() !== "");
 
   /** Never close mid-send (the result would be lost), and ask before discarding typing. */
-  function requestClose() {
+  const [confirm, confirmDialog] = useConfirm();
+  async function requestClose() {
     if (busy) return;
     if (savedDraftId) {
       // The quote itself is safe as a draft; only edited email text would go.
-      if (bodyEdited && !window.confirm("Close this window? Your quote is saved as a draft, but the email text you edited won't be kept.")) {
+      if (
+        bodyEdited &&
+        !(await confirm({
+          title: "Close this window?",
+          message: "Your quote is saved as a draft, but the email text you edited won't be kept.",
+          confirmLabel: "Discard email text",
+          cancelLabel: "Keep editing",
+          danger: true,
+        }))
+      )
         return;
-      }
-    } else if (dirty && !window.confirm("Close without saving this quote? What you typed will be lost.")) {
+    } else if (
+      dirty &&
+      !(await confirm({
+        title: "Close without saving this quote?",
+        message: "What you typed will be lost.",
+        confirmLabel: "Discard quote",
+        cancelLabel: "Keep editing",
+        danger: true,
+      }))
+    ) {
       return;
     }
     onClose();
@@ -400,7 +419,7 @@ export function NewQuoteModal({
               };
 
   const errorBox = error && (
-    <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-inset ring-red-200">
+    <div className="msg-error">
       {error}
       {needsBusinessEmail && (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -438,23 +457,22 @@ export function NewQuoteModal({
               setError(null);
               setStep("form");
             }}
-            className="rounded-lg border border-stone-200 p-4 text-left transition-colors hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="group rounded-[12px] border border-line bg-white p-4 text-left transition-colors duration-150 ease-board hover:border-stone-400 hover:bg-stone-50 active:scale-[.99] disabled:cursor-not-allowed disabled:border-stone-300 disabled:hover:bg-white"
           >
-            <span className="flex items-center gap-2 font-medium text-stone-900">
-              <Mail className="h-4 w-4 text-brand-600" />
+            <span className="flex items-center gap-2 text-[17px] font-medium leading-tight text-stone-900">
+              <Mail className="h-5 w-5" />
               Send a quote with QuoteLoop
-              <ArrowRight className="ml-auto h-4 w-4 text-stone-400" />
             </span>
-            <span className="mt-1 block text-sm text-stone-500">
+            <span className="mt-1 block text-[14px] text-stone-500">
               Create a quote email, send it to the customer, and schedule follow-up reminders.
             </span>
             {!emailEnabled ? (
-              <span className="mt-2 block text-xs text-stone-500">
+              <span className="mt-2 block hint">
                 Email sending isn&apos;t set up for this workspace yet.
               </span>
             ) : (
               !canSendEmail && (
-                <span className="mt-2 block text-xs text-stone-500">
+                <span className="mt-2 block hint">
                   Add your business email in Settings before sending from QuoteLoop.
                 </span>
               )
@@ -463,7 +481,7 @@ export function NewQuoteModal({
           {emailEnabled && !canSendEmail && (
             <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
               <AddBusinessEmailButton unsaved={dirty} />
-              <span className="text-xs text-stone-500">Or track a quote you already sent:</span>
+              <span className="hint">Or track a quote you already sent:</span>
             </div>
           )}
 
@@ -474,14 +492,13 @@ export function NewQuoteModal({
               setError(null);
               setStep("form");
             }}
-            className="rounded-lg border border-stone-200 p-4 text-left transition-colors hover:border-stone-400 hover:bg-stone-50"
+            className="group rounded-[12px] border border-line bg-white p-4 text-left transition-colors duration-150 ease-board hover:border-stone-400 hover:bg-stone-50 active:scale-[.99]"
           >
-            <span className="flex items-center gap-2 font-medium text-stone-900">
-              <CalendarCheck className="h-4 w-4 text-stone-500" />
+            <span className="flex items-center gap-2 text-[17px] font-medium leading-tight text-stone-900">
+              <CalendarCheck className="h-5 w-5" />
               Track a quote already sent
-              <ArrowRight className="ml-auto h-4 w-4 text-stone-400" />
             </span>
-            <span className="mt-1 block text-sm text-stone-500">
+            <span className="mt-1 block text-[14px] text-stone-500">
               Add a quote you sent elsewhere and let QuoteLoop remind you to follow up, counting from
               the day you sent it.
             </span>
@@ -493,16 +510,17 @@ export function NewQuoteModal({
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="eyebrow">Customer</span>
+              <span className="section-title">Customer</span>
               {customers.length > 0 && (
-                <div className="inline-flex rounded-md border border-stone-300 p-0.5 text-xs font-medium">
+                <div role="group" aria-label="Customer" className="inline-flex rounded-full bg-stone-100 p-1 text-[14px] font-medium">
                   {(["new", "existing"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setCustomerMode(m)}
+                      aria-pressed={customerMode === m}
                       className={cn(
-                        "tap rounded px-2.5 py-1 transition-colors",
+                        "tap rounded-full px-3.5 py-1 transition-colors duration-150 ease-board",
                         customerMode === m ? "bg-stone-900 text-white" : "text-stone-600 hover:text-stone-900"
                       )}
                     >
@@ -523,7 +541,7 @@ export function NewQuoteModal({
                     {customers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.customer_name}
-                        {c.company_name ? ` — ${c.company_name}` : ""}
+                        {c.company_name ? `, ${c.company_name}` : ""}
                       </option>
                     ))}
                   </select>
@@ -563,7 +581,7 @@ export function NewQuoteModal({
                     placeholder="e.g. Marcus Reed"
                   />
                   {nameTwin && (
-                    <p className="mt-1.5 text-xs text-amber-800">
+                    <p className="mt-1.5 text-[15px] font-medium text-stone-900">
                       You already have a customer called{" "}
                       <span className="font-medium [overflow-wrap:anywhere]">{nameTwin.customer_name}</span>.{" "}
                       <button
@@ -597,7 +615,7 @@ export function NewQuoteModal({
           </section>
 
           <section className="flex flex-col gap-3">
-            <span className="eyebrow">Quote</span>
+            <span className="section-title">Quote</span>
             <Field label="What did you quote for?" htmlFor="q-title">
               <input
                 id="q-title"
@@ -757,7 +775,7 @@ export function NewQuoteModal({
       {step === "preview" && (
         <div className="flex flex-col gap-4">
           {staleEmail && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+            <div className="flex flex-wrap items-center justify-between gap-2 msg-warn">
               <span>You changed the quote details after editing this email. Check it still matches.</span>
               <button
                 type="button"
@@ -773,7 +791,7 @@ export function NewQuoteModal({
             </div>
           )}
           {recipientOverride && (
-            <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+            <div className="msg-warn">
               This customer&apos;s saved email address is now <span className="font-medium">{recipientOverride}</span>.
               Check it before sending.
             </div>
@@ -802,7 +820,7 @@ export function NewQuoteModal({
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
             {savedDraftId ? (
-              <p className="max-w-xs text-xs text-stone-500">
+              <p className="max-w-xs hint">
                 Your quote is saved as a draft. To change its details, close this and edit it on the Quotes
                 page.
               </p>
@@ -835,12 +853,13 @@ export function NewQuoteModal({
         <QuoteDonePanel
           result={result}
           // What was saved, so a misread amount is noticed straight away.
-          summary={`${title.trim()} · ${formatCurrency(parseAmount(amount) ?? 0, currency)}`}
+          summary={`${title.trim()}, ${formatCurrency(parseAmount(amount) ?? 0, currency)}`}
           today={today}
           onWriteFollowUp={() => onWriteFollowUp(result.quoteId)}
           onAnother={startAnother}
         />
       )}
+      {confirmDialog}
     </Modal>
   );
 }

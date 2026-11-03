@@ -31,7 +31,7 @@ export function defaultQuoteBody(ctx: QuoteEmailContext): string {
   const owner = ctx.ownerName?.trim();
 
   const lines = [`Hi ${first},`, "", `Thanks for asking us about ${ctx.title.trim()}. Here's our quote:`, ""];
-  lines.push(`${ctx.title.trim()} — ${formatCurrency(ctx.amount, ctx.currency)}`);
+  lines.push(`${ctx.title.trim()}: ${formatCurrency(ctx.amount, ctx.currency)}`);
 
   const description = ctx.description?.trim();
   if (description) lines.push("", description);
