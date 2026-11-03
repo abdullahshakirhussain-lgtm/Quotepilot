@@ -8,7 +8,10 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
-import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
+import { composeQuoteEmail } from "@/lib/quote-email";
+import type { ResolvedTemplate } from "@/lib/templates";
+import type { QuoteBusiness } from "./NewQuoteModal";
+import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import { sendDraftQuoteEmail } from "@/app/(app)/quotes/new-quote-actions";
 import type { QuoteWithLead } from "@/lib/types";
 
@@ -16,12 +19,18 @@ import type { QuoteWithLead } from "@/lib/types";
 export function SendDraftQuoteModal({
   quote,
   business,
+  templates = [],
+  defaultTemplateId = "quote_standard",
   today,
   onClose,
   onSent,
 }: {
   quote: QuoteWithLead;
-  business: { name: string; ownerName: string | null; email: string | null };
+  business: QuoteBusiness;
+  /** Quote email templates: ready-made (with the user's edits), then their own. */
+  templates?: ResolvedTemplate[];
+  /** The template new quote emails start from. */
+  defaultTemplateId?: string;
   /** Viewer's local date from the server. */
   today: string;
   onClose: () => void;
@@ -32,19 +41,27 @@ export function SendDraftQuoteModal({
   const to = recipientOverride ?? quote.lead?.email?.trim() ?? "";
   const validUntil = quote.valid_until && quote.valid_until >= today ? quote.valid_until : null;
 
-  const [subject, setSubject] = useState(() => defaultQuoteSubject(business.name, quote.title));
-  const [body, setBody] = useState(() =>
-    defaultQuoteBody({
-      customerName: quote.lead?.customer_name ?? "",
-      businessName: business.name,
-      ownerName: business.ownerName,
-      title: quote.title,
-      amount: Number(quote.amount),
-      currency: quote.currency,
-      description: quote.description,
-      validUntil,
-    })
-  );
+  // The template the email is written from.
+  const [templateId, setTemplateId] = useState(defaultTemplateId);
+  const compose = (id: string) =>
+    composeQuoteEmail(
+      {
+        customerName: quote.lead?.customer_name ?? "",
+        businessName: business.name,
+        ownerName: business.ownerName,
+        title: quote.title,
+        amount: Number(quote.amount),
+        currency: quote.currency,
+        description: quote.description,
+        validUntil,
+        quoteDate: today,
+        signOff: business.signOff,
+        signature: business.signature,
+      },
+      templates.find((t) => t.id === id) ?? null
+    );
+  const [subject, setSubject] = useState(() => compose(templateId).subject);
+  const [body, setBody] = useState(() => compose(templateId).body);
   const [error, setError] = useState<string | null>(null);
   // The "add a business email first" refusal, so its way out shows only under it.
   const [businessEmailError, setBusinessEmailError] = useState<string | null>(null);
@@ -87,6 +104,25 @@ export function SendDraftQuoteModal({
 
   // Closing mid-send would hide whether the email went out; edits ask first.
   const [confirm, confirmDialog] = useConfirm();
+
+  async function pickTemplate(t: ResolvedTemplate) {
+    if (
+      edited &&
+      !(await confirm({
+        title: "Replace your edited email?",
+        message: "The email is rewritten with the wording you picked. Your edits to it won't be kept.",
+        confirmLabel: "Replace email",
+        cancelLabel: "Keep my edits",
+      }))
+    )
+      return;
+    const email = compose(t.id);
+    setTemplateId(t.id);
+    setSubject(email.subject);
+    setBody(email.body);
+    setEdited(false);
+    setError(null);
+  }
   async function requestClose() {
     if (busy) return;
     if (
@@ -113,6 +149,12 @@ export function SendDraftQuoteModal({
       description={`To ${quote.lead?.customer_name ?? "your customer"}. Reminders start once it's sent.`}
     >
       <div className="flex flex-col gap-4">
+        <TemplatePicker
+          templates={templates}
+          selectedId={templateId}
+          onPick={pickTemplate}
+          disabled={busy || locked}
+        />
         <QuoteEmailPreview
           to={to}
           subject={subject}

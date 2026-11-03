@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import {
@@ -35,6 +35,8 @@ import { sendFollowUpEmail } from "@/app/(app)/quotes/email-actions";
 import { addCustomerEmail } from "@/app/(app)/quotes/new-quote-actions";
 import { isSampleAddress } from "@/lib/email-address";
 import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
+import { TemplatePicker } from "@/components/templates/TemplatePicker";
+import { fillSubject, fillTemplate, templateForStep, type ResolvedTemplate, type TemplateValues } from "@/lib/templates";
 
 type SendOutcome = Awaited<ReturnType<typeof sendFollowUpEmail>>;
 
@@ -125,6 +127,13 @@ export function AIMessageModal({
   const [sendLocked, setSendLocked] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [templates, setTemplates] = useState<ResolvedTemplate[]>([]);
+  const [templateValues, setTemplateValues] = useState<TemplateValues | null>(null);
+  // The template the message came from, if it did (not an AI draft).
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  // The first history load fills in this step's template, once.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const prefilled = useRef(false);
 
   const firstName = quote.customerName.split(" ")[0] || quote.customerName;
   const edited = content.trim() !== "" && content.trim() !== draft.trim();
@@ -145,9 +154,24 @@ export function AIMessageModal({
       setEmailEnabled(Boolean(data.emailEnabled));
       setReplyToReady(data.replyToReady !== false);
       setPendingFollowUpId(typeof data.pendingFollowUpId === "string" ? data.pendingFollowUpId : null);
+      const list: ResolvedTemplate[] = Array.isArray(data.templates) ? data.templates : [];
+      const values: TemplateValues | null = data.templateValues ?? null;
+      setTemplates(list);
+      setTemplateValues(values);
+      // Open with the message for this step already written; the AI can
+      // rewrite it. Only on the first load, before anything was typed.
+      if (!prefilled.current && values) {
+        prefilled.current = true;
+        const t = templateForStep(suggested, list);
+        if (t) fillFrom(t, values);
+      }
     } catch {
       /* history is optional; the assistant still works without it */
+    } finally {
+      setHistoryLoaded(true);
     }
+    // fillFrom only uses state setters; suggested is fixed while open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quote.id]);
 
   useEffect(() => {
@@ -171,6 +195,7 @@ export function AIMessageModal({
       }
       setContent(data.content);
       setDraft(data.content);
+      setTemplateId(null);
       if (data.fellBack) {
         setNotice(
           `QuoteLoop's AI writer isn't available right now${data.error ? ` (${data.error})` : ""}, so this is a template you can edit.`
@@ -193,6 +218,44 @@ export function AIMessageModal({
     } finally {
       setLoading(false);
     }
+  }
+
+  /** Fills the message (and subject, if the template has one) from a template. */
+  function fillFrom(t: ResolvedTemplate, values: TemplateValues) {
+    const text = fillTemplate(t.body, values);
+    setContent(text);
+    setDraft(text);
+    const filled = fillSubject(t.subject, values);
+    if (filled) setSubject(filled);
+    setTemplateId(t.id);
+    if (t.messageType) setMessageType(t.messageType);
+    setNotice(null);
+    setError(null);
+  }
+
+  /** Picked from the menu: asks before replacing edited text. */
+  async function applyTemplate(t: ResolvedTemplate) {
+    if (!templateValues) return;
+    if (
+      edited &&
+      !(await confirm({
+        title: "Replace your message?",
+        message: "The message is rewritten with the template you picked. Your edits to it won't be kept.",
+        confirmLabel: "Replace message",
+        cancelLabel: "Keep my message",
+      }))
+    )
+      return;
+    fillFrom(t, templateValues);
+  }
+
+  /** A different step chosen under Adjust: untouched template text follows it. */
+  function chooseType(next: MessageType) {
+    setMessageType(next);
+    const current = templates.find((t) => t.id === templateId);
+    if (!current?.builtinKey || edited || emailSent || followedUp || !templateValues) return;
+    const t = templateForStep(next, templates);
+    if (t) fillFrom(t, templateValues);
   }
 
   const nextReminder = (at: string | null) =>
@@ -393,7 +456,7 @@ export function AIMessageModal({
                   id="ai-type"
                   className="input"
                   value={messageType}
-                  onChange={(e) => setMessageType(e.target.value as MessageType)}
+                  onChange={(e) => chooseType(e.target.value as MessageType)}
                 >
                   {MESSAGE_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -435,12 +498,24 @@ export function AIMessageModal({
           )}
         </div>
 
-        {/* The draft */}
-        {!content && !loading && (
+        {/* The draft: this step's template once loaded; without templates, the AI button. */}
+        {!content && !loading && !historyLoaded && (
+          <div className="space-y-2.5 rounded-[12px] border border-line p-4" aria-live="polite">
+            <div className="flex items-center gap-2 text-[15px] text-stone-600">
+              <Loader2 className="h-4 w-4 animate-spin" /> Getting your message ready…
+            </div>
+            <div className="h-3.5 w-11/12 rounded-[3px] bg-stone-100" />
+            <div className="h-3.5 w-9/12 rounded-[3px] bg-stone-100" />
+          </div>
+        )}
+        {!content && !loading && historyLoaded && (
           <div className="ql-fade py-2">
-            <button className="btn-primary px-4 py-2.5 text-base" onClick={generate} disabled={!canWrite}>
-              <PenLine className="h-4 w-4" /> Draft follow-up for {firstName}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="btn-primary px-4 py-2.5 text-base" onClick={generate} disabled={!canWrite}>
+                <PenLine className="h-4 w-4" /> Draft follow-up for {firstName}
+              </button>
+              <TemplatePicker templates={templates} selectedId={null} onPick={applyTemplate} disabled={!canWrite} />
+            </div>
             <p className="mt-2 max-w-prose text-[15px] text-stone-600">
               Written from this quote&apos;s details. You review it; nothing is sent until you choose to.
             </p>
@@ -537,9 +612,17 @@ export function AIMessageModal({
                 ) : null}
                 {followedUp ? "Followed up" : "Mark as followed up"}
               </button>
-              <button className="btn-ghost ml-auto" onClick={generate} disabled={busy}>
-                <RotateCcw className="h-4 w-4" /> Rewrite
-              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <TemplatePicker
+                  templates={templates}
+                  selectedId={templateId}
+                  onPick={applyTemplate}
+                  disabled={busy || emailSent || followedUp}
+                />
+                <button className="btn-ghost" onClick={generate} disabled={busy}>
+                  <RotateCcw className="h-4 w-4" /> {templateId ? "Draft with AI" : "Rewrite"}
+                </button>
+              </div>
             </div>
 
             {!canEmail &&

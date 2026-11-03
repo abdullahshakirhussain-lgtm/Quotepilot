@@ -3,6 +3,8 @@ import { QuotesClient } from "@/components/quotes/QuotesClient";
 import { requestToday } from "@/lib/request-time";
 import { emailConfig } from "@/lib/email";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { loadTemplates } from "@/lib/templates-server";
+import { defaultQuoteTemplateId, resolveTemplates } from "@/lib/templates";
 import type { Business, QuoteWithLead } from "@/lib/types";
 import type { QuoteCustomer } from "@/components/quotes/NewQuoteModal";
 
@@ -18,7 +20,7 @@ export default async function QuotesPage({
   const supabase = await createClient();
 
   // Every quote and customer, not just the API's first page.
-  const [rawQuotes, customers, businessRes] = await Promise.all([
+  const [rawQuotes, customers, businessRes, quoteTemplates] = await Promise.all([
     fetchAllRows<QuoteWithLead>((from, to) =>
       supabase
         .from("quotes")
@@ -39,11 +41,15 @@ export default async function QuotesPage({
     ),
     supabase
       .from("businesses")
-      .select("currency, business_name, owner_name, email")
+      .select("*")
       .eq("user_id", user.id)
-      .maybeSingle<Pick<Business, "currency" | "business_name" | "owner_name" | "email">>(),
+      .maybeSingle<Business>(),
+    loadTemplates(user.id, "quote_email"),
   ]);
   if (businessRes.error) throw new Error(`Could not load quotes: ${businessRes.error.message}`);
+
+  // QuoteLoop's ready-made quote emails (with the user's edits), then their own.
+  const resolvedQuoteTemplates = resolveTemplates(quoteTemplates, "quote_email");
 
   // Normalise the embedded customer (Supabase may return it as an array).
   const quotes: QuoteWithLead[] = rawQuotes.map((q) => ({
@@ -90,8 +96,12 @@ export default async function QuotesPage({
         name: businessRes.data?.business_name ?? "",
         ownerName: businessRes.data?.owner_name ?? null,
         email: businessRes.data?.email ?? null,
+        signOff: businessRes.data?.sign_off ?? null,
+        signature: businessRes.data?.signature ?? null,
       }}
       emailEnabled={emailConfig() !== null}
+      quoteTemplates={resolvedQuoteTemplates}
+      defaultQuoteTemplate={defaultQuoteTemplateId(businessRes.data?.quote_template, resolvedQuoteTemplates)}
       earlierQuoteEmails={earlierQuoteEmails}
       initialNewLeadId={preselectLeadId}
       openNew={openNew === "1"}

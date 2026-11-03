@@ -9,7 +9,9 @@ import { SettingsSection } from "@/components/ui/SettingsSection";
 import { BillingSection } from "@/components/billing/BillingSection";
 import { getAccess } from "@/lib/billing-server";
 import { getBillingProvider } from "@/lib/billing-provider";
-import { getRequestTimeZone } from "@/lib/request-time";
+import { getRequestTimeZone, requestToday } from "@/lib/request-time";
+import { loadTemplates } from "@/lib/templates-server";
+import { TemplatesSection } from "@/components/templates/TemplatesSection";
 import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +31,12 @@ export default async function SettingsPage({
     .maybeSingle<Business>();
 
   if (error) throw new Error(`Could not load settings: ${error.message}`);
-  const [access, timeZone] = await Promise.all([getAccess(user.id), getRequestTimeZone()]);
+  const [access, timeZone, templates, today] = await Promise.all([
+    getAccess(user.id),
+    getRequestTimeZone(),
+    loadTemplates(user.id),
+    requestToday(),
+  ]);
 
   return (
     <div>
@@ -48,6 +55,18 @@ export default async function SettingsPage({
           highlightEmail={focus === "business-email"}
         />
       </SettingsSection>
+
+      <TemplatesSection
+        initialRows={templates}
+        business={{
+          name: business?.business_name ?? "",
+          ownerName: business?.owner_name ?? null,
+          signOff: business?.sign_off ?? null,
+          signature: business?.signature ?? null,
+        }}
+        quoteTemplate={business?.quote_template ?? null}
+        today={today}
+      />
 
       <BillingSection
         state={access.state}

@@ -23,6 +23,8 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { QuoteFormModal } from "./QuoteFormModal";
 import { NewQuoteModal, type QuoteCustomer } from "./NewQuoteModal";
 import { SendDraftQuoteModal } from "./SendDraftQuoteModal";
+import type { ResolvedTemplate } from "@/lib/templates";
+import type { QuoteBusiness } from "./NewQuoteModal";
 import { AddCustomerEmailModal } from "./AddCustomerEmailModal";
 import { HowItWorks } from "./HowItWorks";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
@@ -89,6 +91,8 @@ export function QuotesClient({
   defaultCurrency,
   business,
   emailEnabled,
+  quoteTemplates = [],
+  defaultQuoteTemplate = "quote_standard",
   earlierQuoteEmails = {},
   initialNewLeadId,
   openNew,
@@ -97,8 +101,12 @@ export function QuotesClient({
   quotes: QuoteWithLead[];
   customers: QuoteCustomer[];
   defaultCurrency: string;
-  business: { name: string; ownerName: string | null; email: string | null };
+  business: QuoteBusiness;
   emailEnabled: boolean;
+  /** Quote email templates: ready-made (with the user's edits), then their own. */
+  quoteTemplates?: ResolvedTemplate[];
+  /** The one new quote emails start from. */
+  defaultQuoteTemplate?: string;
   /** Drafts whose quote email already went out ("sent") or was never confirmed. */
   earlierQuoteEmails?: Record<string, "sent" | "pending">;
   initialNewLeadId?: string;
@@ -318,6 +326,8 @@ export function QuotesClient({
           today={today}
           business={business}
           emailEnabled={emailEnabled}
+          templates={quoteTemplates}
+          defaultTemplateId={defaultQuoteTemplate}
           preselectCustomerId={initialNewLeadId}
           onClose={closeNew}
           onSaved={(message) => {
@@ -358,6 +368,8 @@ export function QuotesClient({
         <SendDraftQuoteModal
           quote={sendDraft}
           business={business}
+          templates={quoteTemplates}
+          defaultTemplateId={defaultQuoteTemplate}
           today={today}
           onClose={() => setSendDraft(null)}
           onSent={setToast}

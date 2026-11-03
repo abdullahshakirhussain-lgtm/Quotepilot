@@ -3,7 +3,8 @@
 // preview and the server send compose exactly the same text.
 // The short "why you got this" footer is added when sending (see lib/email.ts).
 // ---------------------------------------------------------------------------
-import { formatCurrency, formatDate } from "./utils";
+import { fillSubject, fillTemplate } from "./templates";
+import { builtinByKey, STANDARD_QUOTE_KEY } from "./template-library";
 
 export interface QuoteEmailContext {
   customerName: string;
@@ -14,6 +15,10 @@ export interface QuoteEmailContext {
   currency: string;
   description?: string | null;
   validUntil?: string | null;
+  quoteDate?: string | null;
+  /** From Settings; defaults apply when not set. */
+  signOff?: string | null;
+  signature?: string | null;
 }
 
 /** e.g. "Quote from Northside Home Services: AC servicing" */
@@ -23,23 +28,22 @@ export function defaultQuoteSubject(businessName: string, title: string): string
   return subject.slice(0, 200);
 }
 
-/** A short, plain quote email the user can edit before sending. */
+/** The standard quote email (the ready-made "Standard quote email"). */
 export function defaultQuoteBody(ctx: QuoteEmailContext): string {
-  const name = ctx.customerName.trim();
-  const first = name.split(" ")[0] || name || "there";
-  const business = ctx.businessName.trim();
-  const owner = ctx.ownerName?.trim();
+  return fillTemplate(builtinByKey(STANDARD_QUOTE_KEY)!.body, { ...ctx, title: ctx.title.trim() });
+}
 
-  const lines = [`Hi ${first},`, "", `Thanks for asking us about ${ctx.title.trim()}. Here's our quote:`, ""];
-  lines.push(`${ctx.title.trim()}: ${formatCurrency(ctx.amount, ctx.currency)}`);
-
-  const description = ctx.description?.trim();
-  if (description) lines.push("", description);
-  if (ctx.validUntil) lines.push("", `This quote is valid until ${formatDate(ctx.validUntil)}.`);
-
-  lines.push("", "Just reply to this email if you'd like to go ahead, or if you have any questions.", "");
-  lines.push("Thanks,");
-  lines.push(owner ? (business ? `${owner}, ${business}` : owner) : business);
-
-  return lines.join("\n").trim();
+/**
+ * Subject and body for a quote email from a template, or the standard wording
+ * when there is none. A template without a subject, or one that fills to
+ * nothing, keeps the standard subject.
+ */
+export function composeQuoteEmail(
+  ctx: QuoteEmailContext,
+  template?: { subject: string | null; body: string } | null
+): { subject: string; body: string } {
+  const standardSubject = defaultQuoteSubject(ctx.businessName, ctx.title.trim());
+  if (!template) return { subject: standardSubject, body: defaultQuoteBody(ctx) };
+  const values = { ...ctx, title: ctx.title.trim() };
+  return { subject: fillSubject(template.subject, values) || standardSubject, body: fillTemplate(template.body, values) };
 }

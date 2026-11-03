@@ -17,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effectiveDate="October 29, 2026"
+      effectiveDate="November 3, 2026"
       intro={
         <>
           <p>
@@ -55,8 +55,8 @@ export default function PrivacyPage() {
             </>,
             <>
               <strong className="font-medium text-stone-800">Business profile:</strong> business
-              name, owner or contact name, industry, currency, phone number, business email and your
-              follow-up schedule.
+              name, owner or contact name, industry, currency, phone number, business email, your
+              follow-up schedule, and the sign-off and signature you add to messages.
             </>,
             <>
               <strong className="font-medium text-stone-800">Customer and quote data</strong> you
@@ -81,6 +81,7 @@ export default function PrivacyPage() {
             "quote titles, descriptions, amounts, dates and status",
             "follow-up reminders",
             "drafted message text, and the final message text you used or sent",
+            "message templates you save",
           ]}
         />
         <p>
@@ -238,7 +239,7 @@ export default function PrivacyPage() {
         <LegalList
           items={[
             "You can delete individual records, such as customers and quotes, at any time.",
-            "In Settings, you can clear all your customers, quotes, follow-ups and messages at once. Your business profile stays until your account is deleted.",
+            "In Settings, you can clear all your customers, quotes, follow-ups and messages at once. Your business profile and message templates stay until your account is deleted.",
             "Records of emails you sent from QuoteLoop are kept when you delete a quote or customer, or clear your data, so your sending history and sending limits stay accurate. They are deleted when your account is deleted.",
             "In Settings, you can export your quotes, follow-ups and customers as CSV files.",
             <>

@@ -7,7 +7,9 @@ import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CURRENCIES } from "@/lib/constants";
 import { cn, formatCurrency } from "@/lib/utils";
-import { defaultQuoteBody, defaultQuoteSubject } from "@/lib/quote-email";
+import { composeQuoteEmail } from "@/lib/quote-email";
+import type { ResolvedTemplate } from "@/lib/templates";
+import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import { cleanPasted, isValidEmail } from "@/lib/email-address";
 import { earliestSentDate, LIMITS, MAX_AMOUNT, OLD_SENT_DATE_ERROR, parseAmount } from "@/lib/quote-flows";
 import { AmountInput } from "@/components/ui/AmountInput";
@@ -23,6 +25,15 @@ import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext"
 
 type Outcome = Awaited<ReturnType<typeof trackQuoteAlreadySent>>;
 type Success = Extract<Outcome, { ok: true }>;
+
+/** The business details a quote email is written with. */
+export interface QuoteBusiness {
+  name: string;
+  ownerName: string | null;
+  email: string | null;
+  signOff?: string | null;
+  signature?: string | null;
+}
 
 export interface QuoteCustomer {
   id: string;
@@ -81,6 +92,8 @@ export function NewQuoteModal({
   today,
   business,
   emailEnabled,
+  templates = [],
+  defaultTemplateId = "quote_standard",
   preselectCustomerId,
   onClose,
   onSaved,
@@ -90,9 +103,13 @@ export function NewQuoteModal({
   defaultCurrency: string;
   /** Viewer's local date from the server. */
   today: string;
-  business: { name: string; ownerName: string | null; email: string | null };
+  business: QuoteBusiness;
   /** Whether this workspace can send email at all. */
   emailEnabled: boolean;
+  /** Quote email templates: ready-made (with the user's edits), then their own. */
+  templates?: ResolvedTemplate[];
+  /** The template new quote emails start from. */
+  defaultTemplateId?: string;
   preselectCustomerId?: string;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -121,6 +138,8 @@ export function NewQuoteModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [bodyEdited, setBodyEdited] = useState(false);
+  // The template the email is written from.
+  const [templateId, setTemplateId] = useState(defaultTemplateId);
   const [subjectEdited, setSubjectEdited] = useState(false);
   // The quote details the email text was written from, to notice later edits.
   const [bodyBasis, setBodyBasis] = useState("");
@@ -268,14 +287,10 @@ export function NewQuoteModal({
   // Replies to a quote email go to the business email, so sending needs one.
   const canSendEmail = emailEnabled && isValidEmail(business.email);
 
-  /** The email as QuoteLoop would write it from the details as they are now. */
-  function writeEmail(options: { keepEditedSubject: boolean }) {
-    if (!options.keepEditedSubject) {
-      setSubject(defaultQuoteSubject(business.name, title.trim()));
-      setSubjectEdited(false);
-    }
-    setBody(
-      defaultQuoteBody({
+  /** The email from the chosen wording and the details as they are now. */
+  function compose(templateIdNow = templateId) {
+    return composeQuoteEmail(
+      {
         customerName: customerLabel,
         businessName: business.name,
         ownerName: business.ownerName,
@@ -284,10 +299,39 @@ export function NewQuoteModal({
         currency,
         description: description.trim() || null,
         validUntil: validUntil || null,
-      })
+        quoteDate: today,
+        signOff: business.signOff,
+        signature: business.signature,
+      },
+      templates.find((t) => t.id === templateIdNow) ?? null
     );
+  }
+
+  function writeEmail(options: { keepEditedSubject: boolean; templateId?: string }) {
+    const email = compose(options.templateId ?? templateId);
+    if (!options.keepEditedSubject) {
+      setSubject(email.subject);
+      setSubjectEdited(false);
+    }
+    setBody(email.body);
     setBodyEdited(false);
     setBodyBasis(detailsBasis);
+  }
+
+  async function pickTemplate(t: ResolvedTemplate) {
+    if (
+      (bodyEdited || subjectEdited) &&
+      !(await confirm({
+        title: "Replace your edited email?",
+        message: "The email is rewritten with the wording you picked. Your edits to it won't be kept.",
+        confirmLabel: "Replace email",
+        cancelLabel: "Keep my edits",
+      }))
+    )
+      return;
+    setTemplateId(t.id);
+    writeEmail({ keepEditedSubject: false, templateId: t.id });
+    setError(null);
   }
 
   function goToPreview() {
@@ -296,7 +340,7 @@ export function NewQuoteModal({
     // Text the user hasn't touched always follows the details. Edited text is
     // kept (see the notice on the preview if the details changed since).
     if (!bodyEdited) writeEmail({ keepEditedSubject: subjectEdited });
-    else if (!subjectEdited) setSubject(defaultQuoteSubject(business.name, title.trim()));
+    else if (!subjectEdited) setSubject(compose().subject);
     setError(null);
     setStep("preview");
   }
@@ -796,6 +840,12 @@ export function NewQuoteModal({
               Check it before sending.
             </div>
           )}
+          <TemplatePicker
+            templates={templates}
+            selectedId={templateId}
+            onPick={pickTemplate}
+            disabled={busy}
+          />
           <QuoteEmailPreview
             to={effectiveEmail}
             subject={subject}

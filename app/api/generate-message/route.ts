@@ -12,11 +12,14 @@ import { requestToday } from "@/lib/request-time";
 import { emailConfig, isValidEmail } from "@/lib/email";
 import { AI_DAILY_LIMIT } from "@/lib/constants";
 import { readOnlyReason } from "@/lib/billing-server";
+import { loadTemplates } from "@/lib/templates-server";
+import { resolveTemplates, type TemplateValues } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/generate-message?quoteId=... -> history for that quote, plus
-// whether it can be emailed from QuoteLoop.
+// GET /api/generate-message?quoteId=... -> history for that quote, whether it
+// can be emailed from QuoteLoop, and the user's follow-up templates with the
+// details to fill them.
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -26,7 +29,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "quoteId is required" }, { status: 400 });
 
   const supabase = await createClient();
-  const [drafts, logged, emails, quote, pending, business] = await Promise.all([
+  const [drafts, logged, emails, quote, pending, business, templates] = await Promise.all([
     supabase
       .from("messages")
       .select("*")
@@ -52,7 +55,7 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false }),
     supabase
       .from("quotes")
-      .select("lead_id, lead:leads(email)")
+      .select("lead_id, title, description, amount, currency, quote_date, valid_until, lead:leads(email, customer_name)")
       .eq("id", quoteId)
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -68,7 +71,8 @@ export async function GET(request: Request) {
       .order("due_date", { ascending: true })
       .limit(1),
     // Replies go to the business email; without a working one nothing is sent.
-    supabase.from("businesses").select("email").eq("user_id", user.id).maybeSingle(),
+    supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle(),
+    loadTemplates(user.id, "follow_up"),
   ]);
 
   const error = drafts.error ?? logged.error ?? quote.error ?? pending.error ?? business.error;
@@ -79,8 +83,28 @@ export async function GET(request: Request) {
   // The email log is optional (e.g. schema not yet re-run): degrade, don't fail.
   if (emails.error) console.error("[email] email history unavailable:", emails.error.message);
 
-  const leadRel = quote.data?.lead as { email?: string | null } | { email?: string | null }[] | null | undefined;
-  const leadEmail = (Array.isArray(leadRel) ? leadRel[0]?.email : leadRel?.email) ?? null;
+  type LeadRel = { email?: string | null; customer_name?: string | null };
+  const leadRel = quote.data?.lead as LeadRel | LeadRel[] | null | undefined;
+  const lead = Array.isArray(leadRel) ? leadRel[0] : leadRel;
+  const leadEmail = lead?.email ?? null;
+  const q = quote.data as
+    | { title: string; description: string | null; amount: number | string; currency: string; quote_date: string; valid_until: string | null }
+    | null;
+  const templateValues: TemplateValues | null = q
+    ? {
+        customerName: lead?.customer_name ?? "",
+        title: q.title,
+        amount: Number(q.amount),
+        currency: q.currency,
+        description: q.description,
+        validUntil: q.valid_until,
+        quoteDate: q.quote_date,
+        ownerName: business.data?.owner_name ?? null,
+        businessName: business.data?.business_name ?? "",
+        signOff: business.data?.sign_off ?? null,
+        signature: business.data?.signature ?? null,
+      }
+    : null;
 
   return NextResponse.json({
     messages: drafts.data ?? [],
@@ -92,6 +116,9 @@ export async function GET(request: Request) {
     emailEnabled: emailConfig() !== null && !emails.error,
     replyToReady: isValidEmail(business.data?.email),
     pendingFollowUpId: pending.data?.[0]?.id ?? null,
+    // Ready-made follow-ups (with the user's edits), then their own.
+    templates: templateValues ? resolveTemplates(templates, "follow_up") : [],
+    templateValues,
   });
 }
 
@@ -169,7 +196,8 @@ export async function POST(request: Request) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("business_name, industry, owner_name")
+    // "*": the sign-off columns may not exist until the schema is re-run.
+    .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -181,6 +209,8 @@ export async function POST(request: Request) {
     businessName: clip(business?.business_name, 120) || "Our business",
     industry: clip(business?.industry, 80) || "Services",
     ownerName: clip(business?.owner_name, 80) || null,
+    signOff: clip(business?.sign_off, 40) || null,
+    signature: clip(business?.signature, 300) || null,
     customerName: clip(lead?.customer_name, 120) || "there",
     quoteTitle: clip(quote.title, 200),
     quoteDescription: clip(quote.description, 1500) || null,

@@ -24,6 +24,12 @@ export interface Business {
   phone: string | null;
   email: string | null;
   default_follow_up_days: number[];
+  /** Ends every template ("Thanks,"); null uses the default. */
+  sign_off?: string | null;
+  /** Ends every template; null uses the name and business name. */
+  signature?: string | null;
+  /** Quote email template for new quotes: a ready-made key or a template id. */
+  quote_template?: string | null;
   created_at: string;
   updated_at: string;
 }

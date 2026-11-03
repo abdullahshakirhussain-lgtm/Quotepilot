@@ -1,11 +1,15 @@
 import { formatCurrency } from "../utils";
 import type { MessageType, Tone } from "../constants";
 import { MESSAGE_TYPE_LABELS, TONE_LABELS } from "../constants";
+import { signatureParts } from "../templates";
 
 export interface MessageContext {
   businessName: string;
   industry: string;
   ownerName?: string | null;
+  /** The user's own sign-off and signature from Settings, when set. */
+  signOff?: string | null;
+  signature?: string | null;
   customerName: string;
   quoteTitle: string;
   quoteDescription?: string | null;
@@ -59,6 +63,10 @@ export function buildUserPrompt(ctx: MessageContext): string {
   lines.push("Context:");
   lines.push(`- Business: ${ctx.businessName} (${ctx.industry})`);
   if (ctx.ownerName) lines.push(`- Sender / owner name: ${ctx.ownerName}`);
+  if (ctx.signOff || ctx.signature) {
+    const { signOff, signature } = signatureParts(ctx);
+    lines.push(`- End the message with exactly this sign-off and signature, on their own lines:\n${signOff}\n${signature}`);
+  }
   lines.push(`- Customer name: ${ctx.customerName}`);
   lines.push(`- Quote title: ${ctx.quoteTitle}`);
   if (ctx.quoteDescription) lines.push(`- Quote details: ${ctx.quoteDescription}`);
@@ -82,7 +90,10 @@ export function buildUserPrompt(ctx: MessageContext): string {
  */
 export function templateFallback(ctx: MessageContext): string {
   const first = ctx.customerName.split(" ")[0] || ctx.customerName;
-  const sign = ctx.ownerName ? `${ctx.ownerName}, ${ctx.businessName}` : ctx.businessName;
+  // The user's own sign-off and signature when set; "Best," and the name otherwise.
+  const custom = ctx.signOff || ctx.signature ? signatureParts(ctx) : null;
+  const sign = custom?.signature ?? (ctx.ownerName ? `${ctx.ownerName}, ${ctx.businessName}` : ctx.businessName);
+  const signOff = custom?.signOff ?? "Best,";
   const amount = formatCurrency(ctx.quoteAmount, ctx.currency);
 
   const bodyByType: Record<MessageType, string> = {
@@ -95,7 +106,7 @@ export function templateFallback(ctx: MessageContext): string {
     thank_you_after_acceptance: `Thank you for going ahead with "${ctx.quoteTitle}". We really appreciate it! I'll be in touch shortly with the next steps so we can get started.`,
   };
 
-  return `Hi ${first},\n\n${bodyByType[ctx.messageType]}\n\nBest,\n${sign}`;
+  return `Hi ${first},\n\n${bodyByType[ctx.messageType]}\n\n${signOff}\n${sign}`;
 }
 
 /**
