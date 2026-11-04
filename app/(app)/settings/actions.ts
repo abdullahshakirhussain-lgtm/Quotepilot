@@ -276,7 +276,7 @@ export async function clearAllData(): Promise<ActionState> {
 
   // Who replied and when, and the reply addresses (replies to old emails are
   // then no longer forwarded). Missing tables (schema not re-run) are fine.
-  for (const table of ["customer_replies", "reply_tokens"] as const) {
+  for (const table of ["customer_replies", "reply_tokens", "notifications"] as const) {
     const { error } = await supabase.from(table).delete().eq("user_id", user.id);
     if (error && !/does not exist|PGRST205|42P01/.test(`${error.code} ${error.message}`)) {
       console.error(`[settings] clearing ${table} failed:`, error.message);

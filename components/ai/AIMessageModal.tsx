@@ -33,7 +33,7 @@ import { sendFollowUpEmail } from "@/app/(app)/quotes/email-actions";
 import { addCustomerEmail } from "@/app/(app)/quotes/new-quote-actions";
 import { isSampleAddress } from "@/lib/email-address";
 import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
-import { fillSubject, fillTemplate, templateForStep, type ResolvedTemplate, type TemplateValues } from "@/lib/templates";
+import { fillSubject, fillTemplate, signatureParts, templateForStep, type ResolvedTemplate, type TemplateValues } from "@/lib/templates";
 
 type SendOutcome = Awaited<ReturnType<typeof sendFollowUpEmail>>;
 
@@ -71,15 +71,29 @@ function withoutFooter(body: string): string {
   return i === -1 ? body : body.slice(0, i);
 }
 
+/** A customer's reply being answered from QuoteLoop. */
+export interface ReplyContext {
+  /** customer_replies.id: the answer threads with it. */
+  id: string;
+  subject: string | null;
+  /** Who wrote it. */
+  from: string;
+  /** What they wrote this time. */
+  text: string;
+}
+
 export function AIMessageModal({
   quote,
   today,
   onClose,
+  reply = null,
 }: {
   quote: AIQuoteContext;
   /** Viewer's local date from the server. */
   today: string;
   onClose: () => void;
+  /** Answering this reply instead of writing a follow-up. */
+  reply?: ReplyContext | null;
 }) {
   const suggested = useMemo(
     () =>
@@ -98,7 +112,11 @@ export function AIMessageModal({
   const [adjusting, setAdjusting] = useState(false);
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
-  const [subject, setSubject] = useState(`Following up on your quote: ${quote.title}`);
+  const [subject, setSubject] = useState(() =>
+    reply
+      ? `${/^re:/i.test(reply.subject ?? "") ? "" : "Re: "}${reply.subject || `Your quote: ${quote.title}`}`.slice(0, 200)
+      : `Following up on your quote: ${quote.title}`
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -164,8 +182,17 @@ export function AIMessageModal({
       // rewrite it. Only on the first load, before anything was typed.
       if (!prefilled.current && values) {
         prefilled.current = true;
-        const t = templateForStep(suggested, list);
-        if (t) fillFrom(t, values);
+        if (reply) {
+          // An answer starts with the greeting and sign-off; the middle is yours.
+          const { signOff, signature } = signatureParts(values);
+          const first = values.customerName.trim().split(/\s+/)[0] || "there";
+          const start = `Hi ${first},\n\n\n\n${signOff}\n${signature}`;
+          setContent(start);
+          setDraft(start);
+        } else {
+          const t = templateForStep(suggested, list);
+          if (t) fillFrom(t, values);
+        }
       }
     } catch {
       /* history is optional; the assistant still works without it */
@@ -188,7 +215,17 @@ export function AIMessageModal({
       const res = await fetch("/api/generate-message", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ quoteId: quote.id, messageType, tone, objection: context }),
+        // Answering a reply: the AI responds to what the customer wrote.
+        body: JSON.stringify(
+          reply
+            ? {
+                quoteId: quote.id,
+                messageType: "objection_response",
+                tone,
+                objection: (context.trim() ? `${reply.text}\n\nAlso mention: ${context.trim()}` : reply.text).slice(0, 1500),
+              }
+            : { quoteId: quote.id, messageType, tone, objection: context }
+        ),
       });
       // A proxy error page isn't JSON; never show the parser's complaint.
       const data = await res.json().catch(() => ({}));
@@ -278,6 +315,7 @@ export function AIMessageModal({
           // Only used to refuse if things changed since this was shown.
           expectedTo: recipient,
           expectedFollowUpId: pendingFollowUpId,
+          inReplyTo: reply?.id ?? null,
         });
       } catch (e) {
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
@@ -423,7 +461,7 @@ export function AIMessageModal({
         if (changed.current || emailSent || followedUp) window.location.reload();
       }}
       size="lg"
-      title={`Follow up with ${firstName}`}
+      title={reply ? `Reply to ${firstName}` : `Follow up with ${firstName}`}
       description={
         <span className="[overflow-wrap:anywhere]">
           {quote.title}, <span className="num font-medium text-stone-900">{formatCurrency(quote.amount, quote.currency)}</span>
@@ -433,7 +471,32 @@ export function AIMessageModal({
       <ReadOnlyNotice />
       <div className="flex flex-col gap-4">
         {/* One choice: which message. The AI is one button away. */}
-        {templates.length > 0 && (
+        {/* Answering a reply: what they wrote, then the AI is one button away. */}
+        {reply && (
+          <div>
+            <blockquote className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-[10px] border-l-4 border-info-500 bg-canvas px-3 py-2 text-[14px] text-stone-700 [overflow-wrap:anywhere]">
+              <span className="mb-1 block text-[12px] font-medium text-stone-500">{reply.from} wrote:</span>
+              {reply.text || reply.subject || "(No text)"}
+            </blockquote>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button className="btn-secondary" onClick={generate} disabled={busy || loading || !canWrite}>
+                <PenLine className="h-4 w-4" /> Write with AI
+              </button>
+              <button
+                type="button"
+                className="btn-ghost tap px-2"
+                onClick={() => setAdjusting((a) => !a)}
+                aria-expanded={adjusting}
+                aria-label="AI options"
+                title="AI options"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+              </button>
+            </div>
+            {adjusting && aiOptions()}
+          </div>
+        )}
+        {!reply && templates.length > 0 && (
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -597,7 +660,9 @@ export function AIMessageModal({
             {/* Send on the right; recording it yourself on the left. */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
               <button
-                className="btn-ghost"
+                className={reply ? "invisible" : "btn-ghost"}
+                aria-hidden={reply ? true : undefined}
+                tabIndex={reply ? -1 : undefined}
                 onClick={markFollowedUp}
                 disabled={busy || followedUp || (emailSent && !manualLogNeeded)}
                 title="Record that you sent this yourself"

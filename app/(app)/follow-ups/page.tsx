@@ -4,6 +4,7 @@ import { requestToday } from "@/lib/request-time";
 import { emailConfig } from "@/lib/email";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { FollowUpWithContext } from "@/lib/types";
+import { latestReplies } from "@/lib/replies-server";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,9 @@ export default async function FollowUpsPage({
       .select(SELECT)
       .eq("user_id", user.id)
       .neq("status", "pending")
+      // Reminders paused because the customer replied aren't history: the
+      // reply is shown on top instead.
+      .eq("paused_by_reply", false)
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(DONE_SHOWN + 1),
@@ -56,6 +60,28 @@ export default async function FollowUpsPage({
     lead: Array.isArray(f.lead) ? (f.lead[0] ?? null) : (f.lead ?? null),
   }));
 
+  // Open quotes whose customer replied: on top, with what they wrote.
+  const { data: repliedRows, error: repliedError } = await supabase
+    .from("quotes")
+    .select("id, title, customer_replied_at, lead:leads(customer_name)")
+    .eq("user_id", user.id)
+    .not("customer_replied_at", "is", null)
+    .in("status", ["sent", "follow_up_due", "negotiating"])
+    .order("customer_replied_at", { ascending: false })
+    .limit(20);
+  if (repliedError) console.error("[follow-ups] replied quotes unavailable:", repliedError.message);
+  const replyText = await latestReplies(supabase, user.id, (repliedRows ?? []).map((q) => q.id as string));
+  const replied = (repliedRows ?? []).map((q) => {
+    const lead = Array.isArray(q.lead) ? q.lead[0] : q.lead;
+    return {
+      quoteId: q.id as string,
+      title: q.title as string,
+      customerName: (lead as { customer_name?: string } | null)?.customer_name ?? "Customer",
+      repliedAt: q.customer_replied_at as string,
+      snippet: replyText[q.id as string]?.text ?? "",
+    };
+  });
+
   // "Today" comes from the server (same value the dashboard uses), so the two
   // pages always agree and SSR matches the browser.
   return (
@@ -65,6 +91,7 @@ export default async function FollowUpsPage({
       emailEnabled={emailConfig() !== null}
       moreDone={done.length > DONE_SHOWN}
       quoteId={quoteId}
+      replied={replied}
     />
   );
 }

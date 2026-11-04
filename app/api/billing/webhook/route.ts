@@ -10,6 +10,7 @@ import {
   type SubscriptionPatch,
 } from "@/lib/billing-provider";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notify, type NotificationKind } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -165,8 +166,25 @@ export async function POST(request: Request) {
         console.error("[billing] couldn't apply event", eventKey, updateError.message);
         return RETRY();
       }
+      await notifyBilling(db, sub.user_id, event, patch);
     }
     await done();
   }
   return NextResponse.json({ received: true });
+}
+
+/** The account holder's update under the bell for a billing change that was applied. */
+async function notifyBilling(db: Db, userId: string, event: BillingEvent, patch: SubscriptionPatch) {
+  const until = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
+  const end = until((patch as { current_period_end?: string | null }).current_period_end ?? event.currentPeriodEnd);
+  const messages: Record<BillingEvent["type"], [NotificationKind, string, string]> = {
+    subscription_active: ["payment_received", "Your payment went through", end ? `QuoteLoop is paid until ${end}.` : "Your subscription is active."],
+    payment_failed: ["payment_failed", "A payment didn't go through", "It will be tried again. Update your card in Settings, Billing, to keep full access."],
+    subscription_canceled: ["subscription_canceled", "Your subscription was canceled", end ? `You keep full access until ${end}.` : "You keep full access until the end of the paid period."],
+    subscription_expired: ["subscription_expired", "Your subscription has ended", "Your data is safe and you can still read it. Subscribe again in Settings to keep following up."],
+    payment_reversed: ["payment_reversed", "A payment was refunded", "The money went back to your card."],
+  };
+  const [kind, title, body] = messages[event.type];
+  await notify(db, { userId, kind, title, body, dedupeKey: `billing:${event.id}` });
 }

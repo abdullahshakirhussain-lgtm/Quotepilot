@@ -2,6 +2,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { DashboardView, type RepliedQuote } from "@/components/dashboard/DashboardView";
 import { currentHour, todayISO } from "@/lib/utils";
 import { computeDashboardMetrics, currencyCounts, inCurrency } from "@/lib/metrics";
+import { latestReplies } from "@/lib/replies-server";
 import { classifyFollowUp, onePerQuote } from "@/lib/follow-up-state";
 import { getRequestTimeZone } from "@/lib/request-time";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -31,7 +32,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
   // Every row, not just the API's first page: these feed totals and counts.
   // A failed query throws, and is never rendered as zeros — that would read as
   // "you lost your data".
-  const [businessRes, leads, quotes, followUps, latestRes, repliedRes] = await Promise.all([
+  const [businessRes, leads, quotes, followUps, latestRes, repliedRes, updatesRes] = await Promise.all([
     supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
     fetchAllRows<{ status: string; email: string | null }>((from, to) =>
       supabase.from("leads").select("status, email").eq("user_id", user.id).order("id").range(from, to)
@@ -66,16 +67,28 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
       .in("status", ["sent", "follow_up_due", "negotiating"])
       .order("customer_replied_at", { ascending: false })
       .limit(10),
+    // Unread updates, for "While you were away".
+    supabase
+      .from("notifications")
+      .select("id, kind, quote_id, title, body", { count: "exact" })
+      .eq("user_id", user.id)
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(3),
   ]);
+  if (updatesRes.error) console.error("[dashboard] updates unavailable:", updatesRes.error.message);
   // Optional: before the schema is re-run the column doesn't exist yet.
   if (repliedRes.error) console.error("[dashboard] replied quotes unavailable:", repliedRes.error.message);
-  const replied: RepliedQuote[] = (repliedRes.error ? [] : (repliedRes.data ?? [])).map((q) => {
+  const repliedRows = repliedRes.error ? [] : (repliedRes.data ?? []);
+  const replyText = await latestReplies(supabase, user.id, repliedRows.map((q) => q.id as string));
+  const replied: RepliedQuote[] = repliedRows.map((q) => {
     const lead = Array.isArray(q.lead) ? (q.lead[0] ?? null) : q.lead;
     return {
       id: q.id as string,
       title: q.title as string,
       repliedAt: q.customer_replied_at as string,
       customerName: (lead as { customer_name?: string } | null)?.customer_name ?? "Customer",
+      snippet: replyText[q.id as string]?.text ?? "",
     };
   });
   if (businessRes.error) throw new Error(`Could not load dashboard: ${businessRes.error.message}`);
@@ -133,6 +146,8 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
       customers={leads.length}
       latest={latest}
       replied={replied}
+      updates={updatesRes.error ? [] : (updatesRes.data ?? [])}
+      updatesTotal={updatesRes.error ? 0 : (updatesRes.count ?? 0)}
     />
   );
 }

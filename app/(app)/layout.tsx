@@ -21,7 +21,7 @@ export default async function AppLayout({
 
   const supabase = await createClient();
   const today = await requestToday();
-  const [{ data: business, error }, attention, access, timeZone] = await Promise.all([
+  const [{ data: business, error }, attention, access, timeZone, unreadRes] = await Promise.all([
     supabase
       .from("businesses")
       .select("*")
@@ -41,7 +41,10 @@ export default async function AppLayout({
     ),
     getAccess(user.id),
     getRequestTimeZone(),
+    // Updates under the bell not seen yet (optional: none if the table isn't there yet).
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
   ]);
+  const unreadUpdates = unreadRes.error ? 0 : (unreadRes.count ?? 0);
 
   // A failed query must not look like "no workspace" — that would send an
   // existing user back through onboarding.
@@ -62,6 +65,7 @@ export default async function AppLayout({
       <TopBar
         businessName={business.business_name}
         trialNote={quietTrial ? `Free trial: ${access.daysLeft} days left` : null}
+        unreadUpdates={unreadUpdates}
       />
       {/* Menu down the left from laptop width; a tab bar along the bottom below it. */}
       <div className="mx-auto flex w-full max-w-[1440px] flex-1 gap-5 px-4 py-5 sm:px-6 lg:px-5">

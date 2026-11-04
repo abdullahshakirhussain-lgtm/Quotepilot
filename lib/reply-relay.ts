@@ -179,3 +179,17 @@ export function forwardSubject(subject: string | null | undefined, quoteTitle: s
 export const MAX_FORWARD_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 /** Replies handled per reply address per day: a leaked address can't flood an inbox or the quota. */
 export const MAX_REPLIES_PER_TOKEN_PER_DAY = 20;
+
+/**
+ * Headers that make an answer thread with the customer's email in their inbox.
+ * The Message-ID comes from the stored reply (never the browser) and is
+ * cleaned so it can't add a header of its own.
+ */
+export function threadHeaders(messageId: string | null | undefined): Record<string, string> {
+  const id = (messageId ?? "").replace(/[\r\n\s]+/g, "").slice(0, 500);
+  if (!id) return {};
+  const wrapped = id.startsWith("<") ? id : `<${id}>`;
+  return { "In-Reply-To": wrapped, References: wrapped };
+}
+
+export { MAX_STORED_REPLY, newPartOfReply, replySnippet } from "./reply-text";

@@ -150,6 +150,8 @@ export interface OutgoingEmail {
   subject: string;
   text: string;
   replyTo: string | null;
+  /** Extra headers, e.g. In-Reply-To so an answer threads with the customer's email. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -175,6 +177,7 @@ export async function sendViaResend(
         subject: email.subject,
         text: email.text,
         ...(email.replyTo ? { reply_to: email.replyTo } : {}),
+        ...(email.headers && Object.keys(email.headers).length ? { headers: email.headers } : {}),
       }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });

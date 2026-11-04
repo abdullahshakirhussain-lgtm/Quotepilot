@@ -4,6 +4,8 @@ import { HowItWorks } from "@/components/quotes/HowItWorks";
 import { LoadSampleDataButton, SampleBadge, SampleDataBanner } from "@/components/SampleData";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttentionList } from "./AttentionList";
+import { AwayUpdates } from "./AwayUpdates";
+import type { AppNotification } from "@/lib/notifications";
 import { QuoteLink } from "@/components/quotes/QuotePanel";
 import { TypedGreeting } from "./TypedGreeting";
 import { formatCurrency, formatDate, relativeDay } from "@/lib/utils";
@@ -44,6 +46,8 @@ export interface RepliedQuote {
   title: string;
   repliedAt: string;
   customerName: string;
+  /** The first lines of what they wrote. */
+  snippet?: string;
 }
 
 export function DashboardView({
@@ -60,6 +64,8 @@ export function DashboardView({
   customers,
   latest,
   replied = [],
+  updates = [],
+  updatesTotal = 0,
 }: {
   m: DashboardMetrics;
   /** The currency the overview is showing. */
@@ -79,6 +85,9 @@ export function DashboardView({
   latest: LatestQuote[];
   /** Open quotes whose customer replied; their reminders are paused. */
   replied?: RepliedQuote[];
+  /** Unread updates (newest few) and how many there are in all. */
+  updates?: { id: string; kind: AppNotification["kind"]; quote_id: string | null; title: string; body: string | null }[];
+  updatesTotal?: number;
 }) {
   const hello = `${greeting}${firstName ? `, ${firstName}` : ""}`;
 
@@ -129,6 +138,7 @@ export function DashboardView({
 
   return (
     <div className="flex flex-col gap-4">
+      <AwayUpdates items={updates} total={updatesTotal} />
       {hasSampleData && <SampleDataBanner />}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -230,6 +240,9 @@ export function DashboardView({
                     <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">
                       Replied {relativeDay(r.repliedAt, today)} about {r.title}
                     </div>
+                    {r.snippet && (
+                      <div className="mt-0.5 line-clamp-2 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
+                    )}
                   </div>
                   <QuoteLink quoteId={r.id} className="btn-secondary shrink-0 px-3" aria-label={`Answer ${r.customerName}'s reply`}>
                     Answer

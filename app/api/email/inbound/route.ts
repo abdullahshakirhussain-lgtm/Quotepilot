@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { emailConfig, formatFrom, isValidEmail } from "@/lib/email";
 import { recomputeQuoteFollowUpState } from "@/lib/quote-state";
 import { OPEN_QUOTE_STATUSES } from "@/lib/metrics";
+import { notify } from "@/lib/notifications";
 import {
   forwardSubject,
   forwardText,
@@ -10,7 +11,9 @@ import {
   isAutoReply,
   MAX_FORWARD_ATTACHMENT_BYTES,
   MAX_REPLIES_PER_TOKEN_PER_DAY,
+  MAX_STORED_REPLY,
   parseMailbox,
+  replySnippet,
   relayConfig,
   tokenFromAddress,
   verifyWebhook,
@@ -59,6 +62,7 @@ interface ReceivedEmail {
   html?: string | null;
   headers?: Record<string, unknown> | null;
   reply_to?: string[] | null;
+  message_id?: string | null;
 }
 interface ReceivedAttachment {
   filename?: string | null;
@@ -168,6 +172,15 @@ export async function POST(request: Request) {
   const quote = quoteRes.data as { id: string; title: string; status: string; customer_replied_at: string | null; lead: { customer_name?: string } | { customer_name?: string }[] | null } | null;
   const lead = Array.isArray(quote?.lead) ? quote?.lead[0] : quote?.lead;
   const customerName = fromHeader?.name ?? envelopeFrom.name ?? lead?.customer_name ?? null;
+  const replyText = full.text?.trim() ? full.text : htmlToText(full.html ?? "");
+  const messageId =
+    (typeof full.message_id === "string" && full.message_id) || (typeof data.message_id === "string" && data.message_id) || null;
+  const attachmentNames = Array.isArray(data.attachments)
+    ? (data.attachments as { filename?: unknown }[])
+        .map((a) => (typeof a?.filename === "string" ? a.filename.slice(0, 200) : ""))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
 
   // Record it once. A retry of the same delivery finds this row and only
   // finishes the forward.
@@ -179,6 +192,10 @@ export async function POST(request: Request) {
       from_email: envelopeFrom.email.slice(0, 320),
       from_name: clip(customerName, 200),
       subject: clip(subject, 300),
+      // The reply itself, so it can be read and answered inside QuoteLoop.
+      body: replyText.slice(0, MAX_STORED_REPLY) || null,
+      message_id: messageId ? messageId.slice(0, 500) : null,
+      attachment_names: attachmentNames.length ? attachmentNames : null,
       auto_reply: autoReply,
       received_at: typeof data.created_at === "string" && !Number.isNaN(Date.parse(data.created_at)) ? data.created_at : new Date().toISOString(),
     });
@@ -220,9 +237,28 @@ export async function POST(request: Request) {
     }
   }
 
+  const who = customerName ?? envelopeFrom.email;
+  const about = quote?.title ? ` about ${quote.title}` : "";
+  await notify(db, {
+    userId,
+    kind: autoReply ? "auto_reply" : "customer_reply",
+    title: autoReply ? `${who} sent an automatic reply${about}` : `${who} replied${about}`,
+    body: replySnippet(replyText) || (subject ?? null),
+    quoteId: quote?.id ?? null,
+    dedupeKey: `reply:${emailId}`,
+  });
+
   const businessEmail = (businessRes.data?.email as string | null | undefined)?.trim() ?? "";
   if (!isValidEmail(businessEmail)) {
     await db.from("customer_replies").update({ forward_error: "No business email in Settings" }).eq("resend_email_id", emailId);
+    await notify(db, {
+      userId,
+      kind: "forward_failed",
+      title: `${who}'s reply couldn't be forwarded to your email`,
+      body: "There's no business email in Settings. You can read the reply here; add your email in Settings so the next ones reach your inbox too.",
+      quoteId: quote?.id ?? null,
+      dedupeKey: `forward-failed:${emailId}`,
+    });
     return ok("no business email to forward to");
   }
 
@@ -261,7 +297,7 @@ export async function POST(request: Request) {
     customerName,
     customerEmail: answerTo,
     quoteTitle: quote?.title ?? null,
-    text: full.text?.trim() ? full.text : htmlToText(full.html ?? ""),
+    text: replyText,
     skippedAttachments: skipped,
     reminders,
   });

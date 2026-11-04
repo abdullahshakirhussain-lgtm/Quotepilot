@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { UpdatesBell } from "@/components/UpdatesBell";
 import {
   BellRing,
   FileText,
@@ -43,11 +44,20 @@ function Badge({ count, className }: { count: number; className?: string }) {
  * The dark bar across the top of every signed-in page: the wordmark, the
  * business, the trial note and "New quote" (the one action every page needs).
  */
-export function TopBar({ businessName, trialNote }: { businessName: string; trialNote?: string | null }) {
+export function TopBar({
+  businessName,
+  trialNote,
+  unreadUpdates = 0,
+}: {
+  businessName: string;
+  trialNote?: string | null;
+  /** Unread updates under the bell. */
+  unreadUpdates?: number;
+}) {
   return (
     <header className="sticky top-0 z-30 bg-stone-900 text-white">
       <div className="flex h-14 items-center gap-4 px-4 sm:px-6 lg:px-5">
-        <Link href="/dashboard" className="tap inline-flex items-center text-[20px] font-bold leading-none" aria-label="QuoteLoop dashboard">
+        <Link href="/dashboard" className="tap inline-flex shrink-0 items-center text-[20px] font-bold leading-none" aria-label="QuoteLoop dashboard">
           QuoteLoop
         </Link>
         <span
@@ -56,14 +66,16 @@ export function TopBar({ businessName, trialNote }: { businessName: string; tria
         >
           {businessName}
         </span>
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-3 sm:gap-4">
           {trialNote && (
             <Link href="/settings#billing" className="hidden whitespace-nowrap text-[13px] text-stone-200 underline-offset-4 hover:text-white hover:underline md:inline">
               {trialNote}
             </Link>
           )}
-          <Link href="/quotes?new=1" className="btn tap bg-white px-3.5 text-stone-900 hover:bg-stone-100">
-            <Plus className="h-4 w-4" strokeWidth={2.4} /> New quote
+          <UpdatesBell unread={unreadUpdates} />
+          <Link href="/quotes?new=1" className="btn tap shrink-0 bg-white px-3.5 text-stone-900 hover:bg-stone-100">
+            {/* The narrowest phones show just the +, so the wordmark and bell fit. */}
+            <Plus className="h-4 w-4" strokeWidth={2.4} /> <span className="max-[359px]:sr-only">New quote</span>
           </Link>
         </div>
       </div>

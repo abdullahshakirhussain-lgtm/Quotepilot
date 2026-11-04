@@ -4,6 +4,7 @@ import { requestToday } from "@/lib/request-time";
 import { emailConfig } from "@/lib/email";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { loadTemplates } from "@/lib/templates-server";
+import { latestReplies } from "@/lib/replies-server";
 import { defaultQuoteTemplateId, resolveTemplates } from "@/lib/templates";
 import type { Business, QuoteWithLead } from "@/lib/types";
 import type { QuoteCustomer } from "@/components/quotes/NewQuoteModal";
@@ -87,6 +88,13 @@ export default async function QuotesPage({
     }
   }
 
+  // What customers who replied wrote, for the prompt on their quote.
+  const replySnippets = await latestReplies(
+    supabase,
+    user.id,
+    quotes.filter((q) => q.customer_replied_at).map((q) => q.id)
+  );
+
   return (
     <QuotesClient
       quotes={quotes}
@@ -101,6 +109,7 @@ export default async function QuotesPage({
       }}
       emailEnabled={emailConfig() !== null}
       quoteTemplates={resolvedQuoteTemplates}
+      replySnippets={replySnippets}
       defaultQuoteTemplate={defaultQuoteTemplateId(businessRes.data?.quote_template, resolvedQuoteTemplates)}
       earlierQuoteEmails={earlierQuoteEmails}
       initialNewLeadId={preselectLeadId}

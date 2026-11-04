@@ -136,8 +136,10 @@ export default function PrivacyPage() {
           A reply passes through QuoteLoop on its way: each email carries a reply address that
           belongs to its quote. When the customer replies, Resend receives the reply for us, and
           QuoteLoop records who replied, the subject and when, pauses that quote’s reminders, and
-          forwards the whole reply, with any attachments, to the business email. QuoteLoop does not
-          keep the text of the reply. Resend keeps received emails for up to 30 days.
+          forwards the whole reply, with any attachments, to the business email. QuoteLoop keeps the
+          reply&apos;s text (up to 10,000 characters) and the names of its attachments, so you can read
+          and answer it inside QuoteLoop; the attachments themselves are only forwarded, not stored.
+          Resend keeps received emails for up to 30 days.
         </p>
         <p>
           If you receive an email sent through QuoteLoop and do not want more emails from that
@@ -155,7 +157,12 @@ export default function PrivacyPage() {
             "the related quote, customer and follow-up",
           ]}
         />
-        <p>For each customer reply, we store the sender’s name and email address, the subject, when it arrived, and whether it was forwarded.</p>
+        <p>
+          For each customer reply, we store the sender’s name and email address, the subject, its text,
+          the names of any attachments, when it arrived, and whether it was forwarded. QuoteLoop also keeps
+          a short list of updates for you (a customer replied, a payment went through), which you can read
+          and clear.
+        </p>
         <p>Current limits: 25 emails per 24 hours and 100 emails per 30 days for each user.</p>
       </LegalSection>
 
@@ -247,7 +254,7 @@ export default function PrivacyPage() {
         <LegalList
           items={[
             "You can delete individual records, such as customers and quotes, at any time.",
-            "In Settings, you can clear all your customers, quotes, follow-ups, messages and customer replies at once. Your business profile and message templates stay until your account is deleted.",
+            "In Settings, you can clear all your customers, quotes, follow-ups, messages, customer replies and updates at once. Your business profile and message templates stay until your account is deleted.",
             "Records of emails you sent from QuoteLoop are kept when you delete a quote or customer, or clear your data, so your sending history and sending limits stay accurate. They are deleted when your account is deleted.",
             "In Settings, you can export your quotes, follow-ups and customers as CSV files.",
             <>

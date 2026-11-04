@@ -9,6 +9,7 @@ import { requestToday } from "@/lib/request-time";
 import { clip } from "@/lib/utils";
 import { readOnlyReason } from "@/lib/billing-server";
 import { replyToFor } from "@/lib/reply-relay-server";
+import { threadHeaders } from "@/lib/reply-relay";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -28,6 +29,8 @@ export async function sendFollowUpEmail(input: {
   expectedTo?: string | null;
   /** The reminder that was due when the message was opened (null: none was). */
   expectedFollowUpId?: string | null;
+  /** Answering this customer reply (customer_replies.id): the email threads with it. */
+  inReplyTo?: string | null;
 }): Promise<SendOutcome> {
   const user = await requireUser();
   // Read-only accounts (trial or subscription over) can't create or send.
@@ -37,6 +40,18 @@ export async function sendFollowUpEmail(input: {
   const uid = user.id;
   const config = emailConfig();
   const logs = emailLogWriter(supabase, uid);
+
+  // Answering a reply: thread with it. Looked up here, for this user only.
+  let headers: Record<string, string> = {};
+  if (typeof input?.inReplyTo === "string" && /^[0-9a-f-]{36}$/i.test(input.inReplyTo)) {
+    const { data } = await supabase
+      .from("customer_replies")
+      .select("message_id")
+      .eq("id", input.inReplyTo)
+      .eq("user_id", uid)
+      .maybeSingle();
+    headers = threadHeaders(data?.message_id as string | null | undefined);
+  }
 
   try {
     const outcome = await sendFollowUpEmailCore(
@@ -129,6 +144,7 @@ export async function sendFollowUpEmail(input: {
           sendViaResend(config!, {
             ...email,
             replyTo: (await replyToFor(supabase, uid, meta.quoteId, meta.businessName)) ?? email.replyTo,
+            headers,
           }),
         now: () => new Date(),
       },

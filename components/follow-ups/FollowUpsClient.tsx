@@ -10,11 +10,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Menu, MenuDivider, MenuItem, MenuLabel } from "@/components/ui/Menu";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
-import { useOpenQuote } from "@/components/quotes/QuotePanel";
+import { QuoteLink, useOpenQuote } from "@/components/quotes/QuotePanel";
 import type { ActionResult, FollowUpWithContext } from "@/lib/types";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, relativeDay } from "@/lib/utils";
 import {
   classifyFollowUp,
   onePerQuote,
@@ -60,6 +60,7 @@ export function FollowUpsClient({
   emailEnabled,
   moreDone = false,
   quoteId = null,
+  replied = [],
 }: {
   followUps: FollowUpWithContext[];
   /** Server-computed date so grouping matches the dashboard and SSR. */
@@ -70,6 +71,8 @@ export function FollowUpsClient({
   moreDone?: boolean;
   /** Show only this quote's reminders ("View follow-ups" on a quote). */
   quoteId?: string | null;
+  /** Open quotes whose customer replied (their reminders are paused). */
+  replied?: { quoteId: string; title: string; customerName: string; repliedAt: string; snippet: string }[];
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -155,7 +158,7 @@ export function FollowUpsClient({
         </div>
       )}
 
-      {followUps.length === 0 ? (
+      {followUps.length === 0 && replied.length === 0 ? (
         <EmptyState
           icon={<BellRing className="h-5 w-5" />}
           title="No follow-ups due"
@@ -168,6 +171,35 @@ export function FollowUpsClient({
         />
       ) : (
         <div className="flex flex-col gap-4">
+          {!filtered && replied.length > 0 && (
+            <section aria-labelledby="fu-replied" className="card ql-in">
+              <div className="card-head">
+                <h2 id="fu-replied" className="card-title">
+                  Customer replied
+                </h2>
+                <span className="num chip-soon">{replied.length}</span>
+              </div>
+              <ul className="divide-y divide-[#ECEEF1]">
+                {replied.map((r) => (
+                  <li key={r.quoteId} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-baseline gap-x-2 text-[15px]">
+                        <span className="font-medium text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</span>
+                        <span className="text-stone-500 [overflow-wrap:anywhere]">{r.title}</span>
+                        <span className="text-[13px] text-stone-500">{relativeDay(r.repliedAt, today)}</span>
+                      </p>
+                      {r.snippet && (
+                        <p className="mt-0.5 line-clamp-2 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</p>
+                      )}
+                    </div>
+                    <QuoteLink quoteId={r.quoteId} className="btn-primary shrink-0 self-start sm:self-center">
+                      Read and reply
+                    </QuoteLink>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {SECTIONS.map((s, si) =>
             groups[s.key].length === 0 ? null : (
               <section key={s.key} aria-labelledby={`fu-${s.key}`} className="card ql-in" style={{ animationDelay: `${si * 60}ms` }}>
@@ -194,7 +226,7 @@ export function FollowUpsClient({
             ),
           )}
 
-          {needAttention === 0 && groups.upcoming.length === 0 && (
+          {needAttention === 0 && groups.upcoming.length === 0 && replied.length === 0 && (
             <p className="card ql-fade px-5 py-6 text-[14px] text-stone-500">
               You&apos;re all caught up. New follow-ups appear when you add your
               next quote.

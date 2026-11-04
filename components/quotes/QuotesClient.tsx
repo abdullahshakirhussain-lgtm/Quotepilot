@@ -102,6 +102,7 @@ export function QuotesClient({
   emailEnabled,
   quoteTemplates = [],
   defaultQuoteTemplate = "quote_standard",
+  replySnippets = {},
   earlierQuoteEmails = {},
   initialNewLeadId,
   openNew,
@@ -116,6 +117,8 @@ export function QuotesClient({
   quoteTemplates?: ResolvedTemplate[];
   /** The one new quote emails start from. */
   defaultQuoteTemplate?: string;
+  /** What each customer who replied wrote (first lines), by quote id. */
+  replySnippets?: Record<string, { from: string; text: string; at: string }>;
   /** Drafts whose quote email already went out ("sent") or was never confirmed. */
   earlierQuoteEmails?: Record<string, "sent" | "pending">;
   initialNewLeadId?: string;
@@ -338,6 +341,7 @@ export function QuotesClient({
                   businessEmailOk={isValidEmail(business.email)}
                   earlierEmail={earlierQuoteEmails[quote.id] ?? null}
                   onOpen={() => openQuote(quote.id)}
+                  replySnippet={replySnippets[quote.id]?.text}
                   onEdit={() => setEditing(quote)}
                   onWrite={() => setAiFor(quote)}
                   onSendQuote={() => setSendDraft(quote)}
@@ -472,6 +476,7 @@ function QuoteRow({
   businessEmailOk,
   earlierEmail,
   onOpen,
+  replySnippet,
   onEdit,
   onWrite,
   onSendQuote,
@@ -489,6 +494,8 @@ function QuoteRow({
   businessEmailOk: boolean;
   earlierEmail: "sent" | "pending" | null;
   onOpen: () => void;
+  /** The first lines of the customer's reply, when they replied. */
+  replySnippet?: string;
   onEdit: () => void;
   onWrite: () => void;
   onSendQuote: () => void;
@@ -624,6 +631,9 @@ function QuoteRow({
               </span>{" "}
               Reminders are paused. What&apos;s next?
             </p>
+            {replySnippet && (
+              <p className="mt-1 line-clamp-2 text-[14px] text-stone-800 [overflow-wrap:anywhere]">&ldquo;{replySnippet}&rdquo;</p>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               <button className="btn-secondary bg-white px-3 py-1.5" disabled={pending} onClick={() => answer("negotiating")}>
                 Negotiating
@@ -636,6 +646,9 @@ function QuoteRow({
               </button>
               <button className="btn-ghost px-3 py-1.5" disabled={pending} onClick={() => answer("resume")}>
                 Resume reminders
+              </button>
+              <button className="btn-ghost px-3 py-1.5 text-info-700" onClick={onOpen}>
+                Read and reply
               </button>
             </div>
           </div>

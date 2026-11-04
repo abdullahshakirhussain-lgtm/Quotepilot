@@ -36,13 +36,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .order("due_date", { ascending: true }),
     supabase
       .from("email_logs")
-      .select("id, follow_up_id, recipient_email, subject, status, created_at, sent_at")
+      .select("id, follow_up_id, recipient_email, subject, body, status, created_at, sent_at")
       .eq("quote_id", id)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase
       .from("customer_replies")
-      .select("id, from_name, from_email, subject, received_at, auto_reply")
+      .select("id, from_name, from_email, subject, body, attachment_names, received_at, auto_reply")
       .eq("quote_id", id)
       .eq("user_id", user.id)
       .order("received_at", { ascending: false }),
