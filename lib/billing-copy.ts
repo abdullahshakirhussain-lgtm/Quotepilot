@@ -6,5 +6,5 @@ export const PAYMENTS_NOT_SET_UP = `Online payment isn't set up yet. Email ${CON
 /** Where the provider sends people back to. Never built from the request: behind the host's proxy that is an internal address. */
 export function billingReturnUrl(): string {
   const base = (process.env.APP_URL || "https://quoteloop.site").replace(/\/+$/, "");
-  return `${base}/settings?billing=done#billing`;
+  return `${base}/settings?area=billing&billing=done`;
 }

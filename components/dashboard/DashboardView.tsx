@@ -188,11 +188,11 @@ export function DashboardView({
                 href={`/dashboard?currency=${c.currency}`}
                 aria-current={c.currency === currency ? "true" : undefined}
                 className={`tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ${
-                  c.currency === currency ? "bg-stone-900 text-white" : "border border-line bg-white text-stone-700 hover:border-stone-400"
+                  c.currency === currency ? "border border-stone-300 bg-stone-200/80 text-stone-900" : "border border-line bg-white text-stone-700 hover:border-stone-400"
                 }`}
               >
                 {c.currency}
-                <span className={`num ${c.currency === currency ? "text-stone-300" : "text-stone-500"}`}>{c.count}</span>
+                <span className="num text-stone-500">{c.count}</span>
               </a>
             ))}
           </nav>

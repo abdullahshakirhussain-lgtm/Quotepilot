@@ -93,7 +93,7 @@ export function BillingBanner({
       )}
     >
       <p className="min-w-0 [overflow-wrap:anywhere]">{text}</p>
-      <Link href="/settings#billing" className={cn("shrink-0 px-3 py-1.5", tone === "danger" ? "btn-danger" : "btn-primary")}>
+      <Link href="/settings?area=billing" className={cn("shrink-0 px-3 py-1.5", tone === "danger" ? "btn-danger" : "btn-primary")}>
         {action}
       </Link>
     </div>

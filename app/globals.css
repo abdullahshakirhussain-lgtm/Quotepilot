@@ -46,7 +46,7 @@ body {
   }
   /* 16px text: phones don't zoom in when a field is tapped. */
   .input {
-    @apply w-full rounded-[8px] border border-stone-300 bg-white px-3 py-2.5 text-[16px] leading-6 text-stone-900 placeholder:text-stone-400 focus:border-info-500 focus:outline-none focus:ring-2 focus:ring-info-500/20;
+    @apply w-full rounded-[8px] border border-stone-300 bg-white px-3 py-2.5 text-[16px] leading-6 text-stone-900 placeholder:text-stone-500 focus:border-info-500 focus:outline-none focus:ring-2 focus:ring-info-500/20;
   }
   /* Dropdowns look like the other fields, with a drawn arrow, not the browser's box. */
   select.input {
@@ -58,9 +58,10 @@ body {
   .label {
     @apply mb-1.5 block text-[14px] font-medium text-stone-800;
   }
-  /* A white card. Lists inside it are separated by hairlines, never by more cards. */
+  /* A white card: a hairline edge and no shadow (shadows are for what floats).
+     Lists inside it are separated by hairlines, never by more cards. */
   .card {
-    @apply rounded-[12px] border border-line bg-white shadow-[0_1px_2px_rgba(16,24,40,0.05)];
+    @apply rounded-[12px] border border-line bg-white;
   }
   /* A card's title bar. */
   .card-head {

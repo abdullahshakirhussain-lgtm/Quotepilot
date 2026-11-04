@@ -19,7 +19,7 @@ export async function markUpdatesRead(id?: string) {
 /** Where an update leads: its quote, or billing in Settings. */
 export function openUpdate(n: Pick<AppNotification, "quote_id" | "kind">) {
   if (n.quote_id) openQuote(n.quote_id);
-  else if (n.kind.startsWith("payment") || n.kind.startsWith("subscription")) window.location.assign("/settings#billing");
+  else if (n.kind.startsWith("payment") || n.kind.startsWith("subscription")) window.location.assign("/settings?area=billing");
 }
 
 function Icon({ kind }: { kind: AppNotification["kind"] }) {
@@ -61,7 +61,7 @@ export function UpdatesBell({ unread: initialUnread }: { unread: number }) {
       <button
         type="button"
         onClick={show}
-        className="tap relative inline-flex items-center justify-center rounded-full px-2 text-stone-200 hover:text-white"
+        className="tap relative inline-flex items-center justify-center rounded-full px-2 text-stone-600 hover:text-stone-900"
         aria-label={unread ? `Updates, ${unread} new` : "Updates"}
         title="Updates"
       >

@@ -87,9 +87,10 @@ export function PipelineClient({ leads, currency }: { leads: PipelineLead[]; cur
               <div className="border-b border-[#ECEEF1] px-4 py-3 sm:px-5">
                 <StageHeading col={col} count={items.length} total={total} />
               </div>
-              <ul className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:p-4">
-                {items.map((l, i) => (
-                  <PipelineCard key={l.id} lead={l} currency={currency} index={i} className="rounded-[10px] border border-line" />
+              {/* One row per customer, full width: no half-empty grid, no cards in cards. */}
+              <ul className="divide-y divide-[#ECEEF1]">
+                {items.map((l) => (
+                  <PipelineCard key={l.id} lead={l} currency={currency} row />
                 ))}
               </ul>
             </section>
@@ -113,8 +114,8 @@ export function PipelineClient({ leads, currency }: { leads: PipelineLead[]; cur
               <p className="px-1 pb-2 text-[13px] text-stone-400">None</p>
             ) : (
               <ul className="flex flex-col gap-2.5">
-                {items.map((l, i) => (
-                  <PipelineCard key={l.id} lead={l} currency={currency} index={ci + i} alignMenu={ci >= 4 ? "right" : "left"} className="card" />
+                {items.map((l) => (
+                  <PipelineCard key={l.id} lead={l} currency={currency} alignMenu={ci >= 4 ? "right" : "left"} className="card p-3" />
                 ))}
               </ul>
             )}
@@ -128,14 +129,15 @@ export function PipelineClient({ leads, currency }: { leads: PipelineLead[]; cur
 function PipelineCard({
   lead,
   currency,
-  index,
   alignMenu = "left",
+  row = false,
   className,
 }: {
   lead: PipelineLead;
   currency: string;
-  index: number;
   alignMenu?: "left" | "right";
+  /** A full-width list row (who on the left, the amount on the right) instead of a board card. */
+  row?: boolean;
   className?: string;
 }) {
   const [pending, start] = useTransition();
@@ -155,45 +157,71 @@ function PipelineCard({
       }
     });
 
+  const amount = totals.length > 0 && (
+    <div className={cn("num font-semibold leading-tight text-stone-900 [overflow-wrap:anywhere]", row ? "text-right text-[15px]" : "mt-1.5 text-[16px]")}>
+      {formatMoney(totals, currency)}
+    </div>
+  );
+  const moveMenu = (
+    <div className="flex items-center gap-2">
+      <Menu
+        label={`Move ${lead.customer_name} to another stage`}
+        align={row ? "right" : alignMenu}
+        triggerClassName="tap -ml-1 inline-flex items-center gap-1 rounded-[6px] px-1 py-0.5 text-[13px] font-medium text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
+        trigger={
+          <>
+            <span className="sr-only">{lead.customer_name}: </span>Move to <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </>
+        }
+      >
+        <MenuLabel>Move to stage</MenuLabel>
+        {LEAD_STATUSES.filter((s) => s !== lead.status).map((s) => (
+          <MenuItem key={s} disabled={pending} onClick={() => move(s)}>
+            {LEAD_STATUS_LABELS[s]}
+          </MenuItem>
+        ))}
+      </Menu>
+      {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-500" aria-label="Moving" />}
+    </div>
+  );
+  const who = (
+    <>
+      <div className="text-[15px] font-medium leading-snug text-stone-900 [overflow-wrap:anywhere]">{lead.customer_name}</div>
+      {lead.company_name && <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>}
+    </>
+  );
+  const open = stillOpen.length > 0 && (
+    <div className="num mt-0.5 text-[13px] text-stone-500 [overflow-wrap:anywhere]">
+      plus {formatMoney(stillOpen, currency)} still open
+    </div>
+  );
+  const errorLine = error && (
+    <p role="alert" className="mt-1 text-[13px] font-medium text-red-700">
+      {error}
+    </p>
+  );
+
+  // Read in this order: who, how much, then what else and the stage menu.
+  if (row) {
+    return (
+      <li data-pipeline-card className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 px-4 py-3 sm:px-5", className)}>
+        <div className="col-start-1 row-start-1 min-w-0">{who}</div>
+        {amount && <div className="col-start-2 row-start-1">{amount}</div>}
+        <div className="col-span-2 col-start-1 row-start-2 min-w-0">
+          {open}
+          <div className="mt-1">{moveMenu}</div>
+          {errorLine}
+        </div>
+      </li>
+    );
+  }
   return (
-    <li data-pipeline-card className={cn("ql-in bg-white p-3", className)} style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}>
-      <div className="text-[14px] font-medium leading-snug text-stone-900 [overflow-wrap:anywhere]">{lead.customer_name}</div>
-      {lead.company_name && <div className="text-[12px] text-stone-500 [overflow-wrap:anywhere]">{lead.company_name}</div>}
-      {totals.length > 0 && (
-        <div className="num mt-1.5 text-[16px] font-semibold leading-tight text-stone-900 [overflow-wrap:anywhere]">
-          {formatMoney(totals, currency)}
-        </div>
-      )}
-      {stillOpen.length > 0 && (
-        <div className="num mt-0.5 text-[12px] text-stone-500 [overflow-wrap:anywhere]">
-          plus {formatMoney(stillOpen, currency)} still open
-        </div>
-      )}
-      <div className="mt-1.5 flex items-center gap-2">
-        <Menu
-          label={`Move ${lead.customer_name} to another stage`}
-          align={alignMenu}
-          triggerClassName="tap -ml-1 inline-flex items-center gap-1 rounded-[6px] px-1 py-0.5 text-[13px] font-medium text-info-700 transition-colors hover:bg-info-50 disabled:opacity-50"
-          trigger={
-            <>
-              <span className="sr-only">{lead.customer_name}: </span>Move to <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </>
-          }
-        >
-          <MenuLabel>Move to stage</MenuLabel>
-          {LEAD_STATUSES.filter((s) => s !== lead.status).map((s) => (
-            <MenuItem key={s} disabled={pending} onClick={() => move(s)}>
-              {LEAD_STATUS_LABELS[s]}
-            </MenuItem>
-          ))}
-        </Menu>
-        {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-500" aria-label="Moving" />}
-      </div>
-      {error && (
-        <p role="alert" className="mt-1 text-[13px] font-medium text-red-700">
-          {error}
-        </p>
-      )}
+    <li data-pipeline-card className={cn("bg-white", className)}>
+      {who}
+      {amount}
+      {open}
+      <div className="mt-1.5">{moveMenu}</div>
+      {errorLine}
     </li>
   );
 }

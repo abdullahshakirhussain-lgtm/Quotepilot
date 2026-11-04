@@ -137,11 +137,11 @@ export async function GET(
       ]);
       filename = "quoteloop-follow-ups.csv";
     } else {
-      return goTo("/settings?export=failed");
+      return goTo("/settings?area=data&export=failed");
     }
   } catch (e) {
     console.error("[export] query failed:", e instanceof Error ? e.message : e);
-    return goTo("/settings?export=failed");
+    return goTo("/settings?area=data&export=failed");
   }
 
   return new NextResponse(BOM + csv, {

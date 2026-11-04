@@ -23,7 +23,7 @@ export function PaddleCheckout({ token }: { token: string }) {
       if (token.startsWith("test_")) paddle.Environment.set("sandbox");
       paddle.Initialize({
         token,
-        checkout: { settings: { displayMode: "overlay", successUrl: `${window.location.origin}/settings?billing=done#billing` } },
+        checkout: { settings: { displayMode: "overlay", successUrl: `${window.location.origin}/settings?area=billing&billing=done` } },
         eventCallback: (event: { name?: string }) => {
           if (event.name === "checkout.loaded") setState("open");
           if (event.name === "checkout.closed") setState("closed");

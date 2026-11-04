@@ -25,7 +25,7 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
         <p className="mt-3 text-base text-stone-700">There&apos;s no checkout to open here. Subscribe from Settings, under Billing.</p>
       )}
       <Link
-        href="/settings#billing"
+        href="/settings?area=billing"
         className="tap mt-6 inline-flex items-center font-medium text-info-700 hover:underline"
       >
         Back to Settings

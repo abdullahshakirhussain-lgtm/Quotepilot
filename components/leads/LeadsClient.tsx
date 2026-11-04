@@ -135,7 +135,7 @@ export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startN
                     <div className="mt-3 flex flex-wrap gap-2">
                       {!lead.email && (
                         <button
-                          className="btn-primary"
+                          className="btn-secondary"
                           onClick={() => {
                             setFocusEmail(true);
                             setEditing(lead);

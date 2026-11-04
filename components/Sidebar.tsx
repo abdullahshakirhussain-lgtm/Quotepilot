@@ -15,7 +15,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Item = { href: string; label: string; short?: string; icon: typeof LayoutDashboard; badge?: boolean };
+type Item = {
+  href: string;
+  label: string;
+  short?: string;
+  icon: typeof LayoutDashboard;
+  badge?: boolean;
+  /** Other pages this item is current on. */
+  also?: string[];
+};
 
 const HOME: Item = { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard };
 const WORK: Item[] = [
@@ -25,11 +33,20 @@ const WORK: Item[] = [
   { href: "/leads", label: "Customers", icon: Users },
 ];
 const SETTINGS: Item = { href: "/settings", label: "Settings", icon: Settings };
-const ALL = [HOME, ...WORK, SETTINGS];
+// Phones have room for five tabs: Customers and Pipeline are one tab there,
+// two views of the same people (see CustomerViews).
+const TABS: Item[] = [
+  HOME,
+  WORK[0],
+  WORK[1],
+  { href: "/leads", label: "Customers", icon: Users, also: ["/pipeline"] },
+  SETTINGS,
+];
 
 function useActive() {
   const pathname = usePathname();
-  return (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const on = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  return (item: Item) => on(item.href) || (item.also ?? []).some(on);
 }
 
 function Badge({ count, className }: { count: number; className?: string }) {
@@ -41,8 +58,9 @@ function Badge({ count, className }: { count: number; className?: string }) {
 }
 
 /**
- * The dark bar across the top of every signed-in page: the wordmark, the
- * business, the trial note and "New quote" (the one action every page needs).
+ * The bar across the top of every signed-in page, on the page's own white:
+ * the wordmark, the business, the trial note, the bell and "New quote" (the
+ * one action every page needs, and the one dark button).
  */
 export function TopBar({
   businessName,
@@ -55,25 +73,25 @@ export function TopBar({
   unreadUpdates?: number;
 }) {
   return (
-    <header className="sticky top-0 z-30 bg-stone-900 text-white">
+    <header className="sticky top-0 z-30 border-b border-line bg-white text-stone-900">
       <div className="flex h-14 items-center gap-4 px-4 sm:px-6 lg:px-5">
         <Link href="/dashboard" className="tap inline-flex shrink-0 items-center text-[20px] font-bold leading-none" aria-label="QuoteLoop dashboard">
           QuoteLoop
         </Link>
         <span
-          className="hidden max-w-[16rem] truncate rounded-[6px] border border-stone-500 px-2 py-0.5 text-[13px] text-stone-200 lg:inline"
+          className="hidden max-w-[16rem] truncate rounded-[6px] border border-line px-2 py-0.5 text-[13px] text-stone-600 lg:inline"
           title={businessName}
         >
           {businessName}
         </span>
         <div className="ml-auto flex items-center gap-3 sm:gap-4">
           {trialNote && (
-            <Link href="/settings#billing" className="hidden whitespace-nowrap text-[13px] text-stone-200 underline-offset-4 hover:text-white hover:underline md:inline">
+            <Link href="/settings?area=billing" className="hidden whitespace-nowrap text-[13px] text-stone-600 underline-offset-4 hover:text-stone-900 hover:underline md:inline">
               {trialNote}
             </Link>
           )}
           <UpdatesBell unread={unreadUpdates} />
-          <Link href="/quotes?new=1" className="btn tap shrink-0 bg-white px-3.5 text-stone-900 hover:bg-stone-100">
+          <Link href="/quotes?new=1" className="btn-primary tap shrink-0 px-3.5">
             {/* The narrowest phones show just the +, so the wordmark and bell fit. */}
             <Plus className="h-4 w-4" strokeWidth={2.4} /> <span className="max-[359px]:sr-only">New quote</span>
           </Link>
@@ -87,7 +105,7 @@ export function TopBar({
 export function Sidebar({ attentionCount }: { attentionCount: number }) {
   const isActive = useActive();
   const link = (item: Item) => {
-    const active = isActive(item.href);
+    const active = isActive(item);
     const Icon = item.icon;
     return (
       <Link
@@ -96,7 +114,7 @@ export function Sidebar({ attentionCount }: { attentionCount: number }) {
         aria-current={active ? "page" : undefined}
         className={cn(
           "flex h-10 items-center gap-3 rounded-[8px] px-3 text-[15px] transition-colors duration-150",
-          active ? "bg-stone-900 font-medium text-white" : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+          active ? "bg-stone-200/80 font-medium text-stone-900" : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
         )}
       >
         <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.2 : 1.9} />
@@ -126,7 +144,7 @@ export function Sidebar({ attentionCount }: { attentionCount: number }) {
   );
 }
 
-/** Phones and tablets: every section in a tab bar along the bottom, always in view.
+/** Phones and tablets: five tabs along the bottom, always in view.
     Signing out lives in Settings, away from the buttons used all day. */
 export function TabBar({ attentionCount }: { attentionCount: number }) {
   const isActive = useActive();
@@ -135,9 +153,9 @@ export function TabBar({ attentionCount }: { attentionCount: number }) {
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
-      <ul className="grid grid-cols-6">
-        {ALL.map((item) => {
-          const active = isActive(item.href);
+      <ul className="grid grid-cols-5">
+        {TABS.map((item) => {
+          const active = isActive(item);
           const Icon = item.icon;
           return (
             <li key={item.href} className="min-w-0">
@@ -150,7 +168,7 @@ export function TabBar({ attentionCount }: { attentionCount: number }) {
                   active ? "text-stone-900" : "text-stone-500 hover:text-stone-900"
                 )}
               >
-                <span className={cn("grid h-7 w-11 place-items-center rounded-full", active && "bg-stone-900 text-white")}>
+                <span className={cn("grid h-7 w-11 place-items-center rounded-full", active && "bg-stone-200 text-stone-900")}>
                   <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.2 : 1.8} />
                 </span>
                 <span className="max-w-full truncate leading-tight">{item.short ?? item.label}</span>
@@ -160,6 +178,37 @@ export function TabBar({ attentionCount }: { attentionCount: number }) {
           );
         })}
       </ul>
+    </nav>
+  );
+}
+
+/** Phones and tablets: Customers and Pipeline share a tab, so their pages
+    switch between the list and the stages here. */
+export function CustomerViews() {
+  const pathname = usePathname();
+  const views = [
+    { href: "/leads", label: "List" },
+    { href: "/pipeline", label: "By stage" },
+  ];
+  if (!views.some((v) => pathname === v.href)) return null;
+  return (
+    <nav aria-label="Customer views" className="mb-4 inline-flex rounded-full bg-stone-200/70 p-1 lg:hidden">
+      {views.map((v) => {
+        const active = pathname === v.href;
+        return (
+          <Link
+            key={v.href}
+            href={v.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "inline-flex min-h-10 items-center rounded-full px-4 text-[14px] font-medium transition-colors duration-150",
+              active ? "bg-white text-stone-900" : "text-stone-600 hover:text-stone-900"
+            )}
+          >
+            {v.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

@@ -35,7 +35,7 @@ export function ReadOnlyNotice() {
   return (
     <div role="alert" className="mb-4 msg-error">
       {READ_ONLY_MESSAGE}{" "}
-      <Link href="/settings#billing" className="font-medium underline underline-offset-2">
+      <Link href="/settings?area=billing" className="font-medium underline underline-offset-2">
         Go to billing
       </Link>
     </div>

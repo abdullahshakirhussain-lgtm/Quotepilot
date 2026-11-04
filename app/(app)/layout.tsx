@@ -6,7 +6,7 @@ import { getRequestTimeZone, requestToday } from "@/lib/request-time";
 import { getAccess } from "@/lib/billing-server";
 import { BillingBanner } from "@/components/billing/BillingBanner";
 import { AccessFlag } from "@/components/billing/AccessContext";
-import { Sidebar, TabBar, TopBar } from "@/components/Sidebar";
+import { CustomerViews, Sidebar, TabBar, TopBar } from "@/components/Sidebar";
 import { QuotePanelHost } from "@/components/quotes/QuotePanel";
 import type { Business } from "@/lib/types";
 
@@ -79,6 +79,7 @@ export default async function AppLayout({
             daysLeft={access.daysLeft}
             timeZone={timeZone}
           />
+          <CustomerViews />
           {children}
         </main>
       </div>

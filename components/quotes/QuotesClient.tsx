@@ -668,22 +668,23 @@ function QuoteRow({
         <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:justify-end">
           {pending && <Loader2 className="h-4 w-4 animate-spin text-stone-500" />}
 
-          {/* Drafts: one obvious way forward, whether or not we can email it. */}
+          {/* Drafts: one obvious way forward, whether or not we can email it.
+              Row actions are outlined: the one dark button is "New quote". */}
           {isDraft && (
             <>
               {canEmailQuote && (
-                <button className="btn-primary" disabled={pending} onClick={onSendQuote}>
+                <button className="btn-secondary" disabled={pending} onClick={onSendQuote}>
                   <Mail className="h-4 w-4" /> Send quote email
                 </button>
               )}
               {offerAddEmail && (
-                <button className="btn-primary" disabled={pending} onClick={onAddEmail}>
+                <button className="btn-secondary" disabled={pending} onClick={onAddEmail}>
                   <Mail className="h-4 w-4" /> Add customer email
                 </button>
               )}
               {offerBusinessEmail && <AddBusinessEmailButton />}
               <button
-                className={canEmailQuote || offerAddEmail || offerBusinessEmail ? "btn-secondary" : "btn-primary"}
+                className="btn-secondary"
                 disabled={pending}
                 title="Record that you sent this quote yourself"
                 onClick={() => run(() => markQuoteSent(quote.id), onTracked)}
@@ -694,7 +695,7 @@ function QuoteRow({
           )}
           {/* Sent: chase when a follow-up is due, otherwise look; Won is one tap. */}
           {urgentOpen && (
-            <button className="btn-primary" disabled={pending} onClick={onWrite}>
+            <button className="btn-secondary" disabled={pending} onClick={onWrite}>
               <PenLine className="h-4 w-4" /> Write follow-up
             </button>
           )}
@@ -795,7 +796,7 @@ function QuoteTabs({ tab, counts, onChange }: { tab: Tab; counts: Record<string,
             onClick={() => onChange(t.key)}
             className={cn(
               "tap inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-[14px] font-medium transition-colors duration-150",
-              on ? "border-stone-900 bg-stone-900 text-white" : "border-line bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
+              on ? "border-stone-300 bg-stone-200/80 text-stone-900" : "border-line bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
             )}
           >
             {t.label}
