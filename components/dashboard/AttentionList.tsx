@@ -5,13 +5,12 @@ import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import { SampleBadge } from "@/components/SampleData";
 import type { FollowUpWithContext } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
-import { DueChip } from "@/components/ui/DueChip";
+import { dueLabel } from "@/components/ui/DueChip";
 import { isSampleAddress } from "@/lib/email-address";
 import { useOpenQuote } from "@/components/quotes/QuotePanel";
 
 /**
- * The quotes to follow up now, each with a one-click "Write". Rows ease in
- * one after another when the page loads.
+ * The quotes to follow up now: who, how late, how much, and one "Write".
  */
 export function AttentionList({
   items,
@@ -27,37 +26,42 @@ export function AttentionList({
 
   return (
     <>
-      <ul className="flex flex-col divide-y divide-[#ECEEF1] px-5">
-        {items.map((f, i) => (
-          <li key={f.id} className="ql-in flex items-center gap-3 py-3" style={{ animationDelay: `${80 + i * 40}ms` }}>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-stone-900 [overflow-wrap:anywhere]">
-                {f.quote ? (
-                  <button type="button" className="tap inline-flex items-center text-left hover:underline" onClick={() => openQuote(f.quote!.id)}>
-                    {f.lead?.customer_name ?? "Customer"}
-                  </button>
-                ) : (
-                  (f.lead?.customer_name ?? "Customer")
-                )}
-                {isSampleAddress(f.lead?.email) && <SampleBadge />}
+      <ul className="flex flex-col divide-y divide-[#ECEEF1]">
+        {items.map((f) => {
+          const due = dueLabel(f.due_date, today);
+          return (
+            <li key={f.id} className="flex items-center gap-3 px-5 py-3.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-stone-900 [overflow-wrap:anywhere]">
+                  {f.quote ? (
+                    <button type="button" className="tap inline-flex items-center text-left hover:underline" onClick={() => openQuote(f.quote!.id)}>
+                      {f.lead?.customer_name ?? "Customer"}
+                    </button>
+                  ) : (
+                    (f.lead?.customer_name ?? "Customer")
+                  )}
+                  {isSampleAddress(f.lead?.email) && <SampleBadge />}
+                </div>
+                <div className={`text-[13px] ${due.bucket === "overdue" ? "font-medium text-red-700" : "text-stone-500"}`}>
+                  {due.bucket === "today" ? "Due today" : due.text}
+                  {(f.dueCount ?? 1) > 1 && <span className="font-normal text-stone-500">, {f.dueCount} reminders missed</span>}
+                </div>
               </div>
-              <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">
-                {f.quote ? formatCurrency(Number(f.quote.amount), f.quote.currency) : "Quote"}
-                {(f.dueCount ?? 1) > 1 && <>, {f.dueCount} reminders missed</>}
-              </div>
-            </div>
-            <DueChip dueDate={f.due_date} today={today} />
-            {f.quote && (
-              <button
-                className="btn-primary shrink-0 px-3"
-                onClick={() => setAiFor(f)}
-                aria-label={`Write follow-up to ${f.lead?.customer_name ?? "this customer"}`}
-              >
-                Write
-              </button>
-            )}
-          </li>
-        ))}
+              {f.quote && (
+                <span className="num shrink-0 font-medium text-stone-900">{formatCurrency(Number(f.quote.amount), f.quote.currency)}</span>
+              )}
+              {f.quote && (
+                <button
+                  className="btn-secondary shrink-0 px-3"
+                  onClick={() => setAiFor(f)}
+                  aria-label={`Write follow-up to ${f.lead?.customer_name ?? "this customer"}`}
+                >
+                  Write
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       {aiFor?.quote && (

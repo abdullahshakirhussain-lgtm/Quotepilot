@@ -1,45 +1,27 @@
 import Link from "next/link";
-import { Plus, UserPlus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { HowItWorks } from "@/components/quotes/HowItWorks";
-import { LoadSampleDataButton, SampleBadge, SampleDataBanner } from "@/components/SampleData";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LoadSampleDataButton, SampleDataBanner } from "@/components/SampleData";
 import { AttentionList } from "./AttentionList";
 import { AwayUpdates } from "./AwayUpdates";
 import type { AppNotification } from "@/lib/notifications";
 import { QuoteLink } from "@/components/quotes/QuotePanel";
 import { TypedGreeting } from "./TypedGreeting";
-import { formatCurrency, formatDate, relativeDay } from "@/lib/utils";
+import { formatCurrency, relativeDay } from "@/lib/utils";
 import { formatMoney, type DashboardMetrics, type Money } from "@/lib/metrics";
-import type { QuoteStatus } from "@/lib/constants";
 import type { FollowUpWithContext } from "@/lib/types";
 
-/** One row of the "Latest quotes" list. */
-export interface LatestQuote {
-  id: string;
-  title: string;
-  amount: number;
-  currency: string;
-  status: QuoteStatus;
-  quoteDate: string;
-  customerName: string;
-  companyName: string | null;
-  sample: boolean;
-}
+/** How many people the dashboard lists before "See all". */
+const SHOWN = 5;
 
-/** Quote statuses in the overview ring, in a fixed order with fixed colours. */
-const RING: { key: string; label: string; color: string; money: string }[] = [
-  { key: "open", label: "Open", color: "#2A78D6", money: "text-stone-900" },
-  { key: "draft", label: "Not sent", color: "#EDA100", money: "text-stone-900" },
-  { key: "won", label: "Won", color: "#23692A", money: "text-emerald-700" },
-  { key: "lost", label: "Lost", color: "#8A949C", money: "text-stone-500" },
-  { key: "expired", label: "Expired", color: "#C9CED4", money: "text-stone-500" },
+/** The money bar's parts, in a fixed order with fixed colours. */
+const MONEY_PARTS: { key: "open" | "won" | "lost" | "expired"; label: string; color: string }[] = [
+  { key: "open", label: "Waiting", color: "#2A78D6" },
+  { key: "won", label: "Won", color: "#23692A" },
+  { key: "lost", label: "Lost", color: "#8A949C" },
+  { key: "expired", label: "Expired", color: "#C9CED4" },
 ];
 
-/**
- * The dashboard, laid out like the owner's reference: an overview card (quotes
- * by status, and the totals), what to follow up now, and the newest quotes.
- * Every figure appears once. Data is loaded by the page.
- */
 /** An open quote whose customer replied by email. */
 export interface RepliedQuote {
   id: string;
@@ -50,6 +32,11 @@ export interface RepliedQuote {
   snippet?: string;
 }
 
+/**
+ * The dashboard answers one question first: who needs following up today.
+ * Under it, three numbers and one bar of where the money is. Every figure
+ * appears once; the full quote list lives on the Quotes page.
+ */
 export function DashboardView({
   m,
   currency,
@@ -61,8 +48,6 @@ export function DashboardView({
   upcoming,
   hasData,
   hasSampleData = false,
-  customers,
-  latest,
   replied = [],
   updates = [],
   updatesTotal = 0,
@@ -80,9 +65,6 @@ export function DashboardView({
   hasData: boolean;
   /** Made-up demo customers are in the workspace. */
   hasSampleData?: boolean;
-  /** Every customer in the workspace. */
-  customers: number;
-  latest: LatestQuote[];
   /** Open quotes whose customer replied; their reminders are paused. */
   replied?: RepliedQuote[];
   /** Unread updates (newest few) and how many there are in all. */
@@ -117,131 +99,47 @@ export function DashboardView({
     );
   }
 
-  const counts: Record<string, number> = {
-    open: m.openCount,
-    draft: m.draftCount,
-    won: m.wonCount,
-    lost: m.lostCount,
-    expired: m.expiredCount,
-  };
-  const money: Record<string, Money[]> = {
-    open: m.openValue,
-    draft: m.draftValue,
-    won: m.acceptedValue,
-    lost: m.lostValue,
-    expired: m.expiredValue,
-  };
-  // Expired only appears once there is one.
-  const ring = RING.filter((r) => r.key !== "expired" || counts.expired > 0);
-  const total = ring.reduce((n, r) => n + counts[r.key], 0);
+  const all = replied.length + attention.length;
+  const shownReplies = replied.slice(0, SHOWN);
+  const shownDue = attention.slice(0, SHOWN - shownReplies.length);
   const next = upcoming[0];
+  const amountIn = (list: Money[]) => list.find((x) => x.currency === currency)?.amount ?? 0;
+  const parts = MONEY_PARTS.map((p) => ({
+    ...p,
+    amount: amountIn(p.key === "open" ? m.openValue : p.key === "won" ? m.acceptedValue : p.key === "lost" ? m.lostValue : m.expiredValue),
+  }))
+    // Expired only appears once there is some.
+    .filter((p) => p.key !== "expired" || p.amount > 0);
+  const moneyTotal = parts.reduce((n, p) => n + p.amount, 0);
 
   return (
     <div className="flex flex-col gap-4">
       <AwayUpdates items={updates} total={updatesTotal} />
       {hasSampleData && <SampleDataBanner />}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[20px] font-medium text-stone-900">
-          <TypedGreeting text={hello} />
+      {/* Who needs you today: the headline is the count, the list is the people. */}
+      <section aria-labelledby="follow-up-now" className="flex flex-col gap-3">
+        <h1 id="follow-up-now" className="text-[22px] font-medium leading-tight text-stone-900">
+          {all > 0 ? (
+            <>
+              <span className="num">{all}</span> {all === 1 ? "quote needs" : "quotes need"} you today
+            </>
+          ) : (
+            "You’re all caught up"
+          )}
         </h1>
-        <Link href="/leads?new=1" className="btn bg-stone-600 text-white hover:bg-stone-700">
-          <UserPlus className="h-4 w-4" /> Add customer
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        {/* Overview: quotes by status, then the totals */}
-        <section className="card ql-in" aria-labelledby="overview">
-          <div className="card-head flex-wrap gap-y-2">
-            <h2 id="overview" className="card-title">Overview</h2>
-            {currencies.length > 1 && (
-              <nav aria-label="Currency" className="flex flex-wrap gap-1.5">
-                {currencies.map((c) => (
-                  // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
-                  <a
-                    key={c.currency}
-                    href={`/dashboard?currency=${c.currency}`}
-                    aria-current={c.currency === currency ? "true" : undefined}
-                    className={`tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ${
-                      c.currency === currency
-                        ? "bg-stone-900 text-white"
-                        : "border border-line text-stone-700 hover:border-stone-400"
-                    }`}
-                  >
-                    {c.currency}
-                    <span className={`num ${c.currency === currency ? "text-stone-300" : "text-stone-500"}`}>{c.count}</span>
-                  </a>
-                ))}
-              </nav>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-6 p-5 2xl:grid-cols-[auto_minmax(0,1fr)] 2xl:items-center">
-            <div className="flex min-w-0 flex-wrap items-center gap-6 2xl:border-r 2xl:border-[#ECEEF1] 2xl:pr-6">
-              <StatusRing segments={ring.map((r) => ({ ...r, value: counts[r.key] }))} total={total} />
-              <dl className="grid min-w-0 max-w-full grid-cols-[auto_auto_minmax(0,auto)] items-center gap-x-4 gap-y-2.5 text-[14px]">
-                {ring.map((r) => (
-                  <div key={r.key} className="contents">
-                    <dt className="flex items-center gap-2 text-stone-700">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} aria-hidden="true" />
-                      {r.label}
-                    </dt>
-                    <dd className="num text-right text-stone-500">{counts[r.key]}</dd>
-                    <dd className={`num text-right font-medium [overflow-wrap:anywhere] ${r.money}`}>{formatMoney(money[r.key], currency)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <dl className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(9.5rem,100%),1fr))] gap-x-5 gap-y-4 border-t border-[#ECEEF1] pt-5 2xl:border-t-0 2xl:pt-0">
-              <Figure label="Quoted in total" value={formatMoney(m.totalQuoted, currency)} />
-              <div className="min-w-0">
-                <dt className="text-[13px] text-stone-500">Win rate</dt>
-                <dd className="flex items-center gap-2.5">
-                  {m.winRate === null ? (
-                    <span className="text-[14px] text-stone-500">Nothing won or lost yet</span>
-                  ) : (
-                    <>
-                      <span className="num text-[24px] font-medium leading-tight">{m.winRate}%</span>
-                      <span
-                        className="h-1.5 max-w-24 flex-1 overflow-hidden rounded-full bg-stone-200"
-                        role="img"
-                        aria-label={`${m.wonCount} won, ${m.lostCount} lost`}
-                      >
-                        <span className="block h-full bg-emerald-600" style={{ width: `${m.winRate}%` }} />
-                      </span>
-                    </>
-                  )}
-                </dd>
-              </div>
-              <Figure label="Average quote" value={formatMoney(m.avgQuote, currency)} />
-              <Figure label="Customers" value={String(customers)} />
-            </dl>
-          </div>
-
-        </section>
-
-        {/* What to do now */}
-        {/* First on phones and tablets, beside the overview on wide screens. */}
-        <section className="card ql-in order-first flex flex-col xl:order-none" style={{ animationDelay: "60ms" }} aria-labelledby="follow-up-now">
-          <div className="card-head">
-            <h2 id="follow-up-now" className="card-title">Follow up now</h2>
-            {attention.length + replied.length > 0 && (
-              <span className="num rounded-full bg-red-500 px-2.5 text-[13px] font-medium leading-6 text-white">
-                {attention.length + replied.length}
-              </span>
-            )}
-          </div>
-          {replied.length > 0 && (
-            <ul className="flex flex-col divide-y divide-[#ECEEF1] border-b border-[#ECEEF1] px-5" aria-label="Customers who replied">
-              {replied.map((r) => (
-                <li key={r.id} className="flex items-center gap-3 py-3">
+        <div className="card">
+          {shownReplies.length > 0 && (
+            <ul className="flex flex-col divide-y divide-[#ECEEF1]" aria-label="Customers who replied">
+              {shownReplies.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 bg-info-50/60 px-5 py-3.5">
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</div>
                     <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">
                       Replied {relativeDay(r.repliedAt, today)} about {r.title}
                     </div>
                     {r.snippet && (
-                      <div className="mt-0.5 line-clamp-2 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
+                      <div className="mt-0.5 line-clamp-1 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
                     )}
                   </div>
                   <QuoteLink quoteId={r.id} className="btn-secondary shrink-0 px-3" aria-label={`Answer ${r.customerName}'s reply`}>
@@ -251,144 +149,116 @@ export function DashboardView({
               ))}
             </ul>
           )}
-          {attention.length ? (
-            <AttentionList items={attention} today={today} />
-          ) : replied.length ? null : (
-            <p className="px-5 py-5 text-[14px] text-stone-500">You&apos;re all caught up. Nothing is due right now.</p>
+          {shownDue.length > 0 && (
+            <div className={shownReplies.length > 0 ? "border-t border-[#ECEEF1]" : undefined}>
+              <AttentionList items={shownDue} today={today} />
+            </div>
           )}
-          {next && (
-            <p className="mt-auto border-t border-[#ECEEF1] px-5 py-3 text-[13px] text-stone-500">
-              Next: {next.lead?.customer_name ?? "a customer"}, {relativeDay(next.due_date, today)}
+          {all === 0 && (
+            <p className="px-5 py-4 text-[15px] text-stone-600">
+              {next ? (
+                <>
+                  Next: <span className="font-medium text-stone-900">{next.lead?.customer_name ?? "a customer"}</span>,{" "}
+                  {relativeDay(next.due_date, today)}
+                </>
+              ) : (
+                "Nothing is waiting on you."
+              )}
             </p>
           )}
-        </section>
-      </div>
-
-      {/* The newest quotes, in the space a chart would take */}
-      <section className="card ql-in" style={{ animationDelay: "120ms" }} aria-labelledby="latest">
-        <div className="card-head">
-          <h2 id="latest" className="card-title">Latest quotes</h2>
-          <Link href="/quotes?tab=all" className="tap inline-flex items-center text-[14px] font-medium text-info-700 hover:underline">
-            See all quotes
-          </Link>
+          {all > SHOWN && (
+            <Link
+              href="/follow-ups"
+              className="tap flex items-center border-t border-[#ECEEF1] px-5 text-[14px] font-medium text-stone-700 hover:text-stone-900 hover:underline"
+            >
+              See all {all}
+            </Link>
+          )}
         </div>
-        {latest.length ? (
-          <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[14px]">
-              <thead>
-                <tr className="text-left text-[13px] text-stone-500">
-                  <th className="px-5 py-2.5 font-medium">Customer</th>
-                  <th className="px-5 py-2.5 font-medium">Job</th>
-                  <th className="px-5 py-2.5 font-medium">Date</th>
-                  <th className="px-5 py-2.5 font-medium">Status</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {latest.map((q) => (
-                  <tr key={q.id} className="relative cursor-pointer border-t border-[#ECEEF1] transition-colors hover:bg-stone-50">
-                    <td className="px-5 py-3 align-middle">
-                      <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-stone-900 [overflow-wrap:anywhere]">
-                        {/* The whole row opens the quote (the link stretches over it). */}
-                        <QuoteLink
-                          quoteId={q.id}
-                          aria-label={`Open quote: ${q.title}, ${q.customerName}`}
-                          className="tap inline-flex items-center after:absolute after:inset-0 after:content-[''] hover:underline"
-                        >
-                          {q.customerName}
-                        </QuoteLink>
-                        {q.sample && <SampleBadge />}
-                      </div>
-                      {q.companyName && <div className="text-[12px] text-stone-500 [overflow-wrap:anywhere]">{q.companyName}</div>}
-                    </td>
-                    <td className="px-5 py-3 align-middle text-stone-700 [overflow-wrap:anywhere]">{q.title}</td>
-                    <td className="num whitespace-nowrap px-5 py-3 align-middle text-stone-500">{formatDate(q.quoteDate)}</td>
-                    <td className="px-5 py-3 align-middle">
-                      <StatusBadge kind="quote" value={q.status} />
-                    </td>
-                    <td className="num whitespace-nowrap px-5 py-3 text-right align-middle font-medium text-stone-900">
-                      {formatCurrency(q.amount, q.currency)}
-                    </td>
-                  </tr>
+      </section>
+
+      {/* Three numbers. Amounts are in one currency at a time, never added across currencies. */}
+      <section aria-label="Your numbers" className="flex flex-col gap-2">
+        {currencies.length > 1 && (
+          <nav aria-label="Currency" className="flex flex-wrap items-center justify-end gap-1.5">
+            {currencies.map((c) => (
+              // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
+              <a
+                key={c.currency}
+                href={`/dashboard?currency=${c.currency}`}
+                aria-current={c.currency === currency ? "true" : undefined}
+                className={`tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ${
+                  c.currency === currency ? "bg-stone-900 text-white" : "border border-line bg-white text-stone-700 hover:border-stone-400"
+                }`}
+              >
+                {c.currency}
+                <span className={`num ${c.currency === currency ? "text-stone-300" : "text-stone-500"}`}>{c.count}</span>
+              </a>
+            ))}
+          </nav>
+        )}
+        <dl className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <Figure label="Waiting" value={formatMoney(m.openValue, currency)} />
+          <Figure label="Won" value={formatMoney(m.acceptedValue, currency)} />
+          <Figure
+            label="Win rate"
+            value={m.winRate === null ? "–" : `${m.winRate}%`}
+            note={m.winRate === null ? "Nothing won or lost yet" : undefined}
+          />
+        </dl>
+      </section>
+
+      {/* One picture: where the money in sent quotes stands. */}
+      <section className="card px-5 py-4" aria-labelledby="money-title">
+        <h2 id="money-title" className="text-[16px] font-medium text-stone-900">
+          Where your money is
+        </h2>
+        {moneyTotal > 0 ? (
+          <>
+            <div
+              className="mt-3 flex h-7 gap-[3px] overflow-hidden rounded-[6px]"
+              role="img"
+              aria-label={parts.map((p) => `${p.label} ${formatCurrency(p.amount, currency)}`).join(", ")}
+            >
+              {parts
+                .filter((p) => p.amount > 0)
+                .map((p) => (
+                  <span key={p.key} className="block h-full min-w-[6px]" style={{ flexGrow: p.amount, flexBasis: 0, background: p.color }} />
                 ))}
-              </tbody>
-            </table>
-          </div>
+            </div>
+            <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[14px] text-stone-600">
+              {parts.map((p) => (
+                <li key={p.key} className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: p.color }} aria-hidden="true" />
+                  {p.label} <span className="num font-medium text-stone-900">{formatCurrency(p.amount, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          </>
         ) : (
-          <p className="px-5 py-5 text-[14px] text-stone-500">No quotes yet.</p>
+          <>
+            <div className="mt-3 h-7 rounded-[6px] bg-stone-100" aria-hidden="true" />
+            <p className="mt-3 text-[14px] text-stone-500">Fills in once you&apos;ve sent a quote.</p>
+          </>
         )}
       </section>
     </div>
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-[13px] text-stone-500">{label}</dt>
+    <div className="flex min-w-0 items-baseline justify-between gap-3 px-5 py-3.5 sm:block">
+      <dt className="text-[14px] text-stone-500">{label}</dt>
       {/* Long amounts get a smaller size, so a big total stays on one line instead of breaking mid-number. */}
       <dd
-        className={`num font-medium leading-tight text-stone-900 [overflow-wrap:anywhere] ${
+        className={`num text-right font-medium leading-tight text-stone-900 [overflow-wrap:anywhere] sm:mt-1 sm:text-left ${
           value.length > 16 ? "text-[17px]" : value.length > 12 ? "text-[20px]" : "text-[24px]"
         }`}
       >
         {value}
+        {note && <span className="block text-[13px] font-normal text-stone-500">{note}</span>}
       </dd>
     </div>
-  );
-}
-
-/** Quotes by status as a ring, with the total in the middle. */
-function StatusRing({
-  segments,
-  total,
-}: {
-  segments: { key: string; label: string; color: string; value: number }[];
-  total: number;
-}) {
-  const r = 60;
-  const c = 2 * Math.PI * r;
-  const shown = segments.filter((s) => s.value > 0);
-  // A small gap of page colour between segments, when there's more than one.
-  const gap = shown.length > 1 ? 3 : 0;
-  let start = 0;
-  return (
-    <svg
-      viewBox="0 0 160 160"
-      className="h-[132px] w-[132px] shrink-0"
-      role="img"
-      aria-label={`${total} quotes: ${segments.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(", ")}`}
-    >
-      <g transform="rotate(-90 80 80)" fill="none" strokeWidth="16">
-        {total === 0 ? (
-          <circle cx="80" cy="80" r={r} stroke="#E4E7EB" />
-        ) : (
-          shown.map((s) => {
-            const len = (s.value / total) * c;
-            const el = (
-              <circle
-                key={s.key}
-                cx="80"
-                cy="80"
-                r={r}
-                stroke={s.color}
-                strokeDasharray={`${Math.max(len - gap, 0.5)} ${c}`}
-                strokeDashoffset={-start}
-              >
-                <title>{`${s.label}: ${s.value}`}</title>
-              </circle>
-            );
-            start += len;
-            return el;
-          })
-        )}
-      </g>
-      <text x="80" y="80" textAnchor="middle" fontSize="30" fontWeight="500" fill="#1F2328">
-        {total}
-      </text>
-      <text x="80" y="102" textAnchor="middle" fontSize="13" fill="#5F6872">
-        {total === 1 ? "quote" : "quotes"}
-      </text>
-    </svg>
   );
 }

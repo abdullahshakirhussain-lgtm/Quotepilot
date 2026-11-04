@@ -1,32 +1,36 @@
 /**
- * While a page loads: grey shapes where the dashboard's cards will be (the
- * overview, follow up now, and the quote list), so nothing jumps when it arrives.
+ * While a page loads: grey shapes where the dashboard's parts will be (the
+ * headline, the people to follow up, the three numbers and the money bar),
+ * so nothing jumps when it arrives.
  */
 export default function Loading() {
   const bar = "rounded-[6px] bg-stone-100";
   return (
     <div role="status" aria-label="Loading" className="ql-fade flex flex-col gap-4">
-      <div className={`h-6 w-48 ${bar}`} />
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="card flex items-center gap-6 p-5">
-          <div className="h-[132px] w-[132px] shrink-0 rounded-full border-[16px] border-stone-100" />
-          <div className="flex flex-1 flex-col gap-3">
-            <div className={`h-4 w-2/3 ${bar}`} />
-            <div className={`h-4 w-1/2 ${bar}`} />
-            <div className={`h-4 w-3/5 ${bar}`} />
+      <div className={`h-7 w-64 max-w-full ${bar}`} />
+      <div className="card flex flex-col divide-y divide-[#ECEEF1]">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+            <div className="flex flex-1 flex-col gap-2">
+              <div className={`h-4 w-36 ${bar}`} />
+              <div className={`h-3 w-20 ${bar}`} />
+            </div>
+            <div className={`h-4 w-16 ${bar}`} />
+            <div className={`h-9 w-16 ${bar}`} />
           </div>
-        </div>
-        <div className="card flex flex-col gap-3 p-5">
-          <div className={`h-5 w-32 ${bar}`} />
-          <div className={`h-10 w-full ${bar}`} />
-          <div className={`h-10 w-full ${bar}`} />
-        </div>
-      </div>
-      <div className="card flex flex-col gap-3 p-5">
-        <div className={`h-5 w-36 ${bar}`} />
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className={`h-9 w-full ${bar}`} />
         ))}
+      </div>
+      <div className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-2 px-5 py-3.5">
+            <div className={`h-3.5 w-16 ${bar}`} />
+            <div className={`h-6 w-28 ${bar}`} />
+          </div>
+        ))}
+      </div>
+      <div className="card flex flex-col gap-3 px-5 py-4">
+        <div className={`h-4 w-40 ${bar}`} />
+        <div className={`h-7 w-full ${bar}`} />
       </div>
     </div>
   );
