@@ -10,7 +10,8 @@ import type {
  * What a button-style server action reports back, so a failure can be shown
  * next to the button instead of replacing the page with the error screen.
  */
-export type ActionResult = { ok: true } | { ok: false; error: string };
+/** `closed`: the reminder (or item) is no longer open, so a page still showing it as due can drop it at once. */
+export type ActionResult = { ok: true } | { ok: false; error: string; closed?: boolean };
 
 // Row shapes that mirror the Supabase schema (see supabase/schema.sql).
 

@@ -119,6 +119,39 @@ export function parseMailbox(raw: string | null | undefined): { name: string | n
 }
 
 /** Plain text from an HTML-only email: good enough to read a reply. */
+/**
+ * True for an https address on a named public host: never localhost, an
+ * internal name or a bare IP address. Checked before the server fetches a URL
+ * it was handed (an attachment's download link), so it can't be pointed at
+ * anything inside the hosting network.
+ */
+export function isPublicHttpsUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  if (!host.includes(".") || host.startsWith("[") || host.includes(":")) return false;
+  if (/^\d+(\.\d+){3}$/.test(host) || /^0x/i.test(host)) return false;
+  return !/(^|\.)(localhost|local|internal|intranet|lan|home|corp|localdomain)$/.test(host);
+}
+
+/** fetch() that follows at most 3 redirects, each to a public https host (see isPublicHttpsUrl). */
+export async function fetchPublic(value: string, init: RequestInit = {}): Promise<Response> {
+  let url = value;
+  for (let hop = 0; hop < 4; hop++) {
+    if (!isPublicHttpsUrl(url)) throw new Error("refused a non-public address");
+    const res = await fetch(url, { ...init, redirect: "manual" });
+    const next = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+    if (!next) return res;
+    url = new URL(next, url).href;
+  }
+  throw new Error("too many redirects");
+}
+
 export function htmlToText(html: string): string {
   return html
     .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, "")

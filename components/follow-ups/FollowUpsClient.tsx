@@ -79,6 +79,15 @@ export function FollowUpsClient({
   // A message from a row that then moved out of view (e.g. into the closed
   // "Completed & skipped" list when the page refreshed).
   const [notice, setNotice] = useState<string | null>(null);
+  // Reminders the server says are no longer open (done in another tab): hidden
+  // at once, without waiting for the page to refresh. Fresh data from the
+  // server always takes over again.
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => setClosed(new Set()), [followUps]);
+  const onClosed = (id: string, message: string) => {
+    setClosed((prev) => new Set(prev).add(id));
+    setNotice(message);
+  };
 
   // Only one quote's reminders when opened from that quote, if it has any here.
   const forQuote = useMemo(
@@ -98,8 +107,10 @@ export function FollowUpsClient({
     };
     // One row per quote: its due reminder, or else its next one. Opened for a
     // single quote ("View follow-ups"), its whole schedule is listed instead.
-    for (const f of filtered ? shown : onePerQuote(shown, today))
+    for (const f of filtered ? shown : onePerQuote(shown, today)) {
+      if (f.status === "pending" && closed.has(f.id)) continue;
       buckets[classifyFollowUp(f, today)].push(f);
+    }
     // Most recently completed first.
     buckets.done.sort((a, b) =>
       (b.completed_at ?? b.due_date).localeCompare(
@@ -107,7 +118,7 @@ export function FollowUpsClient({
       ),
     );
     return buckets;
-  }, [shown, filtered, today]);
+  }, [shown, filtered, today, closed]);
 
   const needAttention = groups.overdue.length + groups.today.length;
 
@@ -218,6 +229,7 @@ export function FollowUpsClient({
                       emailEnabled={emailEnabled}
                       onWrite={() => setAiFor(f)}
                       onLostMessage={setNotice}
+                      onClosed={onClosed}
                     />
                   ))}
                 </ul>
@@ -299,6 +311,7 @@ function FollowUpRow({
   emailEnabled,
   onWrite,
   onLostMessage,
+  onClosed,
 }: {
   f: Row;
   today: string;
@@ -306,6 +319,8 @@ function FollowUpRow({
   onWrite: () => void;
   /** Takes over this row's message if the row leaves the list while showing one. */
   onLostMessage: (message: string) => void;
+  /** The server says this reminder is no longer open: drop the row, say why at the top. */
+  onClosed?: (id: string, message: string) => void;
 }) {
   const openQuote = useOpenQuote();
   const [pending, start] = useTransition();
@@ -331,7 +346,8 @@ function FollowUpRow({
       showError(null);
       try {
         const result = await fn();
-        if (!result.ok) showError(result.error);
+        if (!result.ok && result.closed && onClosed) onClosed(f.id, result.error);
+        else if (!result.ok) showError(result.error);
       } catch (e) {
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         showError(OFFLINE_OR_SIGNED_OUT);

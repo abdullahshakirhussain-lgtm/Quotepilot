@@ -15,6 +15,8 @@ import {
   parseMailbox,
   replySnippet,
   relayConfig,
+  fetchPublic,
+  isPublicHttpsUrl,
   tokenFromAddress,
   verifyWebhook,
 } from "@/lib/reply-relay";
@@ -272,12 +274,13 @@ export async function POST(request: Request) {
     for (const a of found.data ?? []) {
       const filename = (a.filename ?? "attachment").replace(/[\r\n"]/g, "").slice(0, 200) || "attachment";
       const size = Number(a.size ?? 0);
-      if (!a.download_url || total + size > MAX_FORWARD_ATTACHMENT_BYTES) {
+      // Only a public https link is fetched (never an address inside the network).
+      if (!a.download_url || !isPublicHttpsUrl(a.download_url) || total + size > MAX_FORWARD_ATTACHMENT_BYTES) {
         skipped.push(filename);
         continue;
       }
       try {
-        const res = await fetch(a.download_url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+        const res = await fetchPublic(a.download_url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
         if (!res.ok) throw new Error(`status ${res.status}`);
         const bytes = Buffer.from(await res.arrayBuffer());
         if (total + bytes.length > MAX_FORWARD_ATTACHMENT_BYTES) {

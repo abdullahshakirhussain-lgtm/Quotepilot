@@ -124,6 +124,11 @@ export async function GET(request: Request) {
 
 // POST /api/generate-message -> generate a follow-up message and store it
 export async function POST(request: Request) {
+  // JSON only, like the other routes that change something: a plain form
+  // posted from another site can't send this content type.
+  if (!request.headers.get("content-type")?.startsWith("application/json")) {
+    return NextResponse.json({ error: "Send JSON." }, { status: 415 });
+  }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Read-only accounts (trial or subscription over) can't draft. Earlier

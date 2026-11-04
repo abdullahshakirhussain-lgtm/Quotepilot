@@ -50,7 +50,7 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
     // left open): say so, don't reset completed_at, and refresh the stale page.
     if (fu.status === status) {
       revalidateViews();
-      return { ok: false, error: alreadyMessage(fu.status) };
+      return { ok: false, error: alreadyMessage(fu.status), closed: status !== "pending" };
     }
 
     // A won, lost or expired quote has no open reminders; reopening one would
@@ -70,7 +70,7 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
     const allowedFrom: ReminderStatus[] = status === "pending" ? ["completed", "skipped"] : ["pending"];
     if (!allowedFrom.includes(fu.status as ReminderStatus)) {
       revalidateViews();
-      return { ok: false, error: alreadyMessage(fu.status) };
+      return { ok: false, error: alreadyMessage(fu.status), closed: status !== "pending" && fu.status !== "pending" };
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -95,7 +95,11 @@ async function setFollowUpStatus(id: string, status: ReminderStatus): Promise<Ac
         .maybeSingle();
       revalidateViews();
       if (now?.status === status) return { ok: true };
-      return { ok: false, error: now ? alreadyMessage(now.status) : "This reminder no longer exists. Its quote may have been deleted." };
+      return {
+        ok: false,
+        error: now ? alreadyMessage(now.status) : "This reminder no longer exists. Its quote may have been deleted.",
+        closed: status !== "pending" && now?.status !== "pending",
+      };
     }
 
     // Following up today also covers the quote's other reminders already due.
