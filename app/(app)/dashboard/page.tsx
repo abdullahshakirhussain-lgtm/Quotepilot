@@ -1,4 +1,5 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { recordVisit } from "@/lib/visits-server";
 import { DashboardView, type RepliedQuote } from "@/components/dashboard/DashboardView";
 import { currentHour, todayISO } from "@/lib/utils";
 import { computeDashboardMetrics, currencyCounts, inCurrency } from "@/lib/metrics";
@@ -19,6 +20,8 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
   // test harnesses can call the page without props.
   const asked = ((await props?.searchParams)?.currency ?? "").toUpperCase();
   const user = await requireUser();
+  // This visit, for QuoteLoop's own analytics: runs alongside the queries below.
+  const visit = recordVisit("/dashboard");
   const supabase = await createClient();
   // The viewer's own local day (browser zone → APP_TIMEZONE fallback → UTC).
   const timeZone = await getRequestTimeZone();
@@ -102,6 +105,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
     currency: shown,
   });
 
+  await visit;
   return (
     <DashboardView
       m={m}

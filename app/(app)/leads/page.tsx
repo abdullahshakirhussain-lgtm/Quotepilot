@@ -1,4 +1,5 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { recordVisit } from "@/lib/visits-server";
 import { LeadsClient } from "@/components/leads/LeadsClient";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { Lead } from "@/lib/types";
@@ -10,6 +11,8 @@ export default async function LeadsPage(props: { searchParams?: Promise<{ new?: 
   // (Test harnesses call the page with no props at all.)
   const startNew = (await props?.searchParams)?.new;
   const user = await requireUser();
+  // This visit, for QuoteLoop's own analytics: runs alongside the queries below.
+  const visit = recordVisit("/leads");
   const supabase = await createClient();
   // Every customer, not just the API's first page. A failed query throws, so
   // it shows the error screen rather than the "No customers yet" state.
@@ -23,5 +26,6 @@ export default async function LeadsPage(props: { searchParams?: Promise<{ new?: 
       .range(from, to)
   );
 
+  await visit;
   return <LeadsClient leads={leads} startNew={startNew === "1"} />;
 }

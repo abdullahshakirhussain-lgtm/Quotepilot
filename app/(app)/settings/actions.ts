@@ -286,6 +286,17 @@ export async function clearAllData(): Promise<ActionState> {
     }
   }
 
+  // Which pages you opened (kept for the product's own analytics). Missing table is fine.
+  {
+    const { error } = await supabase.rpc("clear_my_page_views");
+    if (error && !/does not exist|PGRST202|PGRST205|42P01|42883/.test(`${error.code} ${error.message}`)) {
+      console.error("[settings] clearing app_events failed:", error.message);
+      return {
+        error: "QuoteLoop couldn't finish deleting your data (it stopped at your page-visit history). Anything already deleted stays deleted. Please try again.",
+      };
+    }
+  }
+
   return {
     ok: true,
     message:

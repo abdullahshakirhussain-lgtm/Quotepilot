@@ -1,4 +1,5 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { recordVisit } from "@/lib/visits-server";
 import { FollowUpsClient } from "@/components/follow-ups/FollowUpsClient";
 import { requestToday } from "@/lib/request-time";
 import { emailConfig } from "@/lib/email";
@@ -20,6 +21,8 @@ export default async function FollowUpsPage({
   searchParams: Promise<{ quote?: string | string[] }>;
 }) {
   const user = await requireUser();
+  // This visit, for QuoteLoop's own analytics: runs alongside the queries below.
+  const visit = recordVisit("/follow-ups");
   // "View follow-ups" on a quote opens this page showing just that quote.
   const quoteParam = (await searchParams).quote;
   const quoteId = (Array.isArray(quoteParam) ? quoteParam[0] : quoteParam) ?? null;
@@ -84,6 +87,7 @@ export default async function FollowUpsPage({
 
   // "Today" comes from the server (same value the dashboard uses), so the two
   // pages always agree and SSR matches the browser.
+  await visit;
   return (
     <FollowUpsClient
       followUps={followUps}

@@ -1,4 +1,5 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { recordVisit } from "@/lib/visits-server";
 import { QuotesClient } from "@/components/quotes/QuotesClient";
 import { requestToday } from "@/lib/request-time";
 import { emailConfig } from "@/lib/email";
@@ -18,6 +19,8 @@ export default async function QuotesPage({
 }) {
   const { lead: preselectLeadId, new: openNew } = await searchParams;
   const user = await requireUser();
+  // This visit, for QuoteLoop's own analytics: runs alongside the queries below.
+  const visit = recordVisit("/quotes");
   const supabase = await createClient();
 
   // Every quote and customer, not just the API's first page.
@@ -95,6 +98,7 @@ export default async function QuotesPage({
     quotes.filter((q) => q.customer_replied_at).map((q) => q.id)
   );
 
+  await visit;
   return (
     <QuotesClient
       quotes={quotes}

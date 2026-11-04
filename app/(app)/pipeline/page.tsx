@@ -1,4 +1,5 @@
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { recordVisit } from "@/lib/visits-server";
 import {
   PipelineClient,
   type PipelineLead,
@@ -24,6 +25,8 @@ type LeadWithQuotes = {
 
 export default async function PipelinePage() {
   const user = await requireUser();
+  // This visit, for QuoteLoop's own analytics: runs alongside the queries below.
+  const visit = recordVisit("/pipeline");
   const supabase = await createClient();
 
   // Every customer, not just the API's first page.
@@ -86,5 +89,6 @@ export default async function PipelinePage() {
     );
   }
 
+  await visit;
   return <PipelineClient leads={rows} currency={currency} />;
 }

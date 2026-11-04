@@ -17,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effectiveDate="November 3, 2026"
+      effectiveDate="November 4, 2026"
       intro={
         <>
           <p>
@@ -61,6 +61,12 @@ export default function PrivacyPage() {
             <>
               <strong className="font-medium text-stone-800">Customer and quote data</strong> you
               enter, plus AI drafts and emails you send from QuoteLoop. See the sections below.
+            </>,
+            <>
+              <strong className="font-medium text-stone-800">Pages you open in QuoteLoop:</strong>{" "}
+              which page of the app you open (for example Quotes or Follow-ups), when, and whether
+              on a phone, tablet or computer. Only the page’s name is recorded, never what is on it,
+              and no cookie is used for this.
             </>,
             <>
               <strong className="font-medium text-stone-800">Basic technical logs:</strong> our
@@ -194,7 +200,10 @@ export default function PrivacyPage() {
             "one cookie that stores your browser’s time zone, so due dates and reminders show the right day",
           ]}
         />
-        <p>We do not use advertising, tracking or analytics cookies.</p>
+        <p>
+          We do not use advertising, tracking or analytics cookies. The page visits described above
+          are recorded without cookies.
+        </p>
       </LegalSection>
 
       <LegalSection title="Service providers and international processing">
@@ -225,13 +234,15 @@ export default function PrivacyPage() {
             "to send a quote or follow-up email when you click to send it",
             "to send account emails, such as sign-up confirmations and password reset links",
             "to keep QuoteLoop secure, prevent abuse (for example, with sending limits) and fix problems",
+            "to understand how QuoteLoop is used and improve it: from the page visits above and from counts and dates in your account (for example, how many quotes you have and when you last used QuoteLoop), never from the content of your quotes, customers or messages",
             "to answer your questions and requests",
             "to comply with the law",
           ]}
         />
         <p>
-          We do not sell your data, and we do not use your data or your customers’ data for
-          advertising.
+          QuoteLoop’s operator can see, for each account, its email address, sign-up date, plan,
+          those counts and dates, and its page visits. We do not sell your data, and we do not use
+          your data or your customers’ data for advertising.
         </p>
       </LegalSection>
 
@@ -254,7 +265,8 @@ export default function PrivacyPage() {
         <LegalList
           items={[
             "You can delete individual records, such as customers and quotes, at any time.",
-            "In Settings, you can clear all your customers, quotes, follow-ups, messages, customer replies and updates at once. Your business profile and message templates stay until your account is deleted.",
+            "In Settings, you can clear all your customers, quotes, follow-ups, messages, customer replies, updates and page visits at once. Your business profile and message templates stay until your account is deleted.",
+            "Page visits are kept for 13 months, then deleted.",
             "Records of emails you sent from QuoteLoop are kept when you delete a quote or customer, or clear your data, so your sending history and sending limits stay accurate. They are deleted when your account is deleted.",
             "In Settings, you can export your quotes, follow-ups and customers as CSV files.",
             <>
