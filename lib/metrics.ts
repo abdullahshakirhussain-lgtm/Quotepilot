@@ -101,10 +101,32 @@ export function combineMoney(lists: Money[][], mainCurrency: string): Money[] {
   return sumByCurrency(lists.flat(), mainCurrency);
 }
 
-/** "$1,200.00", or "$1,200.00 + €300.00" when the quotes use several currencies. */
+/** "$1,200.00", or "$1,200.00 and €300.00" (", " between more) when the quotes use several currencies. */
 export function formatMoney(list: Money[], fallbackCurrency: string): string {
   if (!list.length) return formatCurrency(0, fallbackCurrency);
-  return list.map((m) => formatCurrency(m.amount, m.currency)).join(" + ");
+  const parts = list.map((m) => formatCurrency(m.amount, m.currency));
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * The currencies a workspace's quotes use, with how many quotes each: the
+ * business's own currency first, then the rest by number of quotes.
+ */
+export function currencyCounts(quotes: AmountRow[], mainCurrency: string): { currency: string; count: number }[] {
+  const main = mainCurrency.toUpperCase();
+  const counts = new Map<string, number>();
+  for (const q of quotes) {
+    const c = currencyOf(q, main);
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  return Array.from(counts, ([currency, count]) => ({ currency, count })).sort((a, b) =>
+    a.currency === main ? -1 : b.currency === main ? 1 : b.count - a.count || a.currency.localeCompare(b.currency)
+  );
+}
+
+/** Only this currency's quotes (a quote with none counts as the business's). */
+export function inCurrency<T extends AmountRow>(quotes: T[], currency: string, mainCurrency: string): T[] {
+  return quotes.filter((q) => currencyOf(q, mainCurrency) === currency.toUpperCase());
 }
 
 export function computeDashboardMetrics(input: {

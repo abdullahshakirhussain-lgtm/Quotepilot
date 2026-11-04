@@ -334,7 +334,8 @@ export interface SendQuoteDeps extends TrackQuoteDeps {
       error_message?: string;
     }
   ): Promise<void>;
-  send(email: OutgoingEmail): Promise<SendResult>;
+  /** `meta` lets the caller give the email a reply address for this quote. */
+  send(email: OutgoingEmail, meta: { quoteId: string; businessName: string }): Promise<SendResult>;
   now(): Date;
 }
 
@@ -535,7 +536,7 @@ export async function sendQuoteCore(
     subject,
     text,
     replyTo,
-  });
+  }, { quoteId, businessName });
 
   if (!result.ok) {
     if (result.uncertain) {

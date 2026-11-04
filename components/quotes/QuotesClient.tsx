@@ -24,6 +24,7 @@ import { QuoteFormModal } from "./QuoteFormModal";
 import { NewQuoteModal, type QuoteCustomer } from "./NewQuoteModal";
 import { SendDraftQuoteModal } from "./SendDraftQuoteModal";
 import type { ResolvedTemplate } from "@/lib/templates";
+import { useOpenQuote } from "./QuotePanel";
 import type { QuoteBusiness } from "./NewQuoteModal";
 import { AddCustomerEmailModal } from "./AddCustomerEmailModal";
 import { HowItWorks } from "./HowItWorks";
@@ -31,12 +32,20 @@ import { AIMessageModal } from "@/components/ai/AIMessageModal";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import type { QuoteStatus } from "@/lib/constants";
 import type { ActionResult, Quote, QuoteWithLead } from "@/lib/types";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, relativeDay } from "@/lib/utils";
 import { followUpUrgency } from "@/lib/follow-up-state";
 import { formatMoney, sumByCurrency } from "@/lib/metrics";
 import { isSampleAddress, isValidEmail } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
-import { deleteQuote, markQuoteSent, setQuoteStatus, undoQuoteClose, type QuoteCloseUndo } from "@/app/(app)/quotes/actions";
+import {
+  answerCustomerReply,
+  deleteQuote,
+  markQuoteSent,
+  setQuoteStatus,
+  undoQuoteClose,
+  type QuoteCloseUndo,
+  type ReplyAnswer,
+} from "@/app/(app)/quotes/actions";
 
 const OPEN: QuoteStatus[] = ["sent", "follow_up_due", "negotiating"];
 
@@ -116,6 +125,7 @@ export function QuotesClient({
   today: string;
 }) {
   const router = useRouter();
+  const openQuote = useOpenQuote();
   const hasOpen = quotes.some((q) => OPEN.includes(q.status));
   const defaultTab: Tab = hasOpen ? "open" : "all";
   // The tab lives in the address (?tab=won), so refreshing or sharing keeps it.
@@ -148,6 +158,20 @@ export function QuotesClient({
     setAiFor(quote);
   }, [quotes, writeWhenListed]);
   const [sendDraft, setSendDraft] = useState<QuoteWithLead | null>(null);
+  // From the quote panel: ?edit=<id> opens the edit form, ?send=<id> the quote email.
+  const editParam = useSearchParams().get("edit");
+  const sendParam = useSearchParams().get("send");
+  useEffect(() => {
+    if (!editParam && !sendParam) return;
+    const toEdit = editParam ? quotes.find((q) => q.id === editParam) : undefined;
+    const toSend = sendParam ? quotes.find((q) => q.id === sendParam && q.status === "draft") : undefined;
+    if (toEdit) setEditing(toEdit);
+    if (toSend) setSendDraft(toSend);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("edit");
+    url.searchParams.delete("send");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [editParam, sendParam, quotes]);
   const [addEmailFor, setAddEmailFor] = useState<QuoteWithLead | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // Shown after Won / Lost: where the quote went, and a way back.
@@ -313,6 +337,7 @@ export function QuotesClient({
                   emailEnabled={emailEnabled}
                   businessEmailOk={isValidEmail(business.email)}
                   earlierEmail={earlierQuoteEmails[quote.id] ?? null}
+                  onOpen={() => openQuote(quote.id)}
                   onEdit={() => setEditing(quote)}
                   onWrite={() => setAiFor(quote)}
                   onSendQuote={() => setSendDraft(quote)}
@@ -446,6 +471,7 @@ function QuoteRow({
   emailEnabled,
   businessEmailOk,
   earlierEmail,
+  onOpen,
   onEdit,
   onWrite,
   onSendQuote,
@@ -462,6 +488,7 @@ function QuoteRow({
   /** Replies need somewhere to go before QuoteLoop can send anything. */
   businessEmailOk: boolean;
   earlierEmail: "sent" | "pending" | null;
+  onOpen: () => void;
   onEdit: () => void;
   onWrite: () => void;
   onSendQuote: () => void;
@@ -516,6 +543,21 @@ function QuoteRow({
       }
     });
 
+  // The customer replied: reminders are paused until the owner says what's next.
+  const replied = isOpen && Boolean(quote.customer_replied_at);
+  const answer = (choice: ReplyAnswer) =>
+    start(async () => {
+      setRowError(null);
+      try {
+        const result = await answerCustomerReply(quote.id, choice);
+        if (!result.ok) return setRowError(result.error);
+        if (choice === "accepted" || choice === "rejected") onClosed(choice === "accepted" ? "won" : "lost", result.undo);
+      } catch (e) {
+        unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+        setRowError(OFFLINE_OR_SIGNED_OUT);
+      }
+    });
+
   // Why a draft can't be emailed, in the user's terms.
   const draftHint = !isDraft
     ? null
@@ -542,7 +584,12 @@ function QuoteRow({
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <h3 className="text-[16px] font-medium leading-snug text-stone-900 [overflow-wrap:anywhere]">{quote.title}</h3>
+          <h3 className="text-[16px] font-medium leading-snug text-stone-900 [overflow-wrap:anywhere]">
+            {/* Opens the quote's own page as a panel over the list. */}
+            <button type="button" className="tap inline-flex items-center text-left hover:underline" onClick={onOpen}>
+              {quote.title}
+            </button>
+          </h3>
           <StatusBadge kind="quote" value={quote.status} />
           {sample && <SampleBadge />}
         </div>
@@ -553,7 +600,9 @@ function QuoteRow({
         {/* When the next follow-up is due, as a chip; the status badge says the rest. */}
         {(isOpen || quote.follow_up_count > 0 || quote.sent_method) && (
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-stone-500">
+            {/* A reply says so in its own prompt below. */}
             {isOpen &&
+              !replied &&
               (quote.next_follow_up_at ? (
                 <DueChip dueDate={quote.next_follow_up_at} today={today} />
               ) : (
@@ -566,6 +615,30 @@ function QuoteRow({
             )}
             {quote.sent_method && <span>Sent by {quote.sent_method}</span>}
           </p>
+        )}
+        {replied && (
+          <div className="mt-3 max-w-2xl rounded-[10px] bg-info-50 px-3 py-2.5" data-reply-prompt>
+            <p className="text-[14px] text-info-700">
+              <span className="font-medium">
+                {(quote.lead?.customer_name ?? "The customer").split(" ")[0]} replied {relativeDay(quote.customer_replied_at!, today)}.
+              </span>{" "}
+              Reminders are paused. What&apos;s next?
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button className="btn-secondary bg-white px-3 py-1.5" disabled={pending} onClick={() => answer("negotiating")}>
+                Negotiating
+              </button>
+              <button className="btn-secondary bg-white px-3 py-1.5" disabled={pending} onClick={() => answer("accepted")}>
+                Won
+              </button>
+              <button className="btn-secondary bg-white px-3 py-1.5" disabled={pending} onClick={() => answer("rejected")}>
+                Lost
+              </button>
+              <button className="btn-ghost px-3 py-1.5" disabled={pending} onClick={() => answer("resume")}>
+                Resume reminders
+              </button>
+            </div>
+          </div>
         )}
         {draftHint && <p className="mt-1 max-w-2xl text-[15px] text-stone-600">{draftHint}</p>}
         {rowError && (

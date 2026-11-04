@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { emailConfig, sendViaResend, MAX_BODY_LENGTH } from "@/lib/email";
 import { countRecentEmails, emailLogWriter, sentRecently } from "@/lib/email-quota";
@@ -9,6 +8,7 @@ import { recomputeQuoteFollowUpState, skipRemindersCoveredBy } from "@/lib/quote
 import { requestToday } from "@/lib/request-time";
 import { clip } from "@/lib/utils";
 import { readOnlyReason } from "@/lib/billing-server";
+import { replyToFor } from "@/lib/reply-relay-server";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -124,7 +124,12 @@ export async function sendFollowUpEmail(input: {
           const state = await recomputeQuoteFollowUpState(supabase, uid, quoteId);
           return { next_follow_up_at: state.next_follow_up_at };
         },
-        send: (email) => sendViaResend(config!, email),
+        // Replies come back through QuoteLoop when the relay is on (lib/reply-relay.ts).
+        send: async (email, meta) =>
+          sendViaResend(config!, {
+            ...email,
+            replyTo: (await replyToFor(supabase, uid, meta.quoteId, meta.businessName)) ?? email.replyTo,
+          }),
         now: () => new Date(),
       },
       {
@@ -140,9 +145,9 @@ export async function sendFollowUpEmail(input: {
       }
     );
 
-    if (outcome.ok) {
-      for (const path of ["/quotes", "/follow-ups", "/dashboard"]) revalidatePath(path);
-    }
+    // No revalidatePath: on the dashboard a server action's page refresh can stall
+    // (Next 15.5), leaving the writer's button pending forever. The writer reloads
+    // the page when it closes after a change instead.
     return outcome;
   } catch (e) {
     // Only steps BEFORE the send can throw here (the send itself never throws

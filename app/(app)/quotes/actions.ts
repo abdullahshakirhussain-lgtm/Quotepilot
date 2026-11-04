@@ -538,7 +538,9 @@ export async function logFollowUpSent(
     // This follow-up also covers any other reminder for the quote that was due.
     await skipRemindersCoveredBy(supabase, user.id, quote.id, pending[0].id, await requestToday());
     const state = await recomputeQuoteFollowUpState(supabase, user.id, quote.id);
-    revalidateQuoteViews();
+    // No revalidatePath: on the dashboard a server action's page refresh can stall
+    // (Next 15.5), leaving the writer's button pending forever. The writer reloads
+    // the page when it closes after a change instead.
     return {
       logged: true,
       followUpNumber: pending[0].follow_up_number,
@@ -546,11 +548,72 @@ export async function logFollowUpSent(
     };
   } catch (e) {
     console.error("[quotes] logging a follow-up failed:", errorMessage(e));
-    revalidateQuoteViews();
     return {
       logged: false,
       failed: true,
       message: "The follow-up couldn't be logged just now. Check the quote's follow-ups, then try again.",
     };
   }
+}
+
+export type ReplyAnswer = "negotiating" | "accepted" | "rejected" | "resume";
+
+/**
+ * The owner's answer after a customer replied (their reminders were paused):
+ * negotiating, won or lost go through the usual status change; "resume"
+ * puts the paused reminders back. Either way the "replied" prompt is cleared.
+ */
+export async function answerCustomerReply(id: string, answer: ReplyAnswer): Promise<QuoteStatusResult> {
+  if (!["negotiating", "accepted", "rejected", "resume"].includes(answer)) {
+    return { ok: false, error: "That isn't an answer QuoteLoop knows." };
+  }
+  let result: QuoteStatusResult = { ok: true };
+  if (answer !== "resume") {
+    result = await setQuoteStatus(id, answer);
+    if (!result.ok) return result;
+  }
+
+  const user = await requireUser();
+  const readOnly = await readOnlyReason(user.id);
+  if (readOnly) return { ok: false, error: readOnly };
+  const supabase = await createClient();
+  try {
+    const { data: quote, error } = await supabase
+      .from("quotes")
+      .select("id, status")
+      .eq("id", String(id ?? ""))
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!quote) return { ok: false, error: QUOTE_GONE };
+
+    if (answer === "resume") {
+      if (!OPEN_STATUSES.includes(quote.status)) {
+        return { ok: false, error: "This quote is closed, so it has no reminders to resume." };
+      }
+      const { error: resumeError } = await supabase
+        .from("follow_ups")
+        .update({ status: "pending", paused_by_reply: false })
+        .eq("quote_id", quote.id)
+        .eq("user_id", user.id)
+        .eq("status", "skipped")
+        .eq("paused_by_reply", true);
+      if (resumeError) throw new Error(resumeError.message);
+      await recomputeQuoteFollowUpState(supabase, user.id, quote.id);
+    }
+
+    const { error: clearError } = await supabase
+      .from("quotes")
+      .update({ customer_replied_at: null })
+      .eq("id", quote.id)
+      .eq("user_id", user.id);
+    if (clearError) throw new Error(clearError.message);
+  } catch (e) {
+    console.error("[quotes] answering a customer reply failed:", errorMessage(e));
+    revalidateQuoteViews();
+    return { ok: false, error: TRY_AGAIN };
+  }
+
+  revalidateQuoteViews();
+  return result;
 }

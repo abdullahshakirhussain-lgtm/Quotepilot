@@ -134,9 +134,13 @@ export function suggestMessageType(
 ): MessageType {
   if (quote.status === "accepted") return "thank_you_after_acceptance";
   if (quote.status === "rejected") return "lost_lead_recovery";
-  if (quote.status === "expired") return "quote_expiring";
-  if (quote.valid_until && daysBetween(today, quote.valid_until.slice(0, 10)) <= 3) {
-    return "quote_expiring";
+  // Its price has lapsed: re-open the conversation rather than say it's still valid.
+  if (quote.status === "expired") return "lost_lead_recovery";
+  if (quote.valid_until) {
+    const daysLeft = daysBetween(today, quote.valid_until.slice(0, 10));
+    // Only a date still ahead (today to 3 days) is "expiring"; a past one isn't.
+    if (daysLeft >= 0 && daysLeft <= 3) return "quote_expiring";
+    if (daysLeft < 0) return "lost_lead_recovery";
   }
   if (quote.follow_up_count <= 0) return "first_follow_up";
   if (quote.follow_up_count <= 2) return "second_follow_up";

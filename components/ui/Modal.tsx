@@ -40,7 +40,8 @@ export function Modal({
   title: React.ReactNode;
   description?: React.ReactNode;
   children: React.ReactNode;
-  size?: "md" | "lg";
+  /** "panel": a full-height sheet sliding in from the right (the quote page). */
+  size?: "md" | "lg" | "panel";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -109,11 +110,17 @@ export function Modal({
 
   if (!shown) return null;
 
+  const panel = size === "panel";
+
   // Rendered into <body>, so a dialog opened from inside another (or from a
   // row with its own animation) is never clipped or positioned by its parent.
   return createPortal(
     <div
-      className="ql-fade fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-stone-950/50 sm:items-start sm:p-8"
+      className={
+        panel
+          ? "ql-fade fixed inset-0 z-50 flex justify-end bg-stone-950/40"
+          : "ql-fade fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-stone-950/50 sm:items-start sm:p-8"
+      }
       onMouseDown={(e) => {
         // Only a press on the dimmed backdrop itself closes the dialog — not
         // one on this layer's scrollbar, which a tall dialog scrolls with.
@@ -129,12 +136,20 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`ql-rise max-h-[92dvh] w-full overflow-y-auto rounded-t-[16px] bg-white shadow-[0_18px_48px_rgba(21,24,28,0.25)] outline-none sm:my-6 sm:max-h-none sm:overflow-hidden sm:rounded-[16px] ${
-          size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg"
-        }`}
+        className={
+          panel
+            ? "ql-slide flex h-full w-full max-w-[36rem] flex-col overflow-y-auto overscroll-contain bg-canvas shadow-[-12px_0_40px_rgba(21,24,28,0.18)] outline-none"
+            : `ql-rise max-h-[92dvh] w-full overflow-y-auto rounded-t-[16px] bg-white shadow-[0_18px_48px_rgba(21,24,28,0.25)] outline-none sm:my-6 sm:max-h-none sm:overflow-hidden sm:rounded-[16px] ${
+                size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg"
+              }`
+        }
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[#ECEEF1] px-5 py-4">
+        <div
+          className={`flex items-start justify-between gap-4 border-b border-[#ECEEF1] px-5 py-4 ${
+            panel ? "sticky top-0 z-10 bg-white" : ""
+          }`}
+        >
           <div className="min-w-0">
             <h2 id={titleId} className="text-[20px] font-semibold leading-tight text-stone-900">{title}</h2>
             {description && (
@@ -150,7 +165,7 @@ export function Modal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="px-5 py-5">{children}</div>
+        <div className={panel ? "flex flex-col gap-4 p-4 sm:p-5" : "px-5 py-5"}>{children}</div>
       </div>
     </div>,
     document.body

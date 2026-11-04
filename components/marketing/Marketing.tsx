@@ -256,7 +256,7 @@ export function ProductTour() {
 export function CustomerEmailPreview() {
   const facts = [
     <>It arrives from &quot;Your Business via QuoteLoop&quot;, sent from QuoteLoop&apos;s verified mail domain.</>,
-    <>When they reply, it goes straight to your own inbox.</>,
+    <>When they reply, the reply lands in your own inbox and that quote&apos;s reminders pause, so nobody is chased mid-conversation.</>,
     <>
       One message to one customer, only when you click Send. Up to {LIMITS.emailsPerMonth} a month, or copy the message
       to WhatsApp, text or your own email as often as you like.
@@ -289,7 +289,7 @@ export function CustomerEmailPreview() {
             </div>
             <div className="flex gap-3 px-4 py-2">
               <dt className="w-20 shrink-0 text-stone-600">Reply to</dt>
-              <dd className="min-w-0 text-stone-800 [overflow-wrap:anywhere]">hello@northsidehome.com</dd>
+              <dd className="min-w-0 text-stone-800 [overflow-wrap:anywhere]">Northside Home Services</dd>
             </div>
             <div className="flex gap-3 px-4 py-2">
               <dt className="w-20 shrink-0 text-stone-600">Subject</dt>

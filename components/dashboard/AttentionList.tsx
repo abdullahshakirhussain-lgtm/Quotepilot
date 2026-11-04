@@ -7,6 +7,7 @@ import type { FollowUpWithContext } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { DueChip } from "@/components/ui/DueChip";
 import { isSampleAddress } from "@/lib/email-address";
+import { useOpenQuote } from "@/components/quotes/QuotePanel";
 
 /**
  * The quotes to follow up now, each with a one-click "Write". Rows ease in
@@ -22,6 +23,7 @@ export function AttentionList({
   today: string;
 }) {
   const [aiFor, setAiFor] = useState<FollowUpWithContext | null>(null);
+  const openQuote = useOpenQuote();
 
   return (
     <>
@@ -30,7 +32,13 @@ export function AttentionList({
           <li key={f.id} className="ql-in flex items-center gap-3 py-3" style={{ animationDelay: `${80 + i * 40}ms` }}>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-stone-900 [overflow-wrap:anywhere]">
-                {f.lead?.customer_name ?? "Customer"}
+                {f.quote ? (
+                  <button type="button" className="tap inline-flex items-center text-left hover:underline" onClick={() => openQuote(f.quote!.id)}>
+                    {f.lead?.customer_name ?? "Customer"}
+                  </button>
+                ) : (
+                  (f.lead?.customer_name ?? "Customer")
+                )}
                 {isSampleAddress(f.lead?.email) && <SampleBadge />}
               </div>
               <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">

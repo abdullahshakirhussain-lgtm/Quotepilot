@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -6,6 +7,7 @@ import { getAccess } from "@/lib/billing-server";
 import { BillingBanner } from "@/components/billing/BillingBanner";
 import { AccessFlag } from "@/components/billing/AccessContext";
 import { Sidebar, TabBar, TopBar } from "@/components/Sidebar";
+import { QuotePanelHost } from "@/components/quotes/QuotePanel";
 import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,7 @@ export default async function AppLayout({
   const user = await requireUser();
 
   const supabase = await createClient();
+  const today = await requestToday();
   const [{ data: business, error }, attention, access, timeZone] = await Promise.all([
     supabase
       .from("businesses")
@@ -26,17 +29,15 @@ export default async function AppLayout({
       .maybeSingle<Business>(),
     // Quotes with a reminder due today or overdue — the sidebar badge. Counted
     // per quote, like the dashboard: several missed reminders are one job.
-    requestToday().then((today) =>
-      fetchAllRows<{ quote_id: string }>((from, to) =>
-        supabase
-          .from("follow_ups")
-          .select("quote_id")
-          .eq("user_id", user.id)
-          .eq("status", "pending")
-          .lte("due_date", today)
-          .order("id")
-          .range(from, to)
-      )
+    fetchAllRows<{ quote_id: string }>((from, to) =>
+      supabase
+        .from("follow_ups")
+        .select("quote_id")
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .lte("due_date", today)
+        .order("id")
+        .range(from, to)
     ),
     getAccess(user.id),
     getRequestTimeZone(),
@@ -78,6 +79,10 @@ export default async function AppLayout({
         </main>
       </div>
       <TabBar attentionCount={attentionCount} />
+      {/* Any quote opens over the page you're on (?view=<quote id>). */}
+      <Suspense fallback={null}>
+        <QuotePanelHost today={today} />
+      </Suspense>
     </div>
   );
 }

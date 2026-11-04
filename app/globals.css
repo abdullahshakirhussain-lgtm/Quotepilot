@@ -162,6 +162,10 @@ body {
   from { transform: translateY(24px); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
+@keyframes ql-slide {
+  from { transform: translateX(32px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
 @keyframes ql-swipe {
   from { clip-path: inset(0 100% 0 0); }
   to { clip-path: inset(0 0 0 0); }
@@ -173,6 +177,9 @@ body {
 .ql-fade { animation: ql-fade 160ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
 .ql-pop { animation: ql-pop 140ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .ql-rise { animation: ql-rise 180ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+/* The quote panel slides in from the right ("backwards": no transform is left
+   to trap the menus inside it). */
+.ql-slide { animation: ql-slide 220ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
 @media (max-width: 639px) {
   .ql-rise { animation: ql-sheet 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 }

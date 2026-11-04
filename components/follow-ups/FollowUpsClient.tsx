@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Menu, MenuDivider, MenuItem, MenuLabel } from "@/components/ui/Menu";
 import { AIMessageModal } from "@/components/ai/AIMessageModal";
+import { useOpenQuote } from "@/components/quotes/QuotePanel";
 import type { ActionResult, FollowUpWithContext } from "@/lib/types";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
@@ -279,6 +280,7 @@ function FollowUpRow({
   /** Takes over this row's message if the row leaves the list while showing one. */
   onLostMessage: (message: string) => void;
 }) {
+  const openQuote = useOpenQuote();
   const [pending, start] = useTransition();
   const [rowError, setRowError] = useState<string | null>(null);
   const shownError = useRef<string | null>(null);
@@ -338,7 +340,13 @@ function FollowUpRow({
         </div>
         <p className="mt-0.5 flex flex-wrap items-baseline gap-x-3 text-[14px] text-stone-600">
           <span className="min-w-0 [overflow-wrap:anywhere]">
-            {f.quote?.title ?? "Quote"}
+            {f.quote ? (
+              <button type="button" className="tap inline-flex items-center text-left hover:underline" onClick={() => openQuote(f.quote!.id)}>
+                {f.quote.title}
+              </button>
+            ) : (
+              "Quote"
+            )}
           </span>
           {f.quote && (
             <span className="num whitespace-nowrap font-semibold text-stone-900">
@@ -377,7 +385,7 @@ function FollowUpRow({
           <DueChip dueDate={f.due_date} today={today} />
         ) : (
           <span className="text-[13px] text-stone-500">
-            {f.completed_at ? `Followed up ${formatDate(f.completed_at)}` : "Skipped"}
+            {f.completed_at ? `Followed up ${formatDate(f.completed_at)}` : f.paused_by_reply ? "Paused, customer replied" : "Skipped"}
           </span>
         )}
       </div>

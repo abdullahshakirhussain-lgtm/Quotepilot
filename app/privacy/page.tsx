@@ -129,8 +129,15 @@ export default function PrivacyPage() {
         <p>
           Emails are delivered by Resend to the email address saved for that customer. Each email
           shows your business name and a short note that the person is receiving it because they
-          asked your business for a quote. Replies go to the business email set in QuoteLoop, and
+          asked your business for a quote. Replies reach the business email set in QuoteLoop, and
           QuoteLoop won’t send an email until a business email is set.
+        </p>
+        <p>
+          A reply passes through QuoteLoop on its way: each email carries a reply address that
+          belongs to its quote. When the customer replies, Resend receives the reply for us, and
+          QuoteLoop records who replied, the subject and when, pauses that quote’s reminders, and
+          forwards the whole reply, with any attachments, to the business email. QuoteLoop does not
+          keep the text of the reply. Resend keeps received emails for up to 30 days.
         </p>
         <p>
           If you receive an email sent through QuoteLoop and do not want more emails from that
@@ -148,6 +155,7 @@ export default function PrivacyPage() {
             "the related quote, customer and follow-up",
           ]}
         />
+        <p>For each customer reply, we store the sender’s name and email address, the subject, when it arrived, and whether it was forwarded.</p>
         <p>Current limits: 25 emails per 24 hours and 100 emails per 30 days for each user.</p>
       </LegalSection>
 
@@ -188,7 +196,7 @@ export default function PrivacyPage() {
           items={[
             "Railway: hosting",
             "Supabase: database and login",
-            "Resend: email delivery, including account emails such as sign-up confirmations",
+            "Resend: email delivery and receiving customer replies, including account emails such as sign-up confirmations",
             "DeepSeek: AI text generation",
             "Google: sign-in with Google",
             "Cloudflare: domain and DNS",
@@ -239,7 +247,7 @@ export default function PrivacyPage() {
         <LegalList
           items={[
             "You can delete individual records, such as customers and quotes, at any time.",
-            "In Settings, you can clear all your customers, quotes, follow-ups and messages at once. Your business profile and message templates stay until your account is deleted.",
+            "In Settings, you can clear all your customers, quotes, follow-ups, messages and customer replies at once. Your business profile and message templates stay until your account is deleted.",
             "Records of emails you sent from QuoteLoop are kept when you delete a quote or customer, or clear your data, so your sending history and sending limits stay accurate. They are deleted when your account is deleted.",
             "In Settings, you can export your quotes, follow-ups and customers as CSV files.",
             <>

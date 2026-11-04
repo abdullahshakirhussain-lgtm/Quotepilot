@@ -73,7 +73,8 @@ export interface SendDeps {
   /** Completes a still-pending reminder; false if it was no longer pending. */
   completeFollowUp(followUpId: string, finalText: string, at: string): Promise<boolean>;
   recompute(quoteId: string): Promise<{ next_follow_up_at: string | null }>;
-  send(email: OutgoingEmail): Promise<SendResult>;
+  /** `meta` lets the caller give the email a reply address for this quote. */
+  send(email: OutgoingEmail, meta: { quoteId: string; businessName: string }): Promise<SendResult>;
   now(): Date;
 }
 
@@ -249,7 +250,7 @@ export async function sendFollowUpEmailCore(
     subject,
     text,
     replyTo,
-  });
+  }, { quoteId: quote.id, businessName });
 
   if (!result.ok) {
     if (result.uncertain) {

@@ -49,6 +49,8 @@ export interface Lead {
 }
 
 export interface Quote {
+  /** Set when the customer replied by email and the owner hasn't answered yet. */
+  customer_replied_at?: string | null;
   id: string;
   user_id: string;
   lead_id: string;
@@ -70,6 +72,8 @@ export interface Quote {
 }
 
 export interface FollowUp {
+  /** Skipped because the customer replied (Resume reminders brings it back). */
+  paused_by_reply?: boolean;
   id: string;
   user_id: string;
   quote_id: string;

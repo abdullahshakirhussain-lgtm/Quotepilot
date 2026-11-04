@@ -25,6 +25,7 @@ import {
 } from "@/lib/quote-flows";
 import { clip } from "@/lib/utils";
 import { readOnlyReason } from "@/lib/billing-server";
+import { replyToFor } from "@/lib/reply-relay-server";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -205,7 +206,12 @@ function emailDeps(
     // one-time token the database handed back, which stays on the server.
     insertLog: (row) => logs.insert(row),
     updateLog: (id, patch) => logs.update(id, patch),
-    send: (email) => sendViaResend(config!, email),
+    // Replies come back through QuoteLoop when the relay is on (lib/reply-relay.ts).
+    send: async (email, meta) =>
+      sendViaResend(config!, {
+        ...email,
+        replyTo: (await replyToFor(supabase, uid, meta.quoteId, meta.businessName)) ?? email.replyTo,
+      }),
     now: () => new Date(),
   };
 }
@@ -416,6 +422,7 @@ export async function addCustomerEmail(
     return { ok: false, error: "The email address couldn't be saved just now. Please try again." };
   }
 
-  revalidateViews();
+  // No revalidatePath: this runs inside the follow-up writer, where a page
+  // refresh can stall on the dashboard (Next 15.5). Callers refresh or reload.
   return { ok: true };
 }

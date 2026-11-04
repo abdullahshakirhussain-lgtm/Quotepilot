@@ -8,8 +8,7 @@ import {
   Check,
   Loader2,
   Mail,
-  RotateCcw,
-  ShieldCheck,
+  ChevronDown,
   SlidersHorizontal,
   PenLine,
 } from "lucide-react";
@@ -20,7 +19,6 @@ import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
 import {
   MESSAGE_TYPES,
   MESSAGE_TYPE_LABELS,
-  QUOTE_STATUS_LABELS,
   TONES,
   TONE_LABELS,
   type MessageType,
@@ -35,7 +33,6 @@ import { sendFollowUpEmail } from "@/app/(app)/quotes/email-actions";
 import { addCustomerEmail } from "@/app/(app)/quotes/new-quote-actions";
 import { isSampleAddress } from "@/lib/email-address";
 import { ReadOnlyNotice, useCanWrite } from "@/components/billing/AccessContext";
-import { TemplatePicker } from "@/components/templates/TemplatePicker";
 import { fillSubject, fillTemplate, templateForStep, type ResolvedTemplate, type TemplateValues } from "@/lib/templates";
 
 type SendOutcome = Awaited<ReturnType<typeof sendFollowUpEmail>>;
@@ -127,6 +124,11 @@ export function AIMessageModal({
   const [sendLocked, setSendLocked] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Sent, logged or an address saved: the page underneath reloads on close
+  // (the actions don't refresh it themselves; see email-actions.ts).
+  const changed = useRef(false);
+  // null: folded unless an entry needs attention; then whatever the user chose.
+  const [showHistory, setShowHistory] = useState<boolean | null>(null);
   const [templates, setTemplates] = useState<ResolvedTemplate[]>([]);
   const [templateValues, setTemplateValues] = useState<TemplateValues | null>(null);
   // The template the message came from, if it did (not an AI draft).
@@ -383,14 +385,20 @@ export function AIMessageModal({
       tone: m.tone,
     })),
   ].sort((a, b) => Date.parse(b.at || "0") - Date.parse(a.at || "0"));
-  const visibleHistory = showAll ? history : history.slice(0, 3);
 
-  const bannerStyle: Record<Banner["tone"], string> = {
-    success: "border-emerald-600 bg-white",
-    warning: "border-brand-400 bg-brand-50",
-    error: "border-red-600 bg-white",
-    info: "border-stone-300 bg-stone-50",
+
+  // The picker lists every template; an AI draft shows as its own choice.
+  const readyMade = templates.filter((t) => t.builtinKey);
+  const ownTemplates = templates.filter((t) => !t.builtinKey);
+  const pickTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (t) applyTemplate(t);
   };
+  const locked = busy || emailSent || followedUp;
+  const attention = history.some((h) => h.kind === "unconfirmed" || h.kind === "failed");
+  const historyOpen = showHistory ?? attention;
+  const messageBox = (tone: Banner["tone"]) =>
+    tone === "success" ? "msg-success" : tone === "warning" ? "msg-warn" : tone === "error" ? "msg-error" : "msg-info";
 
   return (
     <Modal
@@ -412,93 +420,67 @@ export function AIMessageModal({
         )
           return;
         onClose();
+        if (changed.current || emailSent || followedUp) window.location.reload();
       }}
       size="lg"
       title={`Follow up with ${firstName}`}
       description={
-        <span className="flex flex-wrap items-baseline gap-x-3">
-          <span className="[overflow-wrap:anywhere]">{quote.title}</span>
-          <span className="num font-semibold text-stone-900">
-            {formatCurrency(quote.amount, quote.currency)}
-          </span>
-          <span>{QUOTE_STATUS_LABELS[quote.status]}</span>
+        <span className="[overflow-wrap:anywhere]">
+          {quote.title}, <span className="num font-medium text-stone-900">{formatCurrency(quote.amount, quote.currency)}</span>
         </span>
       }
     >
       <ReadOnlyNotice />
-      <div className="space-y-4">
-        {/* What will be written, with options tucked away */}
-        <div className="border-b border-stone-200 pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[15px]">
-            <span className="text-stone-700">
-              <span className="font-semibold text-stone-900">{MESSAGE_TYPE_LABELS[messageType]}</span>
-              {", "}
-              {TONE_LABELS[tone].toLowerCase()} tone
-              {messageType === suggested && (
-                <span className="ml-2 text-stone-500">suggested for this quote</span>
-              )}
-            </span>
-            <button
-              type="button"
-              className="btn-ghost tap px-2 py-1 text-[15px]"
-              onClick={() => setAdjusting((a) => !a)}
-              aria-expanded={adjusting}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              {adjusting ? "Hide options" : "Adjust"}
-            </button>
-          </div>
-          {adjusting && (
-            <div className="ql-in mt-3 grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="label" htmlFor="ai-type">Message</label>
-                <select
-                  id="ai-type"
-                  className="input"
-                  value={messageType}
-                  onChange={(e) => chooseType(e.target.value as MessageType)}
-                >
-                  {MESSAGE_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {MESSAGE_TYPE_LABELS[t]}
+      <div className="flex flex-col gap-4">
+        {/* One choice: which message. The AI is one button away. */}
+        {templates.length > 0 && (
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                id="ai-wording"
+                aria-label="Message"
+                className="input min-w-0 flex-1 basis-56"
+                value={templateId ?? ""}
+                disabled={locked || loading}
+                onChange={(e) => pickTemplate(e.target.value)}
+              >
+                {!templateId && <option value="">{content ? "AI draft" : "Choose a message"}</option>}
+                <optgroup label="QuoteLoop templates">
+                  {readyMade.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
                     </option>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="ai-tone">Tone</label>
-                <select
-                  id="ai-tone"
-                  className="input"
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value as Tone)}
-                >
-                  {TONES.map((t) => (
-                    <option key={t} value={t}>
-                      {TONE_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="ai-context">
-                  {messageType === "objection_response"
-                    ? "What did the customer say?"
-                    : "Anything to mention? (optional)"}
-                </label>
-                <input
-                  id="ai-context"
-                  className="input"
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  placeholder="e.g. They said the price is higher than expected"
-                />
-              </div>
+                </optgroup>
+                {ownTemplates.length > 0 && (
+                  <optgroup label="Your templates">
+                    {ownTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <button className="btn-secondary" onClick={generate} disabled={busy || loading || !canWrite}>
+                <PenLine className="h-4 w-4" /> Write with AI
+              </button>
+              <button
+                type="button"
+                className="btn-ghost tap px-2"
+                onClick={() => setAdjusting((a) => !a)}
+                aria-expanded={adjusting}
+                aria-label="AI options"
+                title="AI options"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+              </button>
             </div>
-          )}
-        </div>
+            {adjusting && aiOptions()}
+          </div>
+        )}
 
-        {/* The draft: this step's template once loaded; without templates, the AI button. */}
+        {/* Without templates (they couldn't load): the AI button, as before. */}
         {!content && !loading && !historyLoaded && (
           <div className="space-y-2.5 rounded-[12px] border border-line p-4" aria-live="polite">
             <div className="flex items-center gap-2 text-[15px] text-stone-600">
@@ -508,22 +490,27 @@ export function AIMessageModal({
             <div className="h-3.5 w-9/12 rounded-[3px] bg-stone-100" />
           </div>
         )}
-        {!content && !loading && historyLoaded && (
+        {!content && !loading && historyLoaded && templates.length === 0 && (
           <div className="ql-fade py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <button className="btn-primary px-4 py-2.5 text-base" onClick={generate} disabled={!canWrite}>
-                <PenLine className="h-4 w-4" /> Draft follow-up for {firstName}
-              </button>
-              <TemplatePicker templates={templates} selectedId={null} onPick={applyTemplate} disabled={!canWrite} />
-            </div>
-            <p className="mt-2 max-w-prose text-[15px] text-stone-600">
-              Written from this quote&apos;s details. You review it; nothing is sent until you choose to.
-            </p>
+            <button className="btn-primary px-4 py-2.5 text-base" onClick={generate} disabled={!canWrite}>
+              <PenLine className="h-4 w-4" /> Draft follow-up for {firstName}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost tap ml-2 px-2"
+              onClick={() => setAdjusting((a) => !a)}
+              aria-expanded={adjusting}
+              aria-label="AI options"
+              title="AI options"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
+            {adjusting && aiOptions()}
           </div>
         )}
 
         {loading && (
-          <div className="ql-fade space-y-2.5 rounded-[6px] border border-stone-300 p-4" aria-live="polite">
+          <div className="ql-fade space-y-2.5 rounded-[12px] border border-line p-4" aria-live="polite">
             <div className="flex items-center gap-2 text-[15px] text-stone-600">
               <Loader2 className="h-4 w-4 animate-spin" /> Writing a draft…
             </div>
@@ -534,73 +521,83 @@ export function AIMessageModal({
         )}
 
         {content && !loading && (
-          <div className="ql-fade space-y-3">
+          <div className="ql-fade flex flex-col gap-3">
             {/* Where the To line goes once there's an address: add one right here. */}
             {emailEnabled && replyToReady && !recipient && customerId && (
-              <InlineCustomerEmail customerId={customerId} name={firstName} onSaved={loadHistory} />
+              <InlineCustomerEmail
+                customerId={customerId}
+                name={firstName}
+                onSaved={async () => {
+                  changed.current = true;
+                  await loadHistory();
+                }}
+              />
             )}
             {canEmail && (
-              <div className="divide-y divide-stone-200 rounded-[6px] border border-stone-400 text-[15px]">
-                <div className="flex items-start gap-3 px-3 py-2">
-                  <span className="w-16 shrink-0 text-stone-600">To</span>
-                  {/* Wraps rather than truncates: the whole address must be checkable. */}
-                  <span className="min-w-0 font-semibold text-stone-900 [overflow-wrap:anywhere]">{recipient}</span>
-                </div>
-                <div className="flex items-center gap-3 px-3 py-1.5">
-                  <label htmlFor="ai-subject" className="w-16 shrink-0 text-stone-600">Subject</label>
+              <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-y-1 text-[15px]">
+                <dt className="text-stone-500">To</dt>
+                {/* Wraps rather than truncates: the whole address must be checkable. */}
+                <dd className="font-medium text-stone-900 [overflow-wrap:anywhere]">{recipient}</dd>
+                <dt>
+                  <label htmlFor="ai-subject" className="text-stone-500">
+                    Subject
+                  </label>
+                </dt>
+                <dd>
                   <input
                     id="ai-subject"
-                    className="w-full bg-transparent py-0.5 text-base text-stone-900 focus:outline-none"
+                    className="w-full border-b border-line bg-transparent py-1 text-base text-stone-900 focus:border-info-500 focus:outline-none"
                     value={subject}
                     maxLength={200}
                     onChange={(e) => setSubject(e.target.value)}
                   />
-                </div>
-              </div>
+                </dd>
+              </dl>
             )}
             <div className="relative">
               <textarea
                 aria-label="Follow-up message"
-                className="input min-h-[190px] resize-y leading-relaxed"
+                className="input min-h-[200px] resize-y leading-relaxed"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
-              {edited && (
-                <span className="ql-pop absolute right-2 top-2 rounded-[4px] bg-brand-200 px-1.5 py-0.5 text-[13px] font-semibold text-stone-900">
-                  Edited
-                </span>
-              )}
+              {edited && <span className="chip-muted ql-pop absolute right-2 top-2">Edited</span>}
             </div>
-            <p className="flex items-center gap-1.5 text-[15px] text-stone-600">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-stone-500" />
-              {canEmail
-                ? "Review before sending. It's only emailed when you click Send email."
-                : "Review before sending. Copy it into your own email or phone."}
-            </p>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {canEmail && (
-                <button
-                  className="btn-primary"
-                  onClick={sendEmail}
-                  disabled={busy || !content.trim() || emailSent || followedUp || sendLocked}
-                >
-                  {busy && action === "send" ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
-                  ) : emailSent ? (
-                    <><Check className="h-4 w-4" /> Email sent</>
-                  ) : (
-                    <><Mail className="h-4 w-4" /> Send email</>
+            {!canEmail &&
+              (!emailEnabled ? (
+                <p className="text-[14px] text-stone-500">
+                  Email sending isn&apos;t set up for this workspace, so copy the message and send it yourself.
+                </p>
+              ) : (
+                <>
+                  {!replyToReady && (
+                    <div className="msg-warn flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span>Add your business email in Settings before sending from QuoteLoop.</span>
+                      <AddBusinessEmailButton unsaved={edited && !emailSent && !followedUp} className="btn-secondary px-2.5 py-1.5" />
+                    </div>
                   )}
-                </button>
-              )}
-              <CopyButton
-                text={content}
-                label="Copy message"
-                className={canEmail ? "btn-secondary" : "btn-primary"}
-              />
+                  {sampleRecipient && (
+                    <p className="msg-info">
+                      This is a sample customer from the demo data, so QuoteLoop won&apos;t email them. Copy the message
+                      to try it out.
+                    </p>
+                  )}
+                  {!recipient && !customerId && (
+                    <p className="text-[14px] text-stone-500">
+                      Add an email address to this customer to send from QuoteLoop.{" "}
+                      <Link href="/leads" className="font-medium text-info-700 hover:underline">
+                        Open Customers
+                      </Link>
+                    </p>
+                  )}
+                </>
+              ))}
+
+            {/* Send on the right; recording it yourself on the left. */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
               <button
-                className={canEmail ? "btn-ghost" : "btn-secondary"}
+                className="btn-ghost"
                 onClick={markFollowedUp}
                 disabled={busy || followedUp || (emailSent && !manualLogNeeded)}
                 title="Record that you sent this yourself"
@@ -612,54 +609,34 @@ export function AIMessageModal({
                 ) : null}
                 {followedUp ? "Followed up" : "Mark as followed up"}
               </button>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <TemplatePicker
-                  templates={templates}
-                  selectedId={templateId}
-                  onPick={applyTemplate}
-                  disabled={busy || emailSent || followedUp}
-                />
-                <button className="btn-ghost" onClick={generate} disabled={busy}>
-                  <RotateCcw className="h-4 w-4" /> {templateId ? "Draft with AI" : "Rewrite"}
-                </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <CopyButton text={content} label="Copy message" className={canEmail ? "btn-secondary" : "btn-primary"} />
+                {canEmail && (
+                  <button
+                    className="btn-primary"
+                    onClick={sendEmail}
+                    disabled={busy || !content.trim() || emailSent || followedUp || sendLocked}
+                  >
+                    {busy && action === "send" ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                      </>
+                    ) : emailSent ? (
+                      <>
+                        <Check className="h-4 w-4" /> Email sent
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4" /> Send email
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
-            {!canEmail &&
-              (!emailEnabled ? (
-                <p className="text-[15px] text-stone-600">
-                  Email sending isn&apos;t set up for this workspace, so copy the message and send it yourself.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {!replyToReady && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[6px] border-2 border-brand-400 bg-brand-50 px-3 py-2 text-[15px] text-stone-900">
-                      <span>Add your business email in Settings before sending from QuoteLoop.</span>
-                      <AddBusinessEmailButton
-                        unsaved={edited && !emailSent && !followedUp}
-                        className="btn-secondary px-2.5 py-1.5"
-                      />
-                    </div>
-                  )}
-                  {sampleRecipient && (
-                    <p className="rounded-[6px] border border-stone-300 bg-stone-50 px-3 py-2 text-[15px] text-stone-800">
-                      This is a sample customer from the demo data, so QuoteLoop won&apos;t email them. Copy the
-                      message to try it out.
-                    </p>
-                  )}
-                  {!recipient && !customerId && (
-                    <p className="text-[15px] text-stone-600">
-                      Add an email address to this customer to send from QuoteLoop.{" "}
-                      <Link href="/leads" className="font-medium text-info-700 hover:underline">
-                        Open Customers
-                      </Link>
-                    </p>
-                  )}
-                </div>
-              ))}
-
             {banner && (
-              <div className={cn("ql-fade rounded-[6px] border-2 px-3 py-2 text-[15px] text-stone-900", bannerStyle[banner.tone])} role="status">
+              <div className={cn("ql-fade", messageBox(banner.tone))} role="status">
                 {banner.text}
               </div>
             )}
@@ -667,102 +644,140 @@ export function AIMessageModal({
         )}
 
         {notice && (
-          <div className="ql-fade flex items-start gap-2 rounded-[6px] border-2 border-brand-400 bg-brand-50 px-3 py-2 text-[15px] text-stone-900">
+          <div className="msg-warn ql-fade flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{notice}</span>
           </div>
         )}
-        {error && (
-          <div className="ql-fade rounded-[6px] border-2 border-red-600 px-3 py-2 text-[15px] font-medium text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <div className="msg-error ql-fade">{error}</div>}
 
-        {/* History */}
-        <div className="border-t border-stone-200 pt-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-[16px] font-semibold text-stone-900">History</h3>
-            {history.length > 3 && (
-              <button className="tap inline-flex items-center justify-end text-[15px] font-medium text-info-700 hover:underline" onClick={() => setShowAll((s) => !s)}>
-                {showAll ? "Show less" : `Show all ${history.length}`}
-              </button>
+        {/* History: folded away unless something in it needs a look. */}
+        {history.length > 0 && (
+          <div className="border-t border-line pt-3">
+            <button
+              type="button"
+              className="tap inline-flex items-center gap-1.5 text-[14px] font-medium text-stone-700 hover:text-stone-900"
+              aria-expanded={historyOpen}
+              onClick={() => setShowHistory(!historyOpen)}
+            >
+              <ChevronDown className={cn("h-4 w-4 transition-transform", historyOpen ? "" : "-rotate-90")} />
+              History ({history.length})
+            </button>
+            {historyOpen && (
+              <ul className="mt-3 space-y-3">
+                {(showAll ? history : history.slice(0, 3)).map((h) => (
+                  <li
+                    key={h.id}
+                    className={cn(
+                      "border-l-2 pl-3",
+                      h.kind === "emailed" || h.kind === "logged"
+                        ? "border-emerald-600"
+                        : h.kind === "unconfirmed"
+                          ? "border-due-500"
+                          : h.kind === "failed"
+                            ? "border-red-600"
+                            : "border-stone-300"
+                    )}
+                  >
+                    <div className="flex items-baseline justify-between gap-2 text-[14px]">
+                      {h.kind === "emailed" ? (
+                        <span className="min-w-0 font-medium text-emerald-700 [overflow-wrap:anywhere]">
+                          Email sent to {h.to}, final text used
+                          {h.number ? ` (follow-up ${h.number})` : ""}
+                        </span>
+                      ) : h.kind === "logged" ? (
+                        <span className="font-medium text-emerald-700">Follow-up {h.number} logged, final text used</span>
+                      ) : h.kind === "unconfirmed" ? (
+                        <span className="min-w-0 font-medium text-stone-900 [overflow-wrap:anywhere]">
+                          Email to {h.to}: delivery not confirmed
+                        </span>
+                      ) : h.kind === "failed" ? (
+                        <span className="min-w-0 font-medium text-red-700 [overflow-wrap:anywhere]">
+                          Email to {h.to} failed, no follow-up recorded
+                        </span>
+                      ) : (
+                        <span className="text-stone-600">
+                          Draft: {MESSAGE_TYPE_LABELS[h.type]}, {TONE_LABELS[h.tone].toLowerCase()} tone
+                        </span>
+                      )}
+                      <span className="num shrink-0 text-stone-500">{formatDate(h.at)}</span>
+                    </div>
+                    {h.kind !== "failed" && (
+                      <>
+                        <p className={cn("mt-1 line-clamp-4 whitespace-pre-wrap text-[14px]", h.kind === "draft" ? "text-stone-500" : "text-stone-800")}>
+                          {h.text}
+                        </p>
+                        {/* The entry above is cut to four lines, so a failed copy shows all of it. */}
+                        <CopyButton text={h.text} label="Copy" showTextOnFail className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-[13px]" />
+                      </>
+                    )}
+                  </li>
+                ))}
+                {history.length > 3 && (
+                  <li>
+                    <button
+                      className="tap inline-flex items-center text-[14px] font-medium text-info-700 hover:underline"
+                      onClick={() => setShowAll((s) => !s)}
+                    >
+                      {showAll ? "Show less" : `Show all ${history.length}`}
+                    </button>
+                  </li>
+                )}
+              </ul>
             )}
           </div>
-          {history.length === 0 ? (
-            <p className="text-[15px] text-stone-600">
-              Messages you draft will appear here for reference. When you send or log
-              one, the exact text you used is kept.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {visibleHistory.map((h) => (
-                <li
-                  key={h.id}
-                  className={cn(
-                    "border-l-2 pl-3",
-                    h.kind === "emailed" || h.kind === "logged"
-                      ? "border-emerald-600"
-                      : h.kind === "unconfirmed"
-                        ? "border-brand-400"
-                        : h.kind === "failed"
-                          ? "border-red-600"
-                          : "border-stone-300"
-                  )}
-                >
-                  <div className="flex items-baseline justify-between gap-2 text-[14px]">
-                    {h.kind === "emailed" ? (
-                      <span className="min-w-0 font-semibold text-emerald-700 [overflow-wrap:anywhere]">
-                        Email sent to {h.to}, final text used
-                        {h.number ? ` (follow-up ${h.number})` : ""}
-                      </span>
-                    ) : h.kind === "logged" ? (
-                      <span className="font-semibold text-emerald-700">
-                        Follow-up {h.number} logged, final text used
-                      </span>
-                    ) : h.kind === "unconfirmed" ? (
-                      <span className="min-w-0 font-semibold text-stone-900 [overflow-wrap:anywhere]">
-                        Email to {h.to}: delivery not confirmed
-                      </span>
-                    ) : h.kind === "failed" ? (
-                      <span className="min-w-0 font-semibold text-red-700 [overflow-wrap:anywhere]">
-                        Email to {h.to} failed, no follow-up recorded
-                      </span>
-                    ) : (
-                      <span className="font-medium text-stone-600">
-                        Draft: {MESSAGE_TYPE_LABELS[h.type]}, {TONE_LABELS[h.tone].toLowerCase()} tone
-                      </span>
-                    )}
-                    <span className="num shrink-0 text-stone-600">{formatDate(h.at)}</span>
-                  </div>
-                  {h.kind !== "failed" && (
-                    <>
-                      <p
-                        className={cn(
-                          "mt-1 line-clamp-4 whitespace-pre-wrap text-[15px]",
-                          h.kind === "draft" ? "text-stone-600" : "text-stone-900"
-                        )}
-                      >
-                        {h.text}
-                      </p>
-                      {/* The entry above is cut to four lines, so a failed copy shows all of it. */}
-                      <CopyButton
-                        text={h.text}
-                        label="Copy"
-                        showTextOnFail
-                        className="btn-ghost tap -ml-2 mt-0.5 px-2 py-0.5 text-[14px]"
-                      />
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        )}
       </div>
       {confirmDialog}
     </Modal>
   );
+
+  /** Kind, tone and anything to mention: they only shape AI drafts. */
+  function aiOptions() {
+    return (
+      <div className="ql-in mt-3 grid gap-3 rounded-[12px] bg-canvas p-3 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor="ai-type">
+            Kind of follow-up
+          </label>
+          <select id="ai-type" className="input" value={messageType} onChange={(e) => chooseType(e.target.value as MessageType)}>
+            {MESSAGE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {MESSAGE_TYPE_LABELS[t]}
+                {t === suggested ? " (suggested)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor="ai-tone">
+            Tone
+          </label>
+          <select id="ai-tone" className="input" value={tone} onChange={(e) => setTone(e.target.value as Tone)}>
+            {TONES.map((t) => (
+              <option key={t} value={t}>
+                {TONE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="ai-context">
+            {messageType === "objection_response" ? "What did the customer say?" : "Anything to mention? (optional)"}
+          </label>
+          <input
+            id="ai-context"
+            className="input"
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            placeholder="They said the price is higher than expected"
+          />
+        </div>
+      </div>
+    );
+  }
 }
+
 
 /**
  * Saves an email address for a customer who has none, inside the follow-up

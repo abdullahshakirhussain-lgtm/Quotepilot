@@ -148,7 +148,7 @@ const FAQS = [
   },
   {
     q: "What does my customer see?",
-    a: "A plain email from \"Your Business via QuoteLoop\". When they reply, the reply goes to your own email address.",
+    a: "A plain email from \"Your Business via QuoteLoop\". When they reply, the reply is forwarded to your own email address and that quote's reminders pause.",
   },
   {
     q: "How many emails can I send?",
