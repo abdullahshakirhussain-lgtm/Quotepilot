@@ -1,0 +1,165 @@
+/* The landing page only (app/page.tsx). Everything is scoped under .lp so the
+   app and the trade pages are untouched.
+
+   Direction: "the split stage". Half the screen holds the real product and
+   never leaves; the other half is a calm reading column. On this page the
+   quote that stays in view until it's won or lost becomes that fixed half.
+
+   Five type steps, one radius, one button shape, one accent (the action). No
+   shadows at rest, no rules, no gradients: surfaces part by a step in tone. */
+
+.lp {
+  --lp-dark: #1f2328;      /* the deep field: hero, stage side, input half */
+  --lp-stage: #2b3138;     /* one step up from it: the stage the screens sit on */
+  --lp-paper: #f2f4f6;     /* the reading column */
+  --lp-white: #ffffff;     /* the output half */
+  --lp-ink: #1f2328;
+  --lp-muted: #4b5563;
+  --lp-light: #eef0f3;     /* ink on dark */
+  --lp-light-muted: #b9c0c9;
+  --lp-accent: #1c5cab;    /* the action, and links */
+  --lp-accent-hover: #164a8b;
+
+  --t-display: clamp(60px, 11vw, 180px);
+  --t-h2: clamp(30px, 2.9vw, 44px);
+  --t-lead: clamp(21px, 1.7vw, 26px);
+  --t-body: 18px;
+  --t-small: 15px;
+
+  --radius: 12px;
+  --margin: clamp(20px, 2.2vw, 32px);
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  background: var(--lp-paper);
+  color: var(--lp-ink);
+  font-size: var(--t-body);
+  line-height: 1.55;
+}
+
+.lp h1,
+.lp h2,
+.lp h3 {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.lp .t-h2 { font-size: var(--t-h2); line-height: 1.05; font-weight: 600; }
+.lp .t-lead { font-size: var(--t-lead); line-height: 1.3; }
+.lp .t-small { font-size: var(--t-small); line-height: 1.5; }
+.lp .num { font-variant-numeric: tabular-nums; }
+
+/* One button shape for the whole page: fully round, flat. */
+.lp .lp-btn {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 0 24px;
+  font-weight: 600;
+  font-size: var(--t-body);
+  background: var(--lp-accent);
+  color: #fff;
+  transition: transform 160ms var(--ease-out), background-color 160ms var(--ease-out);
+}
+.lp .lp-btn:hover { background: var(--lp-accent-hover); transform: translateY(-1px); }
+.lp .lp-btn:active { transform: translateY(1px) scale(0.98); }
+.lp .lp-link {
+  color: var(--lp-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  transition: color 160ms var(--ease-out);
+}
+.lp .lp-link:hover { color: var(--lp-accent-hover); }
+.lp .on-dark .lp-link { color: #9cc3f2; }
+.lp :focus-visible { outline: 3px solid #2a78d6; outline-offset: 3px; }
+
+/* ---- The stage: the real product, fixed while the column reads ---------- */
+.lp .stage {
+  position: relative;
+  overflow: clip;
+  border-radius: var(--radius);
+  background: var(--lp-stage);
+}
+.lp .stage img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  padding: clamp(24px, 3vw, 48px);
+  opacity: 0;
+  transition: opacity 420ms var(--ease-out), transform 900ms var(--ease-out);
+  transform: scale(1.02);
+}
+.lp .stage img.is-active { opacity: 1; transform: none; }
+
+/* The name, crossing from the reading half over the stage's edge. */
+.lp .wordmark {
+  /* Fitted to the width on phones, so the name is never cut. */
+  font-size: min(var(--t-display), 17vw);
+  line-height: 0.85;
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  color: var(--lp-light);
+  white-space: nowrap;
+}
+
+/* ---- Statements that change the stage (how it works) ------------------- */
+.lp .step { color: var(--lp-muted); transition: color 240ms var(--ease-out); }
+.lp .step.is-active { color: var(--lp-ink); }
+
+/* ---- FAQ as reading text ------------------------------------------------ */
+.lp .faq-text { column-gap: 56px; }
+/* Two columns where the answers have the full width; one on the reading line beside the stage. */
+@media (min-width: 900px) and (max-width: 1023.98px) { .lp .faq-text { columns: 2; } }
+.lp .faq-text p { break-inside: avoid; margin: 0 0 20px; }
+
+/* ---- Motion --------------------------------------------------------------
+   No class is set on <html> before React loads (that would differ from the
+   server's markup); the CSS asks whether scripting is on instead. Content is
+   never left hidden: a reveal the script never reached shows after 3s. */
+@media (prefers-reduced-motion: no-preference) {
+  /* Arrival on load, in CSS alone: everything is painted, this adds the entrance. */
+  .lp [data-load] {
+    animation: lp-rise 620ms var(--ease-out) both;
+    animation-delay: var(--d, 0ms);
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  /* Each part of a section rises as it comes into view, one after another. */
+  .lp [data-reveal] {
+    transition: opacity 560ms var(--ease-out), transform 560ms var(--ease-out);
+    transition-delay: calc(var(--i, 0) * 80ms);
+  }
+  .lp [data-reveal]:not(.is-in) {
+    opacity: 0;
+    transform: translateY(24px);
+    animation: lp-show 1ms 3s forwards;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* The signature move: the name settles as the first screen leaves. */
+  @supports (animation-timeline: view()) {
+    /* Both the arrival (fades in) and the settle (scales) run on the name. */
+    .lp .wordmark-move {
+      animation: lp-rise 620ms var(--ease-out) both, lp-settle linear both;
+      animation-delay: var(--d, 0ms), 0ms;
+      animation-timeline: auto, view();
+      animation-range: normal, exit 0% exit 100%;
+      transform-origin: left bottom;
+    }
+    @media (min-width: 1024px) { .lp .wordmark-move { transform-origin: right bottom; } }
+  }
+}
+@keyframes lp-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes lp-show { to { opacity: 1; transform: none; } }
+@keyframes lp-settle { from { transform: none; } to { transform: scale(0.94); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp *, .lp *::before, .lp *::after { transition-duration: 1ms !important; animation: none !important; }
+  .lp .stage img { transform: none; }
+}
