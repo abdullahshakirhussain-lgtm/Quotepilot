@@ -134,7 +134,7 @@ export async function loadDashboardExtras(
     ...decided
       .filter((q) => q.decided_at)
       .slice(0, RECENT)
-      .map((q) => ({ at: q.decided_at as string, text: `${nameOf(q.lead)}'s quote marked ${q.status === "accepted" ? "won" : "lost"}` })),
+      .map((q) => ({ at: q.decided_at as string, text: `Quote for ${nameOf(q.lead)} marked ${q.status === "accepted" ? "won" : "lost"}` })),
     ...((addedRes.data ?? []) as { created_at: string; lead: unknown }[]).map((q) => ({
       at: q.created_at,
       text: `Quote added for ${nameOf(q.lead)}`,

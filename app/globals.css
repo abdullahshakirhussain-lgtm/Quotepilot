@@ -205,6 +205,10 @@ body:has([data-billing-banner]) [data-sample-banner] {
    be flex or inline-flex for the height to apply; a .tap item in a row that
    must not squeeze needs shrink-0. */
 @layer components {
+  /* With a mouse, still the 24px minimum WCAG 2.2 asks for (2.5.8). */
+  .tap {
+    min-height: 24px;
+  }
   @media (pointer: coarse), (max-width: 639px) {
     .btn,
     .btn-primary,
