@@ -113,26 +113,30 @@ export function Screenshot({
   );
 }
 
-const STATS = [
+// Every figure is from the source its line links to, except the price line,
+// which is plain arithmetic on our own price.
+const STATS: { value: string; label: string; body: string; source?: { label: string; href: string } }[] = [
   {
-    value: "$30,000",
-    label: "a year",
-    body: "is what one forgotten $2,500 quote a month adds up to.",
+    value: "63%",
+    label: "of home improvement teams",
+    body: "give up on a quote after one or two follow-ups.",
+    source: { label: "Hatch, 2024 survey of 120+ call centers", href: "https://www.usehatchapp.com/blog/state-of-home-improvement-industry-2024" },
   },
   {
-    value: "52",
-    label: "quotes a year",
-    body: "go unanswered if just one follow-up a week slips through the cracks.",
+    value: "69%",
+    label: "of home service businesses",
+    body: "win over half the jobs they quote.",
+    source: { label: "Jobber, survey of 1,050 US owners, 2025", href: "https://www.getjobber.com/home-service-trends-report/" },
   },
   {
     value: `$${(PRICE_MONTHLY * 12).toFixed(2)}`,
-    label: "a year for QuoteLoop",
-    body: "which one small job won back more than pays for.",
+    label: "a year for QuoteLoop.",
+    body: `One $300 job pays for it. One $2,500 job pays for ${Math.floor(2500 / (PRICE_MONTHLY * 12))} years.`,
   },
   {
     value: "7×",
     label: "more likely",
-    body: "to qualify a lead when businesses replied within an hour rather than later.",
+    body: "to qualify a lead when you reply within the hour.",
     source: {
       label: "Harvard Business Review, 2011",
       href: "https://hbr.org/2011/03/the-short-life-of-online-sales-leads",
@@ -179,7 +183,7 @@ export function LostQuoteStats() {
             ))}
           </dl>
           <p className="mt-3 text-[14px] text-stone-600">
-            Examples use a $2,500 job. Your numbers will differ, but the sums work the same way.
+            The price line is plain arithmetic: ${PRICE_MONTHLY} a month against one job.
           </p>
         </div>
       </div>

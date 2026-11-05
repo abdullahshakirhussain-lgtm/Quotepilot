@@ -38,14 +38,27 @@ const SCREENS: StageScreen[] = [
   { key: "phone", src: "/screens/phone-follow-ups.webp", width: 780, height: 1688, alt: "The Follow-ups page on a phone" },
 ];
 
+// Every figure is from the source its line links to, except the last, which
+// is plain arithmetic on our own price.
 const COSTS = [
-  { figure: "$30,000", text: "a year is what one forgotten $2,500 quote a month adds up to." },
-  { figure: "52", text: "quotes a year go unanswered if one follow-up a week slips through the cracks." },
-  { figure: `$${(PRICE_MONTHLY * 12).toFixed(2)}`, text: "a year for QuoteLoop, which one small job won back more than pays for." },
+  {
+    figure: "63%",
+    text: "of home improvement teams give up on a quote after one or two follow-ups.",
+    source: { label: "Hatch, 2024 survey of 120+ call centers", href: "https://www.usehatchapp.com/blog/state-of-home-improvement-industry-2024" },
+  },
+  {
+    figure: "69%",
+    text: "of home service businesses win over half the jobs they quote.",
+    source: { label: "Jobber, survey of 1,050 US owners, 2025", href: "https://www.getjobber.com/home-service-trends-report/" },
+  },
   {
     figure: "7×",
-    text: "more likely to qualify a lead when businesses replied within an hour rather than later.",
+    text: "more likely to qualify a lead when you reply within the hour.",
     source: { label: "Harvard Business Review, 2011", href: "https://hbr.org/2011/03/the-short-life-of-online-sales-leads" },
+  },
+  {
+    figure: `$${(PRICE_MONTHLY * 12).toFixed(2)}`,
+    text: `a year for QuoteLoop. One $300 job pays for it. One $2,500 job pays for ${Math.floor(2500 / (PRICE_MONTHLY * 12))} years.`,
   },
 ];
 
@@ -262,7 +275,7 @@ export default function LandingPage() {
               </div>
             ))}
           </dl>
-          <p className="t-small mt-8 text-[var(--lp-muted)] sm:pl-[156px]">Examples use a $2,500 job. Your numbers will differ, but the sums work the same way.</p>
+          <p className="t-small mt-8 text-[var(--lp-muted)] sm:pl-[156px]">The last line is plain arithmetic: {PRICE_LABEL} a month against one job.</p>
         </section>
 
         {/* How it works: each statement changes the screen on the stage. */}
