@@ -4,6 +4,7 @@ import { DashboardView, type RepliedQuote } from "@/components/dashboard/Dashboa
 import { currentHour, todayISO } from "@/lib/utils";
 import { computeDashboardMetrics, currencyCounts, inCurrency } from "@/lib/metrics";
 import { latestReplies } from "@/lib/replies-server";
+import { loadDashboardExtras } from "@/lib/dashboard-extras";
 import { classifyFollowUp, onePerQuote } from "@/lib/follow-up-state";
 import { getRequestTimeZone } from "@/lib/request-time";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -30,7 +31,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
   // Every row, not just the API's first page: these feed totals and counts.
   // A failed query throws, and is never rendered as zeros — that would read as
   // "you lost your data".
-  const [businessRes, leads, quotes, followUps, repliedRes, updatesRes] = await Promise.all([
+  const [businessRes, leads, quotes, followUps, repliedRes, extras] = await Promise.all([
     supabase.from("businesses").select("*").eq("user_id", user.id).maybeSingle<Business>(),
     fetchAllRows<{ status: string; email: string | null }>((from, to) =>
       supabase.from("leads").select("status, email").eq("user_id", user.id).order("id").range(from, to)
@@ -57,16 +58,9 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
       .in("status", ["sent", "follow_up_due", "negotiating"])
       .order("customer_replied_at", { ascending: false })
       .limit(10),
-    // Unread updates, for "While you were away".
-    supabase
-      .from("notifications")
-      .select("id, kind, quote_id, title, body", { count: "exact" })
-      .eq("user_id", user.id)
-      .is("read_at", null)
-      .order("created_at", { ascending: false })
-      .limit(3),
+    // This week's progress, wins this month, and the latest things that happened.
+    loadDashboardExtras(supabase, user.id, today, timeZone),
   ]);
-  if (updatesRes.error) console.error("[dashboard] updates unavailable:", updatesRes.error.message);
   // Optional: before the schema is re-run the column doesn't exist yet.
   if (repliedRes.error) console.error("[dashboard] replied quotes unavailable:", repliedRes.error.message);
   const repliedRows = repliedRes.error ? [] : (repliedRes.data ?? []);
@@ -119,8 +113,11 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
       hasData={leads.length > 0 || quotes.length > 0}
       hasSampleData={leads.some((l) => isSampleAddress(l.email))}
       replied={replied}
-      updates={updatesRes.error ? [] : (updatesRes.data ?? [])}
-      updatesTotal={updatesRes.error ? 0 : (updatesRes.count ?? 0)}
+      week={extras.week}
+      followedUpOnce={extras.followedUpOnce}
+      wins={extras.wins ? (extras.wins[shown] ?? { thisMonth: 0, lastMonth: 0 }) : null}
+      recent={extras.recent}
+      timeZone={timeZone}
     />
   );
 }

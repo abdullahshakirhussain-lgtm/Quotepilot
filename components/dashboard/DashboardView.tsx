@@ -1,26 +1,16 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
-import { HowItWorks } from "@/components/quotes/HowItWorks";
+import { Check, Plus } from "lucide-react";
 import { LoadSampleDataButton, SampleDataBanner } from "@/components/SampleData";
 import { AttentionList } from "./AttentionList";
-import { AwayUpdates } from "./AwayUpdates";
-import type { AppNotification } from "@/lib/notifications";
 import { QuoteLink } from "@/components/quotes/QuotePanel";
 import { TypedGreeting } from "./TypedGreeting";
-import { formatCurrency, relativeDay } from "@/lib/utils";
-import { formatMoney, type DashboardMetrics, type Money } from "@/lib/metrics";
+import { cn, dateInZone, formatCurrency, relativeDay } from "@/lib/utils";
+import { formatMoney, type DashboardMetrics } from "@/lib/metrics";
+import type { RecentItem, WeekProgress, Wins } from "@/lib/dashboard-extras";
 import type { FollowUpWithContext } from "@/lib/types";
 
 /** How many people the dashboard lists before "See all". */
 const SHOWN = 5;
-
-/** The money bar's parts, in a fixed order with fixed colours. */
-const MONEY_PARTS: { key: "open" | "won" | "lost" | "expired"; label: string; color: string }[] = [
-  { key: "open", label: "Waiting", color: "#2A78D6" },
-  { key: "won", label: "Won", color: "#23692A" },
-  { key: "lost", label: "Lost", color: "#8A949C" },
-  { key: "expired", label: "Expired", color: "#C9CED4" },
-];
 
 /** An open quote whose customer replied by email. */
 export interface RepliedQuote {
@@ -33,15 +23,17 @@ export interface RepliedQuote {
 }
 
 /**
- * The dashboard answers one question first: who needs following up today.
- * Under it, three numbers and one bar of where the money is. Every figure
- * appears once; the full quote list lives on the Quotes page.
+ * The dashboard, in the order the research behind it puts things: what needs
+ * doing today first, then progress you can see filling up, then the money in
+ * context, then what happened lately. A new account sees a short checklist to
+ * its first follow-up instead of a page of zeros.
  */
 export function DashboardView({
   m,
   currency,
   currencies = [],
   today,
+  timeZone = "UTC",
   greeting,
   firstName,
   attention,
@@ -49,8 +41,10 @@ export function DashboardView({
   hasData,
   hasSampleData = false,
   replied = [],
-  updates = [],
-  updatesTotal = 0,
+  week = null,
+  followedUpOnce = true,
+  wins = null,
+  recent = [],
 }: {
   m: DashboardMetrics;
   /** The currency the overview is showing. */
@@ -58,6 +52,7 @@ export function DashboardView({
   /** Every currency the quotes use, with counts; a switcher appears when there are several. */
   currencies?: { currency: string; count: number }[];
   today: string;
+  timeZone?: string;
   greeting: string;
   firstName: string;
   attention: Array<FollowUpWithContext & { dueCount?: number }>;
@@ -67,33 +62,38 @@ export function DashboardView({
   hasSampleData?: boolean;
   /** Open quotes whose customer replied; their reminders are paused. */
   replied?: RepliedQuote[];
-  /** Unread updates (newest few) and how many there are in all. */
-  updates?: { id: string; kind: AppNotification["kind"]; quote_id: string | null; title: string; body: string | null }[];
-  updatesTotal?: number;
+  week?: WeekProgress | null;
+  /** At least one follow-up was ever done. */
+  followedUpOnce?: boolean;
+  /** Won this month and last, in the currency shown; null until the dates are recorded. */
+  wins?: Wins | null;
+  recent?: RecentItem[];
 }) {
   const hello = `${greeting}${firstName ? `, ${firstName}` : ""}`;
+  const steps = [
+    { label: "Set up your business", done: true },
+    { label: "Add a quote you sent", done: m.quotesSent + m.draftCount > 0 },
+    { label: "Send your first follow-up", done: followedUpOnce },
+    { label: "Mark a quote won or lost", done: m.wonCount + m.lostCount > 0 },
+  ];
 
-  // A brand-new workspace: one clear next step, not a page of zeros.
+  // A brand-new workspace: the way to a first follow-up, not a page of zeros.
   if (!hasData) {
     return (
-      <div className="flex flex-col gap-5">
-        <section className="card flex flex-col gap-3 p-6 sm:p-8">
+      <div className="flex flex-col gap-4">
+        <section className="card flex flex-col gap-3 p-6 sm:p-8" aria-labelledby="welcome">
           <TypedGreeting text={hello} className="text-[17px] text-stone-600" />
-          <h1 className="ql-in page-title">Welcome to QuoteLoop</h1>
-          <p className="ql-in max-w-xl text-base text-stone-600" style={{ animationDelay: "60ms" }}>
-            Add a quote you&apos;ve sent, or send one from here, and QuoteLoop reminds you when it&apos;s time to
-            follow up.
+          <h1 id="welcome" className="page-title">
+            Welcome to QuoteLoop
+          </h1>
+          <p className="max-w-xl text-base text-stone-600">
+            Four steps to your first quote followed up. Nothing is sent until you choose to.
           </p>
-          <div className="ql-in mt-2 flex flex-wrap items-center gap-3" style={{ animationDelay: "120ms" }}>
-            <Link href="/quotes?new=1" className="btn-primary px-5 py-2.5">
-              <Plus className="h-4 w-4" strokeWidth={2.4} /> Add your first quote
-            </Link>
+          <Checklist steps={steps} />
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#ECEEF1] pt-4">
             <LoadSampleDataButton />
+            <p className="hint">Sample data is made up, so you can click around safely and remove it any time.</p>
           </div>
-          <p className="hint">Not ready yet? Sample data is made up, so you can click around safely and remove it any time.</p>
-        </section>
-        <section className="card p-6">
-          <HowItWorks />
         </section>
       </div>
     );
@@ -103,19 +103,24 @@ export function DashboardView({
   const shownReplies = replied.slice(0, SHOWN);
   const shownDue = attention.slice(0, SHOWN - shownReplies.length);
   const next = upcoming[0];
-  const amountIn = (list: Money[]) => list.find((x) => x.currency === currency)?.amount ?? 0;
-  const parts = MONEY_PARTS.map((p) => ({
-    ...p,
-    amount: amountIn(p.key === "open" ? m.openValue : p.key === "won" ? m.acceptedValue : p.key === "lost" ? m.lostValue : m.expiredValue),
-  }))
-    // Expired only appears once there is some.
-    .filter((p) => p.key !== "expired" || p.amount > 0);
-  const moneyTotal = parts.reduce((n, p) => n + p.amount, 0);
+  const when = (iso: string) => {
+    const s = relativeDay(dateInZone(iso, timeZone), today);
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      <AwayUpdates items={updates} total={updatesTotal} />
       {hasSampleData && <SampleDataBanner />}
+
+      {/* Until the first follow-up is done: the steps there, at the top. */}
+      {!followedUpOnce && (
+        <section className="card px-5 py-4" aria-labelledby="get-started">
+          <h2 id="get-started" className="text-[16px] font-medium text-stone-900">
+            Get your first quote followed up
+          </h2>
+          <Checklist steps={steps} />
+        </section>
+      )}
 
       {/* Who needs you today: the headline is the count, the list is the people. */}
       <section aria-labelledby="follow-up-now" className="flex flex-col gap-3">
@@ -177,7 +182,34 @@ export function DashboardView({
         </div>
       </section>
 
-      {/* Three numbers. Amounts are in one currency at a time, never added across currencies. */}
+      {/* Progress you can see filling up: this week's follow-ups, Monday to Sunday. */}
+      {week && (
+        <section className="card px-5 py-4" aria-labelledby="this-week">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="this-week" className="text-[16px] font-medium text-stone-900">
+              This week
+            </h2>
+            <p className="num text-[14px] text-stone-600">
+              {week.total === 0
+                ? "No follow-ups due this week"
+                : week.done === week.total
+                  ? `All ${week.total} follow-ups done`
+                  : `${week.done} of ${week.total} follow-ups done`}
+            </p>
+          </div>
+          {week.total > 0 && (
+            <div
+              className="mt-3 h-2.5 overflow-hidden rounded-full bg-stone-100"
+              role="img"
+              aria-label={`${week.done} of ${week.total} follow-ups due this week are done`}
+            >
+              <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-300" style={{ width: `${Math.round((week.done / week.total) * 100)}%` }} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* The money, in context. Amounts are in one currency at a time, never added across currencies. */}
       <section aria-label="Your numbers" className="flex flex-col gap-2">
         {currencies.length > 1 && (
           <nav aria-label="Currency" className="flex flex-wrap items-center justify-end gap-1.5">
@@ -187,9 +219,10 @@ export function DashboardView({
                 key={c.currency}
                 href={`/dashboard?currency=${c.currency}`}
                 aria-current={c.currency === currency ? "true" : undefined}
-                className={`tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ${
+                className={cn(
+                  "tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium",
                   c.currency === currency ? "border border-stone-300 bg-stone-200/80 text-stone-900" : "border border-line bg-white text-stone-700 hover:border-stone-400"
-                }`}
+                )}
               >
                 {c.currency}
                 <span className="num text-stone-500">{c.count}</span>
@@ -197,68 +230,103 @@ export function DashboardView({
             ))}
           </nav>
         )}
-        <dl className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-          <Figure label="Waiting" value={formatMoney(m.openValue, currency)} />
-          <Figure label="Won" value={formatMoney(m.acceptedValue, currency)} />
+        <dl className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          <Figure label="Open quotes" value={formatMoney(m.openValue, currency)} note={`${m.openCount} ${m.openCount === 1 ? "quote" : "quotes"} waiting on a reply`} />
           <Figure
-            label="Win rate"
-            value={m.winRate === null ? "–" : `${m.winRate}%`}
-            note={m.winRate === null ? "Nothing won or lost yet" : undefined}
+            label="Won this month"
+            value={wins ? formatCurrency(wins.thisMonth, currency) : "–"}
+            note={wins ? `Last month ${formatCurrency(wins.lastMonth, currency)}` : "Counting from today"}
           />
         </dl>
       </section>
 
-      {/* One picture: where the money in sent quotes stands. */}
-      <section className="card px-5 py-4" aria-labelledby="money-title">
-        <h2 id="money-title" className="text-[16px] font-medium text-stone-900">
-          Where your money is
-        </h2>
-        {moneyTotal > 0 ? (
-          <>
-            <div
-              className="mt-3 flex h-7 gap-[3px] overflow-hidden rounded-[6px]"
-              role="img"
-              aria-label={parts.map((p) => `${p.label} ${formatCurrency(p.amount, currency)}`).join(", ")}
+      {/* What happened lately, so nothing done in the background goes unseen. */}
+      {recent.length > 0 && (
+        <section className="card" aria-labelledby="recent">
+          <h2 id="recent" className="border-b border-[#ECEEF1] px-5 py-3 text-[16px] font-medium text-stone-900">
+            Recent
+          </h2>
+          <ul className="divide-y divide-[#ECEEF1]">
+            {recent.map((r, i) => (
+              <li key={`${r.at}-${i}`} className="flex items-baseline gap-3 px-5 py-3 text-[15px]">
+                {r.unread && (
+                  <span className="h-2 w-2 shrink-0 self-center rounded-full bg-info-500" aria-hidden="true" />
+                )}
+                <span className={cn("min-w-0 flex-1 [overflow-wrap:anywhere]", r.unread ? "font-medium text-stone-900" : "text-stone-700")}>
+                  {r.unread && <span className="sr-only">New: </span>}
+                  {r.text}
+                </span>
+                <span className="shrink-0 text-[13px] text-stone-500">{when(r.at)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** The steps to a first follow-up, with progress filled in as each is done. */
+function Checklist({ steps }: { steps: { label: string; done: boolean }[] }) {
+  const done = steps.filter((s) => s.done).length;
+  const nextStep = steps.findIndex((s) => !s.done);
+  return (
+    <div className="mt-3">
+      <div className="flex gap-1.5" role="img" aria-label={`${done} of ${steps.length} steps done`}>
+        {steps.map((s) => (
+          <span key={s.label} className={cn("h-2 flex-1 rounded-full", s.done ? "bg-emerald-600" : "bg-stone-200")} />
+        ))}
+      </div>
+      <p className="num mt-1.5 text-[13px] text-stone-500">
+        {done} of {steps.length} done
+      </p>
+      <ol className="mt-2 divide-y divide-[#ECEEF1]">
+        {steps.map((s, i) => (
+          <li key={s.label} className="flex min-h-11 items-center gap-3 py-2">
+            <span
+              className={cn(
+                "grid h-6 w-6 shrink-0 place-items-center rounded-full border",
+                s.done ? "border-emerald-600 bg-emerald-600 text-white" : "border-stone-300 text-transparent"
+              )}
+              aria-hidden="true"
             >
-              {parts
-                .filter((p) => p.amount > 0)
-                .map((p) => (
-                  <span key={p.key} className="block h-full min-w-[6px]" style={{ flexGrow: p.amount, flexBasis: 0, background: p.color }} />
-                ))}
-            </div>
-            <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[14px] text-stone-600">
-              {parts.map((p) => (
-                <li key={p.key} className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: p.color }} aria-hidden="true" />
-                  {p.label} <span className="num font-medium text-stone-900">{formatCurrency(p.amount, currency)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <>
-            <div className="mt-3 h-7 rounded-[6px] bg-stone-100" aria-hidden="true" />
-            <p className="mt-3 text-[14px] text-stone-500">Fills in once you&apos;ve sent a quote.</p>
-          </>
-        )}
-      </section>
+              <Check className="h-3.5 w-3.5" strokeWidth={3} />
+            </span>
+            <span className={cn("min-w-0 flex-1 text-[15px]", s.done ? "text-stone-500" : i === nextStep ? "font-medium text-stone-900" : "text-stone-600")}>
+              <span className="sr-only">{s.done ? "Done: " : "To do: "}</span>
+              {s.label}
+            </span>
+            {i === nextStep && i === 1 && (
+              <Link href="/quotes?new=1" className="btn-secondary shrink-0 px-3">
+                <Plus className="h-4 w-4" /> Add your first quote
+              </Link>
+            )}
+            {i === nextStep && i === 2 && (
+              <Link href="/follow-ups" className="btn-secondary shrink-0 px-3">
+                Go to follow-ups
+              </Link>
+            )}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
 
 function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="flex min-w-0 items-baseline justify-between gap-3 px-5 py-3.5 sm:block">
+    <div className="min-w-0 px-5 py-3.5">
       <dt className="text-[14px] text-stone-500">{label}</dt>
       {/* Long amounts get a smaller size, so a big total stays on one line instead of breaking mid-number. */}
       <dd
-        className={`num text-right font-medium leading-tight text-stone-900 [overflow-wrap:anywhere] sm:mt-1 sm:text-left ${
+        className={cn(
+          "num mt-1 font-medium leading-tight text-stone-900 [overflow-wrap:anywhere]",
           value.length > 16 ? "text-[17px]" : value.length > 12 ? "text-[20px]" : "text-[24px]"
-        }`}
+        )}
       >
         {value}
-        {note && <span className="block text-[13px] font-normal text-stone-500">{note}</span>}
       </dd>
+      {note && <dd className="mt-0.5 text-[13px] text-stone-500">{note}</dd>}
     </div>
   );
 }

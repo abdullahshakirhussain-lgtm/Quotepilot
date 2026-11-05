@@ -94,6 +94,13 @@ export function todayISO(timeZone?: string): string {
   return new Date(d.getTime() - offset).toISOString().slice(0, 10);
 }
 
+/** The date (YYYY-MM-DD) a moment falls on in `timeZone` (UTC if the zone isn't valid). */
+export function dateInZone(iso: string, timeZone?: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return isValidTimeZone(timeZone) ? zonedParts(d, timeZone).date : d.toISOString().slice(0, 10);
+}
+
 /** Current hour (0–23) in `timeZone` (or the local clock if omitted). */
 export function currentHour(timeZone?: string): number {
   if (isValidTimeZone(timeZone)) return zonedParts(new Date(), timeZone).hour;
