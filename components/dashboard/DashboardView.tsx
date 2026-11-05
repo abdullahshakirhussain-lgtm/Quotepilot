@@ -253,18 +253,39 @@ export function DashboardView({
                 Recent
               </h2>
               <ul className="divide-y divide-[#ECEEF1]">
-                {recent.map((r, i) => (
-                  <li key={`${r.at}-${i}`} className="flex items-baseline gap-3 px-5 py-3 text-[15px]">
-                    {r.unread && (
-                      <span className="h-2 w-2 shrink-0 self-center rounded-full bg-info-500" aria-hidden="true" />
-                    )}
-                    <span className={cn("min-w-0 flex-1 [overflow-wrap:anywhere]", r.unread ? "font-medium text-stone-900" : "text-stone-700")}>
-                      {r.unread && <span className="sr-only">New: </span>}
-                      {r.text}
-                    </span>
-                    <span className="shrink-0 text-[13px] text-stone-500">{when(r.at)}</span>
-                  </li>
-                ))}
+                {recent.map((r, i) => {
+                  const row = "flex items-baseline gap-3 px-5 py-3 text-[15px]";
+                  const inner = (
+                    <>
+                      {r.unread && (
+                        <span className="h-2 w-2 shrink-0 self-center rounded-full bg-info-500" aria-hidden="true" />
+                      )}
+                      <span className={cn("min-w-0 flex-1 [overflow-wrap:anywhere]", r.unread ? "font-medium text-stone-900" : "text-stone-700")}>
+                        {r.unread && <span className="sr-only">New: </span>}
+                        {r.text}
+                      </span>
+                      <span className="shrink-0 text-[13px] text-stone-500">{when(r.at)}</span>
+                    </>
+                  );
+                  // Each line opens what it's about: the quote, or billing.
+                  const link = cn(row, "hover:bg-stone-50 focus-visible:bg-stone-50");
+                  return (
+                    <li key={`${r.at}-${i}`}>
+                      {r.quoteId ? (
+                        <QuoteLink quoteId={r.quoteId} className={link}>
+                          {inner}
+                        </QuoteLink>
+                      ) : r.href ? (
+                        // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
+                        <a href={r.href} className={link}>
+                          {inner}
+                        </a>
+                      ) : (
+                        <div className={row}>{inner}</div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}

@@ -22,6 +22,10 @@ export interface RecentItem {
   text: string;
   /** An update under the bell not seen yet. */
   unread?: boolean;
+  /** The quote it's about, opened when the line is clicked. */
+  quoteId?: string;
+  /** Somewhere else it leads (billing), when it isn't about a quote. */
+  href?: string;
 }
 
 export interface DashboardExtras {
@@ -77,21 +81,21 @@ export async function loadDashboardExtras(
     supabase.from("follow_ups").select("id").eq("user_id", userId).eq("status", "completed").limit(1),
     supabase
       .from("quotes")
-      .select("status, amount, currency, decided_at, lead:leads(customer_name)")
+      .select("id, status, amount, currency, decided_at, lead:leads(customer_name)")
       .eq("user_id", userId)
       .in("status", ["accepted", "rejected"])
       .gte("decided_at", decidedSince)
       .order("decided_at", { ascending: false })
       .limit(500),
-    supabase.from("notifications").select("title, created_at, read_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(RECENT),
+    supabase.from("notifications").select("kind, quote_id, title, created_at, read_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(RECENT),
     supabase
       .from("email_logs")
-      .select("created_at, sent_at, lead:leads(customer_name)")
+      .select("quote_id, created_at, sent_at, lead:leads(customer_name)")
       .eq("user_id", userId)
       .eq("status", "sent")
       .order("created_at", { ascending: false })
       .limit(RECENT),
-    supabase.from("quotes").select("created_at, lead:leads(customer_name)").eq("user_id", userId).order("created_at", { ascending: false }).limit(RECENT),
+    supabase.from("quotes").select("id, created_at, lead:leads(customer_name)").eq("user_id", userId).order("created_at", { ascending: false }).limit(RECENT),
   ]);
 
   for (const [name, r] of [["week", weekRes], ["first follow-up", everRes], ["wins", decidedRes], ["updates", notesRes], ["emails", emailsRes], ["quotes", addedRes]] as const) {
@@ -103,7 +107,7 @@ export async function loadDashboardExtras(
 
   // Wins per currency: amounts in different currencies are never added.
   let wins: Record<string, Wins> | null = null;
-  const decided = (decidedRes.data ?? []) as { status: string; amount: number; currency: string | null; decided_at: string | null; lead: unknown }[];
+  const decided = (decidedRes.data ?? []) as { id: string; status: string; amount: number; currency: string | null; decided_at: string | null; lead: unknown }[];
   if (!decidedRes.error) {
     const out: Record<string, Wins> = {};
     for (const q of decided) {
@@ -122,22 +126,27 @@ export async function loadDashboardExtras(
   }
 
   const merged: RecentItem[] = [
-    ...((notesRes.data ?? []) as { title: string; created_at: string; read_at: string | null }[]).map((n) => ({
+    // Each line leads where the bell's would: its quote, or billing.
+    ...((notesRes.data ?? []) as { kind: string; quote_id: string | null; title: string; created_at: string; read_at: string | null }[]).map((n) => ({
       at: n.created_at,
       text: n.title,
       unread: !n.read_at,
+      quoteId: n.quote_id ?? undefined,
+      href: !n.quote_id && (n.kind.startsWith("payment") || n.kind.startsWith("subscription")) ? "/settings?area=billing" : undefined,
     })),
-    ...((emailsRes.data ?? []) as { created_at: string; sent_at: string | null; lead: unknown }[]).map((e) => ({
+    ...((emailsRes.data ?? []) as { quote_id: string | null; created_at: string; sent_at: string | null; lead: unknown }[]).map((e) => ({
       at: e.sent_at ?? e.created_at,
       text: `You emailed ${nameOf(e.lead)}`,
+      quoteId: e.quote_id ?? undefined,
     })),
     ...decided
       .filter((q) => q.decided_at)
       .slice(0, RECENT)
-      .map((q) => ({ at: q.decided_at as string, text: `Quote for ${nameOf(q.lead)} marked ${q.status === "accepted" ? "won" : "lost"}` })),
-    ...((addedRes.data ?? []) as { created_at: string; lead: unknown }[]).map((q) => ({
+      .map((q) => ({ at: q.decided_at as string, text: `Quote for ${nameOf(q.lead)} marked ${q.status === "accepted" ? "won" : "lost"}`, quoteId: q.id })),
+    ...((addedRes.data ?? []) as { id: string; created_at: string; lead: unknown }[]).map((q) => ({
       at: q.created_at,
       text: `Quote added for ${nameOf(q.lead)}`,
+      quoteId: q.id,
     })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
