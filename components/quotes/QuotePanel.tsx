@@ -121,6 +121,8 @@ type Event = {
   tone?: "good" | "bad" | "reply";
   /** The message itself, when there is one. */
   text?: string;
+  /** Said instead, when a reply's text wasn't kept. */
+  note?: string;
   attachments?: string[];
   /** A customer's reply that can be answered. */
   reply?: ReplyContext;
@@ -205,6 +207,7 @@ function history(d: PanelData): Event[] {
       title: `${from} ${r.auto_reply ? "sent an automatic reply" : "replied"}`,
       detail: r.subject ?? undefined,
       text: text || undefined,
+      note: text ? undefined : "The text of this reply wasn't saved in QuoteLoop. It's in your email inbox.",
       attachments: r.attachment_names ?? undefined,
       tone: "reply",
       reply: r.auto_reply ? undefined : { id: r.id, subject: r.subject, from, text },
@@ -541,6 +544,7 @@ function QuotePanel({ quoteId, today, onClose }: { quoteId: string; today: strin
                   </div>
                   {e.detail && <p className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">{e.detail}</p>}
                   {e.text && <MessageText text={e.text} />}
+                  {e.note && <p className="mt-1 text-[13px] italic text-stone-500">{e.note}</p>}
                   {e.attachments && e.attachments.length > 0 && (
                     <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[13px] text-stone-500">
                       <Paperclip className="h-3.5 w-3.5" aria-hidden />

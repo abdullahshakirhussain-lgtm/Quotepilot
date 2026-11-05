@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { recoverReplyText } from "@/lib/replies-server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .order("created_at", { ascending: false }),
     supabase
       .from("customer_replies")
-      .select("id, from_name, from_email, subject, body, attachment_names, received_at, auto_reply")
+      .select("id, from_name, from_email, subject, body, attachment_names, received_at, auto_reply, resend_email_id")
       .eq("quote_id", id)
       .eq("user_id", user.id)
       .order("received_at", { ascending: false }),
@@ -56,10 +57,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (replies.error) console.error("[quote panel] replies unavailable:", replies.error.message);
 
   const lead = Array.isArray(quote.lead) ? (quote.lead[0] ?? null) : (quote.lead ?? null);
+  // Replies from before QuoteLoop kept their text get it fetched once; the
+  // Resend id stays on the server.
+  const replyRows = replies.error ? [] : (replies.data ?? []);
+  const recovered = await recoverReplyText(user.id, replyRows);
   return NextResponse.json({
     quote: { ...quote, lead },
     followUps: followUps.data ?? [],
     emails: emails.error ? [] : (emails.data ?? []),
-    replies: replies.error ? [] : (replies.data ?? []),
+    replies: replyRows.map(({ resend_email_id: _resendId, ...r }) => ({ ...r, body: recovered[r.id] ?? r.body })),
   });
 }
