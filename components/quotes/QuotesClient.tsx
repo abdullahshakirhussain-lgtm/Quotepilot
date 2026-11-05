@@ -584,6 +584,9 @@ function QuoteRow({
 
   // At most one main and one second action in view; everything else is in ⋯.
   const urgentOpen = isOpen && urgent;
+  // The chip saying when the next follow-up is due (a reply has its own prompt instead).
+  const dueChip = isOpen && !replied && Boolean(quote.next_follow_up_at);
+
   return (
     <li
       className="ql-in grid grid-cols-1 gap-x-6 gap-y-3 px-4 py-4 transition-colors hover:bg-stone-50/60 sm:px-5 md:grid-cols-[minmax(0,1fr)_auto]"
@@ -597,7 +600,11 @@ function QuoteRow({
               {quote.title}
             </button>
           </h3>
-          <StatusBadge kind="quote" value={quote.status} />
+          {/* One status mark per row: when the due chip below says when to follow
+              up, "Sent" or "Follow-up due" would only repeat it. */}
+          {!(dueChip && (quote.status === "sent" || quote.status === "follow_up_due")) && (
+            <StatusBadge kind="quote" value={quote.status} />
+          )}
           {sample && <SampleBadge />}
         </div>
         <p className="mt-0.5 text-[14px] text-stone-600 [overflow-wrap:anywhere]">
@@ -610,8 +617,8 @@ function QuoteRow({
             {/* A reply says so in its own prompt below. */}
             {isOpen &&
               !replied &&
-              (quote.next_follow_up_at ? (
-                <DueChip dueDate={quote.next_follow_up_at} today={today} />
+              (dueChip ? (
+                <DueChip dueDate={quote.next_follow_up_at!} today={today} />
               ) : (
                 <span>{step.text}</span>
               ))}

@@ -183,7 +183,7 @@ export function TabBar({ attentionCount }: { attentionCount: number }) {
 }
 
 /** Phones and tablets: Customers and Pipeline share a tab, so their pages
-    switch between the list and the stages here. */
+    switch between the list and the stages here, in the page's title row. */
 export function CustomerViews() {
   const pathname = usePathname();
   const views = [
@@ -192,7 +192,7 @@ export function CustomerViews() {
   ];
   if (!views.some((v) => pathname === v.href)) return null;
   return (
-    <nav aria-label="Customer views" className="mb-4 inline-flex rounded-full bg-stone-200/70 p-1 lg:hidden">
+    <nav aria-label="Customer views" className="inline-flex rounded-full bg-stone-200/70 p-1 lg:hidden">
       {views.map((v) => {
         const active = pathname === v.href;
         return (

@@ -6,6 +6,7 @@ import {
 } from "@/components/pipeline/PipelineClient";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CustomerViews } from "@/components/Sidebar";
 import { KanbanSquare } from "lucide-react";
 import Link from "next/link";
 import type { LeadStatus } from "@/lib/constants";
@@ -74,7 +75,7 @@ export default async function PipelinePage() {
   if (rows.length === 0) {
     return (
       <div>
-        <PageHeader title="Pipeline" subtitle="Every customer by stage." />
+        <PageHeader title="Pipeline" subtitle="Every customer by stage." actions={<CustomerViews />} />
         <EmptyState
           icon={<KanbanSquare className="h-5 w-5" />}
           title="Your pipeline is empty"

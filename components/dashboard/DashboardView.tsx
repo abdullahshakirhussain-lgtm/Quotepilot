@@ -74,7 +74,6 @@ export function DashboardView({
     { label: "Set up your business", done: true },
     { label: "Add a quote you sent", done: m.quotesSent + m.draftCount > 0 },
     { label: "Send your first follow-up", done: followedUpOnce },
-    { label: "Mark a quote won or lost", done: m.wonCount + m.lostCount > 0 },
   ];
 
   // A brand-new workspace: the way to a first follow-up, not a page of zeros.
@@ -87,7 +86,7 @@ export function DashboardView({
             Welcome to QuoteLoop
           </h1>
           <p className="max-w-xl text-base text-stone-600">
-            Four steps to your first quote followed up. Nothing is sent until you choose to.
+            Three steps to your first quote followed up. Nothing is sent until you choose to.
           </p>
           <Checklist steps={steps} />
           <div className="flex flex-wrap items-center gap-3 border-t border-[#ECEEF1] pt-4">
@@ -112,156 +111,165 @@ export function DashboardView({
     <div className="flex flex-col gap-4">
       {hasSampleData && <SampleDataBanner />}
 
-      {/* Until the first follow-up is done: the steps there, at the top. */}
-      {!followedUpOnce && (
-        <section className="card px-5 py-4" aria-labelledby="get-started">
-          <h2 id="get-started" className="text-[16px] font-medium text-stone-900">
-            Get your first quote followed up
-          </h2>
-          <Checklist steps={steps} />
-        </section>
-      )}
+      {/* Wide screens: today's people on the left, progress, money and activity
+          beside them, so a short list isn't stretched across the whole screen.
+          Narrower screens keep one column in the same order. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+          {/* Until the first follow-up is done: the steps there, at the top. */}
+          {!followedUpOnce && (
+            <section className="card px-5 py-4" aria-labelledby="get-started">
+              <h2 id="get-started" className="text-[16px] font-medium text-stone-900">
+                Get your first quote followed up
+              </h2>
+              <Checklist steps={steps} />
+            </section>
+          )}
 
-      {/* Who needs you today: the headline is the count, the list is the people. */}
-      <section aria-labelledby="follow-up-now" className="flex flex-col gap-3">
-        <h1 id="follow-up-now" className="text-[22px] font-medium leading-tight text-stone-900">
-          {all > 0 ? (
-            <>
-              <span className="num">{all}</span> {all === 1 ? "quote needs" : "quotes need"} you today
-            </>
-          ) : (
-            "You’re all caught up"
-          )}
-        </h1>
-        <div className="card">
-          {shownReplies.length > 0 && (
-            <ul className="flex flex-col divide-y divide-[#ECEEF1]" aria-label="Customers who replied">
-              {shownReplies.map((r) => (
-                <li key={r.id} className="flex items-center gap-3 bg-info-50/60 px-5 py-3.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</div>
-                    <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">
-                      Replied {relativeDay(r.repliedAt, today)} about {r.title}
-                    </div>
-                    {r.snippet && (
-                      <div className="mt-0.5 line-clamp-1 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
-                    )}
-                  </div>
-                  <QuoteLink quoteId={r.id} className="btn-secondary shrink-0 px-3" aria-label={`Answer ${r.customerName}'s reply`}>
-                    Answer
-                  </QuoteLink>
-                </li>
-              ))}
-            </ul>
-          )}
-          {shownDue.length > 0 && (
-            <div className={shownReplies.length > 0 ? "border-t border-[#ECEEF1]" : undefined}>
-              <AttentionList items={shownDue} today={today} />
-            </div>
-          )}
-          {all === 0 && (
-            <p className="px-5 py-4 text-[15px] text-stone-600">
-              {next ? (
+          {/* Who needs you today: the headline is the count, the list is the people. */}
+          <section aria-labelledby="follow-up-now" className="flex flex-col gap-3">
+            <h1 id="follow-up-now" className="text-[22px] font-medium leading-tight text-stone-900">
+              {all > 0 ? (
                 <>
-                  Next: <span className="font-medium text-stone-900">{next.lead?.customer_name ?? "a customer"}</span>,{" "}
-                  {relativeDay(next.due_date, today)}
+                  <span className="num">{all}</span> {all === 1 ? "quote needs" : "quotes need"} you today
                 </>
               ) : (
-                "Nothing is waiting on you."
+                "You’re all caught up"
               )}
-            </p>
+            </h1>
+            <div className="card">
+              {shownReplies.length > 0 && (
+                <ul className="flex flex-col divide-y divide-[#ECEEF1]" aria-label="Customers who replied">
+                  {shownReplies.map((r) => (
+                    <li key={r.id} className="flex items-center gap-3 bg-info-50/60 px-5 py-3.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</div>
+                        <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">
+                          Replied {relativeDay(r.repliedAt, today)} about {r.title}
+                        </div>
+                        {r.snippet && (
+                          <div className="mt-0.5 line-clamp-1 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
+                        )}
+                      </div>
+                      <QuoteLink quoteId={r.id} className="btn-secondary shrink-0 px-3" aria-label={`Answer ${r.customerName}'s reply`}>
+                        Answer
+                      </QuoteLink>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {shownDue.length > 0 && (
+                <div className={shownReplies.length > 0 ? "border-t border-[#ECEEF1]" : undefined}>
+                  <AttentionList items={shownDue} today={today} />
+                </div>
+              )}
+              {all === 0 && (
+                <p className="px-5 py-4 text-[15px] text-stone-600">
+                  {next ? (
+                    <>
+                      Next: <span className="font-medium text-stone-900">{next.lead?.customer_name ?? "a customer"}</span>,{" "}
+                      {relativeDay(next.due_date, today)}
+                    </>
+                  ) : (
+                    "Nothing is waiting on you."
+                  )}
+                </p>
+              )}
+              {all > SHOWN && (
+                <Link
+                  href="/follow-ups"
+                  className="tap flex items-center border-t border-[#ECEEF1] px-5 text-[14px] font-medium text-stone-700 hover:text-stone-900 hover:underline"
+                >
+                  See all {all}
+                </Link>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          {/* Progress you can see filling up: this week's follow-ups, Monday to Sunday. */}
+          {week && (
+            <section className="card px-5 py-4" aria-labelledby="this-week">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h2 id="this-week" className="text-[16px] font-medium text-stone-900">
+                  This week
+                </h2>
+                <p className="num text-[14px] text-stone-600">
+                  {week.total === 0
+                    ? "No follow-ups due this week"
+                    : week.done === week.total
+                      ? `All ${week.total} follow-ups done`
+                      : `${week.done} of ${week.total} follow-ups done`}
+                </p>
+              </div>
+              {week.total > 0 && (
+                <div
+                  className="mt-3 h-2.5 overflow-hidden rounded-full bg-stone-100"
+                  role="img"
+                  aria-label={`${week.done} of ${week.total} follow-ups due this week are done`}
+                >
+                  <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-300" style={{ width: `${Math.round((week.done / week.total) * 100)}%` }} />
+                </div>
+              )}
+            </section>
           )}
-          {all > SHOWN && (
-            <Link
-              href="/follow-ups"
-              className="tap flex items-center border-t border-[#ECEEF1] px-5 text-[14px] font-medium text-stone-700 hover:text-stone-900 hover:underline"
-            >
-              See all {all}
-            </Link>
+
+          {/* The money, in context. Amounts are in one currency at a time, never added across currencies. */}
+          <section aria-label="Your numbers" className="flex flex-col gap-2">
+            {currencies.length > 1 && (
+              <nav aria-label="Currency" className="flex flex-wrap items-center justify-end gap-1.5">
+                {currencies.map((c) => (
+                  // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
+                  <a
+                    key={c.currency}
+                    href={`/dashboard?currency=${c.currency}`}
+                    aria-current={c.currency === currency ? "true" : undefined}
+                    className={cn(
+                      "tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium",
+                      c.currency === currency ? "border border-stone-300 bg-stone-200/80 text-stone-900" : "border border-line bg-white text-stone-700 hover:border-stone-400"
+                    )}
+                  >
+                    {c.currency}
+                    <span className="num text-stone-500">{c.count}</span>
+                  </a>
+                ))}
+              </nav>
+            )}
+            <dl className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+              <Figure label="Open quotes" value={formatMoney(m.openValue, currency)} note={`${m.openCount} ${m.openCount === 1 ? "quote" : "quotes"} waiting on a reply`} />
+              <Figure
+                label="Won this month"
+                value={wins ? formatCurrency(wins.thisMonth, currency) : "–"}
+                note={wins ? `Last month ${formatCurrency(wins.lastMonth, currency)}` : "Counting from today"}
+              />
+            </dl>
+          </section>
+
+          {/* What happened lately, so nothing done in the background goes unseen. */}
+          {recent.length > 0 && (
+            <section className="card" aria-labelledby="recent">
+              <h2 id="recent" className="border-b border-[#ECEEF1] px-5 py-3 text-[16px] font-medium text-stone-900">
+                Recent
+              </h2>
+              <ul className="divide-y divide-[#ECEEF1]">
+                {recent.map((r, i) => (
+                  <li key={`${r.at}-${i}`} className="flex items-baseline gap-3 px-5 py-3 text-[15px]">
+                    {r.unread && (
+                      <span className="h-2 w-2 shrink-0 self-center rounded-full bg-info-500" aria-hidden="true" />
+                    )}
+                    <span className={cn("min-w-0 flex-1 [overflow-wrap:anywhere]", r.unread ? "font-medium text-stone-900" : "text-stone-700")}>
+                      {r.unread && <span className="sr-only">New: </span>}
+                      {r.text}
+                    </span>
+                    <span className="shrink-0 text-[13px] text-stone-500">{when(r.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>
-      </section>
-
-      {/* Progress you can see filling up: this week's follow-ups, Monday to Sunday. */}
-      {week && (
-        <section className="card px-5 py-4" aria-labelledby="this-week">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 id="this-week" className="text-[16px] font-medium text-stone-900">
-              This week
-            </h2>
-            <p className="num text-[14px] text-stone-600">
-              {week.total === 0
-                ? "No follow-ups due this week"
-                : week.done === week.total
-                  ? `All ${week.total} follow-ups done`
-                  : `${week.done} of ${week.total} follow-ups done`}
-            </p>
-          </div>
-          {week.total > 0 && (
-            <div
-              className="mt-3 h-2.5 overflow-hidden rounded-full bg-stone-100"
-              role="img"
-              aria-label={`${week.done} of ${week.total} follow-ups due this week are done`}
-            >
-              <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-300" style={{ width: `${Math.round((week.done / week.total) * 100)}%` }} />
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* The money, in context. Amounts are in one currency at a time, never added across currencies. */}
-      <section aria-label="Your numbers" className="flex flex-col gap-2">
-        {currencies.length > 1 && (
-          <nav aria-label="Currency" className="flex flex-wrap items-center justify-end gap-1.5">
-            {currencies.map((c) => (
-              // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
-              <a
-                key={c.currency}
-                href={`/dashboard?currency=${c.currency}`}
-                aria-current={c.currency === currency ? "true" : undefined}
-                className={cn(
-                  "tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium",
-                  c.currency === currency ? "border border-stone-300 bg-stone-200/80 text-stone-900" : "border border-line bg-white text-stone-700 hover:border-stone-400"
-                )}
-              >
-                {c.currency}
-                <span className="num text-stone-500">{c.count}</span>
-              </a>
-            ))}
-          </nav>
-        )}
-        <dl className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-          <Figure label="Open quotes" value={formatMoney(m.openValue, currency)} note={`${m.openCount} ${m.openCount === 1 ? "quote" : "quotes"} waiting on a reply`} />
-          <Figure
-            label="Won this month"
-            value={wins ? formatCurrency(wins.thisMonth, currency) : "–"}
-            note={wins ? `Last month ${formatCurrency(wins.lastMonth, currency)}` : "Counting from today"}
-          />
-        </dl>
-      </section>
-
-      {/* What happened lately, so nothing done in the background goes unseen. */}
-      {recent.length > 0 && (
-        <section className="card" aria-labelledby="recent">
-          <h2 id="recent" className="border-b border-[#ECEEF1] px-5 py-3 text-[16px] font-medium text-stone-900">
-            Recent
-          </h2>
-          <ul className="divide-y divide-[#ECEEF1]">
-            {recent.map((r, i) => (
-              <li key={`${r.at}-${i}`} className="flex items-baseline gap-3 px-5 py-3 text-[15px]">
-                {r.unread && (
-                  <span className="h-2 w-2 shrink-0 self-center rounded-full bg-info-500" aria-hidden="true" />
-                )}
-                <span className={cn("min-w-0 flex-1 [overflow-wrap:anywhere]", r.unread ? "font-medium text-stone-900" : "text-stone-700")}>
-                  {r.unread && <span className="sr-only">New: </span>}
-                  {r.text}
-                </span>
-                <span className="shrink-0 text-[13px] text-stone-500">{when(r.at)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      </div>
     </div>
   );
 }
@@ -306,6 +314,7 @@ function Checklist({ steps }: { steps: { label: string; done: boolean }[] }) {
                 Go to follow-ups
               </Link>
             )}
+
           </li>
         ))}
       </ol>

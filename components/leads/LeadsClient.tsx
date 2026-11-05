@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
 import Link from "next/link";
-import { FilePlus2, Mail, Pencil, Plus, Search, Trash2, UserPlus, Users } from "lucide-react";
+import { FilePlus2, Loader2, Mail, Pencil, Plus, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { Menu, MenuItem } from "@/components/ui/Menu";
+import { useConfirm, type ConfirmOptions } from "@/components/ui/ConfirmDialog";
 import { LeadFormModal } from "./LeadFormModal";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/constants";
-import type { Lead } from "@/lib/types";
+import type { ActionResult, Lead } from "@/lib/types";
 import { deleteLead } from "@/app/(app)/leads/actions";
 import { isSampleAddress } from "@/lib/email-address";
 import { SampleBadge, SampleDataBanner } from "@/components/SampleData";
+import { CustomerViews } from "@/components/Sidebar";
 
 export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startNew?: boolean }) {
   const [query, setQuery] = useState("");
@@ -48,9 +51,12 @@ export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startN
         subtitle="Created automatically when you add a quote."
         actions={
           // "New quote" lives in the navigation, once per screen.
-          <button className="btn-secondary" onClick={() => setShowNew(true)}>
-            <UserPlus className="h-4 w-4" /> Add customer
-          </button>
+          <>
+            <CustomerViews />
+            <button className="btn-secondary" onClick={() => setShowNew(true)}>
+              <UserPlus className="h-4 w-4" /> Add customer
+            </button>
+          </>
         }
       />
 
@@ -69,19 +75,19 @@ export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startN
         />
       ) : (
         <>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <div className="relative min-w-[220px] flex-1">
+          <div className="mb-3 flex gap-2">
+            <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-stone-500" />
               <input
                 className="input pl-9"
-                placeholder="Search name, company, email or phone"
+                placeholder="Search customers"
                 aria-label="Search customers"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             <select
-              className="input tap w-auto"
+              className="input tap w-auto shrink-0"
               aria-label="Filter by stage"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "all")}
@@ -156,15 +162,9 @@ export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startN
                       <Link href={`/quotes?lead=${lead.id}`} className="btn-secondary">
                         <FilePlus2 className="h-4 w-4" /> New quote
                       </Link>
-                      <ConfirmButton
-                        className="btn-ghost text-red-700 hover:bg-red-50"
-                        title="Delete customer"
-                        confirm={deleteOptions(lead)}
-                        action={() => deleteLead(lead.id)}
-                        onError={setDeleteError}
-                      >
-                        <Trash2 className="h-4 w-4" /> Delete
-                      </ConfirmButton>
+                      <div className="ml-auto">
+                        <MoreActions name={lead.customer_name} confirm={deleteOptions(lead)} onDelete={() => deleteLead(lead.id)} onError={setDeleteError} />
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -230,15 +230,7 @@ export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startN
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
-                            <ConfirmButton
-                              className="btn-ghost tap px-2 py-1.5 text-stone-600 hover:bg-red-50 hover:text-red-700"
-                              title="Delete customer"
-                              confirm={deleteOptions(lead)}
-                              action={() => deleteLead(lead.id)}
-                              onError={setDeleteError}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </ConfirmButton>
+                            <MoreActions name={lead.customer_name} confirm={deleteOptions(lead)} onDelete={() => deleteLead(lead.id)} onError={setDeleteError} />
                           </div>
                         </td>
                       </tr>
@@ -254,5 +246,56 @@ export function LeadsClient({ leads, startNew = false }: { leads: Lead[]; startN
       {showNew && <LeadFormModal onClose={() => setShowNew(false)} />}
       {editing && <LeadFormModal lead={editing} focusEmail={focusEmail} onClose={() => setEditing(null)} />}
     </div>
+  );
+}
+
+/**
+ * The customer's less frequent actions, Delete among them: kept in a menu, away
+ * from the buttons used every day, so it can't be tapped by mistake (NN/g,
+ * "Proximity of consequential options"). It still asks before deleting.
+ */
+function MoreActions({
+  name,
+  confirm: options,
+  onDelete,
+  onError,
+}: {
+  name: string;
+  confirm: ConfirmOptions;
+  onDelete: () => Promise<ActionResult>;
+  onError: (message: string | null) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
+  return (
+    <>
+      {pending ? (
+        <Loader2 className="m-2.5 h-4 w-4 animate-spin text-stone-500" aria-label="Deleting" />
+      ) : (
+        <Menu label={`More actions for ${name}`}>
+          <MenuItem
+            danger
+            onClick={async () => {
+              if (!(await confirm(options))) return;
+              onError(null);
+              start(async () => {
+                try {
+                  const result = await onDelete();
+                  if (!result.ok) onError(result.error);
+                } catch (e) {
+                  unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
+                  onError(
+                    "That didn't go through, so nothing was deleted. You may have lost your connection, or been signed out in another tab. Refresh the page and try again."
+                  );
+                }
+              });
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete customer
+          </MenuItem>
+        </Menu>
+      )}
+      {confirmDialog}
+    </>
   );
 }

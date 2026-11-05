@@ -9,6 +9,7 @@ import { Menu, MenuItem, MenuLabel } from "@/components/ui/Menu";
 import { cn } from "@/lib/utils";
 import { combineMoney, formatMoney, type Money } from "@/lib/metrics";
 import { setLeadStatus } from "@/app/(app)/leads/actions";
+import { CustomerViews } from "@/components/Sidebar";
 
 export interface PipelineLead {
   id: string;
@@ -56,6 +57,7 @@ export function PipelineClient({ leads, currency }: { leads: PipelineLead[]; cur
     <div>
       <PageHeader
         title="Pipeline"
+        actions={<CustomerViews />}
         subtitle={
           <>
             Every customer by stage. Won and Lost update automatically from your quotes.
