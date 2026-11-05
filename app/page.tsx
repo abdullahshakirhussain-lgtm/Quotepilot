@@ -44,12 +44,12 @@ const COSTS = [
   {
     figure: "63%",
     text: "of home improvement teams give up on a quote after one or two follow-ups.",
-    source: { label: "Hatch, 2024 survey of 120+ call centers", href: "https://www.usehatchapp.com/blog/state-of-home-improvement-industry-2024" },
+    source: { label: "Hatch, 2024", href: "https://www.usehatchapp.com/blog/state-of-home-improvement-industry-2024" },
   },
   {
     figure: "69%",
     text: "of home service businesses win over half the jobs they quote.",
-    source: { label: "Jobber, survey of 1,050 US owners, 2025", href: "https://www.getjobber.com/home-service-trends-report/" },
+    source: { label: "Jobber, 2026 report", href: "https://www.getjobber.com/home-service-trends-report/" },
   },
   {
     figure: "7×",
@@ -58,7 +58,7 @@ const COSTS = [
   },
   {
     figure: `$${(PRICE_MONTHLY * 12).toFixed(2)}`,
-    text: `a year for QuoteLoop. One $300 job pays for it. One $2,500 job pays for ${Math.floor(2500 / (PRICE_MONTHLY * 12))} years.`,
+    text: `a year for QuoteLoop. One $300 job covers it. A $2,500 job covers ${Math.floor(2500 / (PRICE_MONTHLY * 12))} years.`,
   },
 ];
 
@@ -257,25 +257,24 @@ export default function LandingPage() {
             A quote that goes quiet isn&apos;t always a &quot;no&quot;. Often the customer just got busy, and the job goes to whoever
             checks in first.
           </p>
-          <dl className="mt-14 grid gap-y-7">
+          {/* The figures lead: a big number, one short line, the source small beneath. */}
+          <dl className="mt-14 grid gap-x-12 gap-y-12 sm:grid-cols-2">
             {COSTS.map((c, n) => (
-              <div key={c.figure} className="grid grid-cols-[88px_minmax(0,1fr)] items-baseline gap-x-6 sm:grid-cols-[132px_minmax(0,1fr)]" data-reveal style={i(n + 2)}>
-                <dt className="num t-lead text-right font-medium">{c.figure}</dt>
-                <dd className="max-w-[40ch] text-[var(--lp-muted)]">
-                  {c.text}
-                  {c.source && (
-                    <>
-                      {" "}
-                      <a href={c.source.href} target="_blank" rel="noopener noreferrer" className="lp-link text-[var(--t-small)]">
-                        Source: {c.source.label}
-                      </a>
-                    </>
+              <div key={c.figure} data-reveal style={i(n + 2)}>
+                <dt className="num text-[clamp(52px,5.2vw,76px)] font-semibold leading-none tracking-[-0.02em] text-[var(--lp-ink)]">{c.figure}</dt>
+                <dd className="mt-3 max-w-[24ch] text-[19px] leading-snug text-[var(--lp-ink)]">{c.text}</dd>
+                <dd className="t-small mt-2 text-[var(--lp-muted)]">
+                  {c.source ? (
+                    <a href={c.source.href} target="_blank" rel="noopener noreferrer" className="underline decoration-stone-400 underline-offset-4 hover:text-[var(--lp-ink)]">
+                      {c.source.label}
+                    </a>
+                  ) : (
+                    <>Plain arithmetic: {PRICE_LABEL} a month</>
                   )}
                 </dd>
               </div>
             ))}
           </dl>
-          <p className="t-small mt-8 text-[var(--lp-muted)] sm:pl-[156px]">The last line is plain arithmetic: {PRICE_LABEL} a month against one job.</p>
         </section>
 
         {/* How it works: each statement changes the screen on the stage. */}

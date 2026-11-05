@@ -120,18 +120,18 @@ const STATS: { value: string; label: string; body: string; source?: { label: str
     value: "63%",
     label: "of home improvement teams",
     body: "give up on a quote after one or two follow-ups.",
-    source: { label: "Hatch, 2024 survey of 120+ call centers", href: "https://www.usehatchapp.com/blog/state-of-home-improvement-industry-2024" },
+    source: { label: "Hatch, 2024", href: "https://www.usehatchapp.com/blog/state-of-home-improvement-industry-2024" },
   },
   {
     value: "69%",
     label: "of home service businesses",
     body: "win over half the jobs they quote.",
-    source: { label: "Jobber, survey of 1,050 US owners, 2025", href: "https://www.getjobber.com/home-service-trends-report/" },
+    source: { label: "Jobber, 2026 report", href: "https://www.getjobber.com/home-service-trends-report/" },
   },
   {
     value: `$${(PRICE_MONTHLY * 12).toFixed(2)}`,
     label: "a year for QuoteLoop.",
-    body: `One $300 job pays for it. One $2,500 job pays for ${Math.floor(2500 / (PRICE_MONTHLY * 12))} years.`,
+    body: `One $300 job covers it. A $2,500 job covers ${Math.floor(2500 / (PRICE_MONTHLY * 12))} years.`,
   },
   {
     value: "7×",
@@ -144,7 +144,7 @@ const STATS: { value: string; label: string; body: string; source?: { label: str
   },
 ];
 
-/** The sums, set like lines on a ledger: figure on the left, what it means on the right. */
+/** The sums: a big figure, one short line saying what it means, and its source. */
 export function LostQuoteStats() {
   return (
     <Band labelledBy="lost-quote">
@@ -159,32 +159,31 @@ export function LostQuoteStats() {
           </p>
         </div>
         <div>
-          <dl className="divide-y divide-stone-200 border-y border-stone-300">
+          {/* The figures lead: a big number, one short line, the source small beneath. */}
+          <dl className="grid gap-x-10 gap-y-10 sm:grid-cols-2">
             {STATS.map((stat) => (
-              <div key={stat.value} className="grid grid-cols-1 gap-x-6 gap-y-1 py-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-baseline">
-                <dt className="num text-[31px] font-semibold leading-none text-stone-900">{stat.value}</dt>
-                <dd className="text-base leading-relaxed text-stone-700">
-                  <span className="font-semibold text-stone-900">{stat.label}</span> {stat.body}
-                  {stat.source && (
-                    <>
-                      {" "}
-                      <a
-                        href={stat.source.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="tap inline-flex items-center text-[14px] text-stone-600 underline decoration-stone-300 underline-offset-4 hover:text-stone-900 hover:decoration-stone-900"
-                      >
-                        Source: {stat.source.label}
-                      </a>
-                    </>
+              <div key={stat.value}>
+                <dt className="num text-[52px] font-semibold leading-none tracking-[-0.02em] text-stone-900">{stat.value}</dt>
+                <dd className="mt-3 max-w-[26ch] text-lg leading-snug text-stone-900">
+                  {stat.label} {stat.body}
+                </dd>
+                <dd className="mt-1 text-[14px] text-stone-600">
+                  {stat.source ? (
+                    <a
+                      href={stat.source.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tap inline-flex items-center underline decoration-stone-300 underline-offset-4 hover:text-stone-900 hover:decoration-stone-900"
+                    >
+                      {stat.source.label}
+                    </a>
+                  ) : (
+                    <>Plain arithmetic: ${PRICE_MONTHLY} a month</>
                   )}
                 </dd>
               </div>
             ))}
           </dl>
-          <p className="mt-3 text-[14px] text-stone-600">
-            The price line is plain arithmetic: ${PRICE_MONTHLY} a month against one job.
-          </p>
         </div>
       </div>
     </Band>
