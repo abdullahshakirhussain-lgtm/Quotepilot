@@ -1,5 +1,6 @@
 "use client";
 
+import { canViewInBrowser } from "@/lib/attachments";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -552,8 +553,8 @@ function QuotePanel({ quoteId, today, onClose }: { quoteId: string; today: strin
                     <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Files they sent">
                       {e.attachments.map((name, n) => (
                         <li key={`${n}-${name}`} className="min-w-0">
-                          {e.filesOf ? (
-                            // A fresh page: the file opens from Resend's link (it works for an hour).
+                          {e.filesOf && canViewInBrowser(name) ? (
+                            // Opens in a new tab, in the browser's own viewer (PDFs and photos only).
                             <a
                               href={`/api/replies/${e.filesOf}/files/${n}`}
                               target="_blank"
@@ -565,9 +566,11 @@ function QuotePanel({ quoteId, today, onClose }: { quoteId: string; today: strin
                               <span className="truncate">{name}</span>
                             </a>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500">
-                              <Paperclip className="h-3.5 w-3.5" aria-hidden />
-                              {name}
+                            // Any other kind of file is never opened from QuoteLoop.
+                            <span className="inline-flex max-w-full items-center gap-1.5 text-[13px] text-stone-500">
+                              <Paperclip className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              <span className="truncate">{name}</span>
+                              <span className="shrink-0 text-stone-400">(in your inbox)</span>
                             </span>
                           )}
                         </li>

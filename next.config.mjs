@@ -9,6 +9,8 @@ const SECURITY_HEADERS = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
 ];
 
+const FILE_VIEW_CSP = "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; object-src 'self'; frame-ancestors 'none'";
+
 // NEXT_PUBLIC_* values are copied into the JavaScript every visitor downloads.
 // A Supabase service-role or secret key there would let anyone bypass row-level
 // security and read or change every account, so the build stops instead.
@@ -45,6 +47,12 @@ const nextConfig = {
       // Pay or Google Pay; everywhere else payment stays off. (Later entries
       // override earlier ones for the same header.)
       { source: "/pay", headers: [{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=*" }] },
+      // A customer's PDF or photo shown in the tab (app/api/replies/[id]/files):
+      // nothing in it may run as QuoteLoop. Sandboxed, nothing loads but the file.
+      {
+        source: "/api/replies/:id/files/:n",
+        headers: [{ key: "Content-Security-Policy", value: FILE_VIEW_CSP }],
+      },
     ];
   },
 };

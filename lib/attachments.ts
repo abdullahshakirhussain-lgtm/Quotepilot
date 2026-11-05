@@ -55,6 +55,15 @@ export function sniffKind(bytes: Uint8Array): { type: string; ext: string } | nu
   return k ? { type: k.type, ext: k.ext } : null;
 }
 
+/**
+ * Whether a customer's file is one QuoteLoop shows in the browser: a PDF or a
+ * photo by its name (the content is checked again when it's opened). Anything
+ * else stays in the inbox it was forwarded to.
+ */
+export function canViewInBrowser(filename: string): boolean {
+  return /\.(pdf|jpe?g|png|webp|gif|heic|heif)$/i.test(filename.trim());
+}
+
 /** "1.4 MB", "820 KB". */
 export function fileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
