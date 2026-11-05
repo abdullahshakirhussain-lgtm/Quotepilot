@@ -10,6 +10,7 @@ import { clip } from "@/lib/utils";
 import { readOnlyReason } from "@/lib/billing-server";
 import { replyToFor } from "@/lib/reply-relay-server";
 import { threadHeaders } from "@/lib/reply-relay";
+import { parseAttachments, type AttachmentInput } from "@/lib/attachments";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -31,11 +32,15 @@ export async function sendFollowUpEmail(input: {
   expectedFollowUpId?: string | null;
   /** Answering this customer reply (customer_replies.id): the email threads with it. */
   inReplyTo?: string | null;
+  /** PDFs and photos to send with it; checked here before anything is logged or sent. */
+  attachments?: AttachmentInput[] | null;
 }): Promise<SendOutcome> {
   const user = await requireUser();
   // Read-only accounts (trial or subscription over) can't create or send.
   const readOnly = await readOnlyReason(user.id);
   if (readOnly) return { ok: false, error: readOnly };
+  const files = parseAttachments(input?.attachments);
+  if (!files.ok) return { ok: false, error: `${files.error} Nothing was sent.` };
   const supabase = await createClient();
   const uid = user.id;
   const config = emailConfig();
@@ -158,6 +163,7 @@ export async function sendFollowUpEmail(input: {
           typeof input?.expectedFollowUpId === "string" && input.expectedFollowUpId
             ? clip(input.expectedFollowUpId, 64)
             : null,
+        attachments: files.files,
       }
     );
 

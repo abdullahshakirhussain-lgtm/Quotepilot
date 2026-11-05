@@ -12,6 +12,7 @@ import { composeQuoteEmail } from "@/lib/quote-email";
 import type { ResolvedTemplate } from "@/lib/templates";
 import type { QuoteBusiness } from "./NewQuoteModal";
 import { TemplatePicker } from "@/components/templates/TemplatePicker";
+import { AttachFiles, toAttachmentInputs, type PickedFile } from "@/components/ui/AttachFiles";
 import { sendDraftQuoteEmail } from "@/app/(app)/quotes/new-quote-actions";
 import type { QuoteWithLead } from "@/lib/types";
 
@@ -62,6 +63,8 @@ export function SendDraftQuoteModal({
     );
   const [subject, setSubject] = useState(() => compose(templateId).subject);
   const [body, setBody] = useState(() => compose(templateId).body);
+  // The quote document or photos, sent with the email.
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   // The "add a business email first" refusal, so its way out shows only under it.
   const [businessEmailError, setBusinessEmailError] = useState<string | null>(null);
@@ -82,7 +85,13 @@ export function SendDraftQuoteModal({
       try {
         // The address shown is only used to refuse if it changed; the server
         // always sends to the customer's saved address.
-        const outcome = await sendDraftQuoteEmail({ quoteId: quote.id, subject, message: body, expectedTo: to });
+        const outcome = await sendDraftQuoteEmail({
+          quoteId: quote.id,
+          subject,
+          message: body,
+          expectedTo: to,
+          attachments: toAttachmentInputs(files),
+        });
         if (!outcome.ok) {
           if (outcome.unconfirmed || outcome.locked) setLocked(true);
           if (outcome.recipientChanged) setRecipientOverride(outcome.recipientChanged);
@@ -126,11 +135,11 @@ export function SendDraftQuoteModal({
   async function requestClose() {
     if (busy) return;
     if (
-      edited &&
+      (edited || files.length > 0) &&
       !locked &&
       !(await confirm({
         title: "Close without sending?",
-        message: "Your changes to the email won't be kept.",
+        message: "Your changes to the email and any attached files won't be kept.",
         confirmLabel: "Discard changes",
         cancelLabel: "Keep editing",
         danger: true,
@@ -174,6 +183,7 @@ export function SendDraftQuoteModal({
           businessName={business.name}
           replyTo={business.email}
         />
+        <AttachFiles files={files} onChange={setFiles} disabled={busy || locked} />
 
         {error && (
           <div className="msg-error">

@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { cleanPasted, isValidEmail } from "./email-address";
+import { attachedLine, type OutgoingAttachment } from "./attachments";
 
 /** Per user, rolling 24 hours. */
 export const EMAIL_DAILY_LIMIT = 25;
@@ -70,11 +71,16 @@ export function formatFrom(configFrom: string, businessName: string): string {
   return name ? `"${name} via QuoteLoop" <${address}>` : `QuoteLoop <${address}>`;
 }
 
-/** The exact plain-text body sent: the user's final message plus a 1-to-1 footer. */
-export function composeEmailText(message: string, businessName: string): string {
+/**
+ * The exact plain-text body sent: the user's final message, the files attached
+ * (if any), then a 1-to-1 footer.
+ */
+export function composeEmailText(message: string, businessName: string, attachmentNames: string[] = []): string {
   const name = businessName.trim() || "this business";
+  const attached = attachedLine(attachmentNames);
   return (
     `${message.trim()}\n\n` +
+    (attached ? `${attached}\n\n` : "") +
     `--\nYou're receiving this because you requested a quote from ${name}. ` +
     `Just reply to this email to respond.`
   );
@@ -152,6 +158,8 @@ export interface OutgoingEmail {
   replyTo: string | null;
   /** Extra headers, e.g. In-Reply-To so an answer threads with the customer's email. */
   headers?: Record<string, string>;
+  /** PDFs and photos, already checked (lib/attachments.ts). */
+  attachments?: OutgoingAttachment[];
 }
 
 /**
@@ -178,6 +186,7 @@ export async function sendViaResend(
         text: email.text,
         ...(email.replyTo ? { reply_to: email.replyTo } : {}),
         ...(email.headers && Object.keys(email.headers).length ? { headers: email.headers } : {}),
+        ...(email.attachments?.length ? { attachments: email.attachments } : {}),
       }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });

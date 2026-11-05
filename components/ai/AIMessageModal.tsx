@@ -16,6 +16,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
+import { AttachFiles, toAttachmentInputs, type PickedFile } from "@/components/ui/AttachFiles";
 import {
   MESSAGE_TYPES,
   MESSAGE_TYPE_LABELS,
@@ -112,6 +113,8 @@ export function AIMessageModal({
   const [adjusting, setAdjusting] = useState(false);
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
+  // PDFs and photos sent with the email (not with a copied message).
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [subject, setSubject] = useState(() =>
     reply
       ? `${/^re:/i.test(reply.subject ?? "") ? "" : "Re: "}${reply.subject || `Your quote: ${quote.title}`}`.slice(0, 200)
@@ -316,6 +319,7 @@ export function AIMessageModal({
           expectedTo: recipient,
           expectedFollowUpId: pendingFollowUpId,
           inReplyTo: reply?.id ?? null,
+          attachments: toAttachmentInputs(files),
         });
       } catch (e) {
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
@@ -626,6 +630,7 @@ export function AIMessageModal({
               />
               {edited && <span className="chip-muted ql-pop absolute right-2 top-2">Edited</span>}
             </div>
+            {canEmail && <AttachFiles files={files} onChange={setFiles} disabled={busy || emailSent || followedUp} />}
 
             {!canEmail &&
               (!emailEnabled ? (

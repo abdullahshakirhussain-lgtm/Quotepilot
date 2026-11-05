@@ -124,6 +124,8 @@ type Event = {
   /** Said instead, when a reply's text wasn't kept. */
   note?: string;
   attachments?: string[];
+  /** The reply the files came with: each opens from QuoteLoop. */
+  filesOf?: string;
   /** A customer's reply that can be answered. */
   reply?: ReplyContext;
 };
@@ -209,6 +211,7 @@ function history(d: PanelData): Event[] {
       text: text || undefined,
       note: text ? undefined : "The text of this reply wasn't saved in QuoteLoop. It's in your email inbox.",
       attachments: r.attachment_names ?? undefined,
+      filesOf: r.id,
       tone: "reply",
       reply: r.auto_reply ? undefined : { id: r.id, subject: r.subject, from, text },
     });
@@ -546,11 +549,30 @@ function QuotePanel({ quoteId, today, onClose }: { quoteId: string; today: strin
                   {e.text && <MessageText text={e.text} />}
                   {e.note && <p className="mt-1 text-[13px] italic text-stone-500">{e.note}</p>}
                   {e.attachments && e.attachments.length > 0 && (
-                    <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[13px] text-stone-500">
-                      <Paperclip className="h-3.5 w-3.5" aria-hidden />
-                      {e.attachments.join(", ")}
-                      <span className="text-stone-400">(in your inbox)</span>
-                    </p>
+                    <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Files they sent">
+                      {e.attachments.map((name, n) => (
+                        <li key={`${n}-${name}`} className="min-w-0">
+                          {e.filesOf ? (
+                            // A fresh page: the file opens from Resend's link (it works for an hour).
+                            <a
+                              href={`/api/replies/${e.filesOf}/files/${n}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="tap inline-flex max-w-full items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-[13px] text-stone-800 hover:border-stone-400"
+                              aria-label={`Open ${name} (opens in a new tab)`}
+                            >
+                              <Paperclip className="h-3.5 w-3.5 shrink-0 text-stone-500" aria-hidden />
+                              <span className="truncate">{name}</span>
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500">
+                              <Paperclip className="h-3.5 w-3.5" aria-hidden />
+                              {name}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                   {e.reply && canWrite && q.status !== "draft" && (
                     <button type="button" className="btn-secondary mt-2 px-3 py-1.5" onClick={() => setWriting(e.reply!)}>

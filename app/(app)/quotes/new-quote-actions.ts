@@ -26,6 +26,7 @@ import {
 import { clip } from "@/lib/utils";
 import { readOnlyReason } from "@/lib/billing-server";
 import { replyToFor } from "@/lib/reply-relay-server";
+import { parseAttachments, type AttachmentInput } from "@/lib/attachments";
 
 function check(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -244,18 +245,23 @@ export async function trackQuoteAlreadySent(input: QuoteFields): Promise<QuoteFl
  * Flow A - "Send a quote with QuoteLoop". The quote is saved as a draft, the
  * email is sent, and only then is it marked sent with reminders scheduled.
  */
-export async function sendQuoteWithQuoteLoop(input: QuoteFields): Promise<QuoteFlowOutcome> {
+export async function sendQuoteWithQuoteLoop(
+  input: Omit<QuoteFields, "attachments"> & { attachments?: AttachmentInput[] | null }
+): Promise<QuoteFlowOutcome> {
   const user = await requireUser();
   // Read-only accounts (trial or subscription over) can't create or send.
   const readOnly = await readOnlyReason(user.id);
   if (readOnly) return { ok: false, error: readOnly };
+  // Checked before anything is saved or sent.
+  const files = parseAttachments(input?.attachments);
+  if (!files.ok) return { ok: false, error: `${files.error} Nothing was sent.` };
   const supabase = await createClient();
   const today = await requestToday();
   const config = emailConfig();
 
   try {
     // The send date is the server's today; the browser doesn't get a say.
-    const fields = clean(input, today);
+    const fields = { ...clean(input as QuoteFields, today), attachments: files.files };
     const deps: SendQuoteDeps = {
       ...quoteDeps(supabase, user.id),
       ...emailDeps(supabase, user.id, config),
@@ -291,11 +297,15 @@ export async function sendDraftQuoteEmail(input: {
   message: string;
   /** The address the preview showed; if the saved one differs, nothing is sent. */
   expectedTo?: string | null;
+  /** PDFs and photos to send with it; checked before anything is sent. */
+  attachments?: AttachmentInput[] | null;
 }): Promise<QuoteFlowOutcome> {
   const user = await requireUser();
   // Read-only accounts (trial or subscription over) can't create or send.
   const readOnly = await readOnlyReason(user.id);
   if (readOnly) return { ok: false, error: readOnly };
+  const files = parseAttachments(input?.attachments);
+  if (!files.ok) return { ok: false, error: `${files.error} Nothing was sent.` };
   const supabase = await createClient();
   const today = await requestToday();
   const config = emailConfig();
@@ -378,6 +388,7 @@ export async function sendDraftQuoteEmail(input: {
       subject: clip(input?.subject ?? "", 200),
       message: clip(input?.message ?? "", MAX_INPUT),
       expectedTo: clip(cleanPasted(input?.expectedTo), 320) || null,
+      attachments: files.files,
     };
 
     const outcome = await sendQuoteCore(deps, fields, today);

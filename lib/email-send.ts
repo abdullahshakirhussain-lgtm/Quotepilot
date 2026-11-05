@@ -31,6 +31,7 @@ import {
   type SendResult,
 } from "./email";
 import { isSampleAddress, SAMPLE_RECIPIENT_ERROR } from "./email-address";
+import type { OutgoingAttachment } from "./attachments";
 
 export interface EmailLogInsert {
   quote_id: string;
@@ -123,6 +124,8 @@ export async function sendFollowUpEmailCore(
      * since been recorded (another tab), nothing is sent.
      */
     expectedFollowUpId?: string | null;
+    /** Checked PDFs and photos to send with it. */
+    attachments?: OutgoingAttachment[];
   }
 ): Promise<SendOutcome> {
   if (!deps.config) {
@@ -205,7 +208,8 @@ export async function sendFollowUpEmailCore(
 
   const businessName = business?.business_name ?? "";
   const subject = cleanSubject(input.subject, quote.title);
-  const text = composeEmailText(message, businessName);
+  const files = input.attachments ?? [];
+  const text = composeEmailText(message, businessName, files.map((f) => f.filename));
 
   // The same email to the same person moments ago (another tab): don't repeat it.
   if (await deps.sentRecently({ to, subject, text })) {
@@ -250,6 +254,7 @@ export async function sendFollowUpEmailCore(
     subject,
     text,
     replyTo,
+    ...(files.length ? { attachments: files } : {}),
   }, { quoteId: quote.id, businessName });
 
   if (!result.ok) {

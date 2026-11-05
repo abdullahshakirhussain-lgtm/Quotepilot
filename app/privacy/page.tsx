@@ -17,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effectiveDate="November 4, 2026"
+      effectiveDate="November 5, 2026"
       intro={
         <>
           <p>
@@ -139,13 +139,19 @@ export default function PrivacyPage() {
           QuoteLoop won’t send an email until a business email is set.
         </p>
         <p>
+          You can attach PDFs and photos to an email (up to five files, 10 MB in all). They go to
+          Resend with the email and are not stored by QuoteLoop; the email lists their names, and
+          that text is kept with the email.
+        </p>
+        <p>
           A reply passes through QuoteLoop on its way: each email carries a reply address that
           belongs to its quote. When the customer replies, Resend receives the reply for us, and
           QuoteLoop records who replied, the subject and when, pauses that quote’s reminders, and
           forwards the whole reply, with any attachments, to the business email. QuoteLoop keeps the
           reply&apos;s text (up to 10,000 characters) and the names of its attachments, so you can read
-          and answer it inside QuoteLoop; the attachments themselves are only forwarded, not stored.
-          Resend keeps received emails for up to 30 days.
+          and answer it inside QuoteLoop; the attachments themselves are forwarded, not stored by
+          QuoteLoop. Resend keeps received emails for up to 30 days, and while it does, you can open
+          a reply&apos;s attachments from its quote in QuoteLoop.
         </p>
         <p>
           If you receive an email sent through QuoteLoop and do not want more emails from that

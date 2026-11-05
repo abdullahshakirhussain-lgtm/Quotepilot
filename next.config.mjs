@@ -34,6 +34,9 @@ assertPublicSupabaseKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Emails can carry up to 10MB of PDFs and photos (lib/attachments.ts),
+  // which arrive base64-encoded inside the send action's request.
+  experimental: { serverActions: { bodySizeLimit: "15mb" } },
   poweredByHeader: false,
   async headers() {
     return [

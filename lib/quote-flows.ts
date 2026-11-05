@@ -28,6 +28,7 @@ import {
   type OutgoingEmail,
   type SendResult,
 } from "./email";
+import type { OutgoingAttachment } from "./attachments";
 import { formatCurrency, formatDate } from "./utils";
 
 export { NEEDS_BUSINESS_EMAIL };
@@ -59,6 +60,8 @@ export interface QuoteFields {
   expectedTo?: string | null;
   /** Flow B only: the user saw the "looks like a quote you already added" warning and continued. */
   allowDuplicate?: boolean;
+  /** Flow A only: checked PDFs and photos sent with the quote email (lib/attachments.ts). */
+  attachments?: OutgoingAttachment[];
 }
 
 export interface ScheduledFollowUp {
@@ -462,7 +465,8 @@ export async function sendQuoteCore(
   const message = (f.message ?? "").trim();
   // A blank subject becomes the quote subject the preview started with.
   const subject = cleanSubject(f.subject, f.title.trim(), defaultQuoteSubject(businessName, f.title.trim()));
-  const text = composeEmailText(message, businessName);
+  const files = f.attachments ?? [];
+  const text = composeEmailText(message, businessName, files.map((a) => a.filename));
 
   // The same email to the same person moments ago (a second tab, a repeated
   // submit): don't send it twice, and don't save a second quote for it.
@@ -536,6 +540,7 @@ export async function sendQuoteCore(
     subject,
     text,
     replyTo,
+    ...(files.length ? { attachments: files } : {}),
   }, { quoteId, businessName });
 
   if (!result.ok) {

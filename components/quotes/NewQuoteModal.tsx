@@ -16,6 +16,7 @@ import { AmountInput } from "@/components/ui/AmountInput";
 import { QuoteEmailPreview } from "./QuoteEmailPreview";
 import { QuoteDonePanel } from "./QuoteDonePanel";
 import { AddBusinessEmailButton } from "@/components/ui/AddBusinessEmailButton";
+import { AttachFiles, toAttachmentInputs, type PickedFile } from "@/components/ui/AttachFiles";
 import {
   sendDraftQuoteEmail,
   sendQuoteWithQuoteLoop,
@@ -138,6 +139,8 @@ export function NewQuoteModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [bodyEdited, setBodyEdited] = useState(false);
+  // The quote document or photos, sent with the email.
+  const [files, setFiles] = useState<PickedFile[]>([]);
   // The template the email is written from.
   const [templateId, setTemplateId] = useState(defaultTemplateId);
   const [subjectEdited, setSubjectEdited] = useState(false);
@@ -259,10 +262,10 @@ export function NewQuoteModal({
     if (savedDraftId) {
       // The quote itself is safe as a draft; only edited email text would go.
       if (
-        bodyEdited &&
+        (bodyEdited || files.length > 0) &&
         !(await confirm({
           title: "Close this window?",
-          message: "Your quote is saved as a draft, but the email text you edited won't be kept.",
+          message: "Your quote is saved as a draft, but your changes to the email and any attached files won't be kept.",
           confirmLabel: "Discard email text",
           cancelLabel: "Keep editing",
           danger: true,
@@ -370,8 +373,14 @@ export function NewQuoteModal({
           kind === "track"
             ? await trackQuoteAlreadySent(fields())
             : savedDraftId
-              ? await sendDraftQuoteEmail({ quoteId: savedDraftId, subject, message: body, expectedTo: effectiveEmail })
-              : await sendQuoteWithQuoteLoop(fields());
+              ? await sendDraftQuoteEmail({
+                  quoteId: savedDraftId,
+                  subject,
+                  message: body,
+                  expectedTo: effectiveEmail,
+                  attachments: toAttachmentInputs(files),
+                })
+              : await sendQuoteWithQuoteLoop({ ...fields(), attachments: toAttachmentInputs(files) });
       } catch (e) {
         unstable_rethrow(e); // a redirect Next is handling itself must not be swallowed
         if (kind === "send") setSendLocked(true);
@@ -865,6 +874,7 @@ export function NewQuoteModal({
             businessName={business.name}
             replyTo={business.email}
           />
+          <AttachFiles files={files} onChange={setFiles} disabled={busy || sendLocked} />
 
           {errorBox}
 
