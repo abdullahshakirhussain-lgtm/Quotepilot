@@ -113,7 +113,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
       hasData={leads.length > 0 || quotes.length > 0}
       hasSampleData={leads.some((l) => isSampleAddress(l.email))}
       replied={replied}
-      week={extras.week}
+      weeks={extras.weeks}
       followedUpOnce={extras.followedUpOnce}
       wins={extras.wins ? (extras.wins[shown] ?? { thisMonth: 0, lastMonth: 0 }) : null}
       recent={extras.recent}

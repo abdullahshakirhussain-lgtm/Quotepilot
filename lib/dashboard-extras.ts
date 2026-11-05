@@ -1,16 +1,19 @@
-// The dashboard's progress and activity: this week's follow-ups, wins this
-// month against last, and the latest things that happened. Each part is
+// The dashboard's progress and activity: follow-ups done week by week, wins
+// this month against last, and the latest things that happened. Each part is
 // optional: a failed or not-yet-available read leaves that part out, never
 // the whole dashboard.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, dateInZone } from "@/lib/utils";
 
-export interface WeekProgress {
-  /** Follow-ups due this week (Monday to Sunday) that were done. */
-  done: number;
-  /** Follow-ups due this week that are done or still to do (skipped ones don't count). */
-  total: number;
+/** Follow-ups done in one week (Monday to Sunday, in the viewer's time zone). */
+export interface WeekCount {
+  /** The Monday, YYYY-MM-DD. */
+  start: string;
+  count: number;
 }
+
+/** How many weeks the chart shows, this one last. */
+export const WEEKS_SHOWN = 8;
 
 export interface Wins {
   thisMonth: number;
@@ -26,10 +29,13 @@ export interface RecentItem {
   quoteId?: string;
   /** Somewhere else it leads (billing), when it isn't about a quote. */
   href?: string;
+  /** A customer's reply (or automatic reply), which the dashboard may already show above. */
+  reply?: boolean;
 }
 
 export interface DashboardExtras {
-  week: WeekProgress | null;
+  /** Oldest first, this week last; null when it couldn't be read. */
+  weeks: WeekCount[] | null;
   /** At least one follow-up was ever done: the account is past getting started. */
   followedUpOnce: boolean;
   /** Per currency (never added across currencies); null until the database records when quotes are won or lost. */
@@ -63,7 +69,9 @@ export async function loadDashboardExtras(
   timeZone: string
 ): Promise<DashboardExtras> {
   const weekStart = weekStartOf(today);
-  const weekEnd = addDays(weekStart, 6);
+  const starts = Array.from({ length: WEEKS_SHOWN }, (_, i) => addDays(weekStart, -7 * (WEEKS_SHOWN - 1 - i)));
+  // A day early, so a follow-up late on that Sunday (in any time zone) is in range.
+  const doneSince = `${addDays(starts[0], -1)}T00:00:00Z`;
   const monthStart = `${today.slice(0, 7)}-01`;
   const prevStart = previousMonthStart(today);
   // A day early, so a win late on the last day of the month before (in any time zone) is in range.
@@ -72,12 +80,11 @@ export async function loadDashboardExtras(
   const [weekRes, everRes, decidedRes, notesRes, emailsRes, addedRes] = await Promise.all([
     supabase
       .from("follow_ups")
-      .select("status")
+      .select("completed_at")
       .eq("user_id", userId)
-      .gte("due_date", weekStart)
-      .lte("due_date", weekEnd)
-      .in("status", ["pending", "completed"])
-      .limit(1000),
+      .eq("status", "completed")
+      .gte("completed_at", doneSince)
+      .limit(5000),
     supabase.from("follow_ups").select("id").eq("user_id", userId).eq("status", "completed").limit(1),
     supabase
       .from("quotes")
@@ -102,8 +109,17 @@ export async function loadDashboardExtras(
     if (r.error) console.error(`[dashboard] ${name} unavailable:`, r.error.message);
   }
 
-  const weekRows = (weekRes.data ?? []) as { status: string }[];
-  const week = weekRes.error ? null : { done: weekRows.filter((r) => r.status === "completed").length, total: weekRows.length };
+  // Each follow-up in the week it was done, on the viewer's own calendar.
+  let weeks: WeekCount[] | null = null;
+  if (!weekRes.error) {
+    const counts = new Map(starts.map((s) => [s, 0]));
+    for (const r of (weekRes.data ?? []) as { completed_at: string | null }[]) {
+      if (!r.completed_at) continue;
+      const start = weekStartOf(dateInZone(r.completed_at, timeZone));
+      if (counts.has(start)) counts.set(start, counts.get(start)! + 1);
+    }
+    weeks = starts.map((start) => ({ start, count: counts.get(start)! }));
+  }
 
   // Wins per currency: amounts in different currencies are never added.
   let wins: Record<string, Wins> | null = null;
@@ -133,6 +149,7 @@ export async function loadDashboardExtras(
       unread: !n.read_at,
       quoteId: n.quote_id ?? undefined,
       href: !n.quote_id && (n.kind.startsWith("payment") || n.kind.startsWith("subscription")) ? "/settings?area=billing" : undefined,
+      reply: n.kind === "customer_reply" || n.kind === "auto_reply" ? true : undefined,
     })),
     ...((emailsRes.data ?? []) as { quote_id: string | null; created_at: string; sent_at: string | null; lead: unknown }[]).map((e) => ({
       at: e.sent_at ?? e.created_at,
@@ -160,9 +177,10 @@ export async function loadDashboardExtras(
       seen.unread = seen.unread || item.unread;
     } else byText.set(item.text, { ...item, count: 1 });
   }
+  // A few spare, so the dashboard can leave out what it already shows above.
   const recent: RecentItem[] = [...byText.values()]
-    .slice(0, RECENT)
+    .slice(0, RECENT + 3)
     .map(({ count, ...item }) => (count > 1 ? { ...item, text: `${item.text} (${count} times)` } : item));
 
-  return { week, followedUpOnce: (everRes.data ?? []).length > 0, wins, recent };
+  return { weeks, followedUpOnce: (everRes.data ?? []).length > 0, wins, recent };
 }

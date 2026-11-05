@@ -42,9 +42,12 @@ export function AttentionList({
                   )}
                   {isSampleAddress(f.lead?.email) && <SampleBadge />}
                 </div>
-                <div className={`text-[13px] ${due.bucket === "overdue" ? "font-medium text-red-700" : "text-stone-500"}`}>
-                  {due.bucket === "today" ? "Due today" : due.text}
-                  {(f.dueCount ?? 1) > 1 && <span className="font-normal text-stone-500">, {f.dueCount} reminders missed</span>}
+                <div className="text-[13px] text-stone-600 [overflow-wrap:anywhere]">
+                  {f.quote?.title && <>{f.quote.title}, </>}
+                  <span className={due.bucket === "overdue" ? "font-medium text-red-700" : due.bucket === "today" ? "font-medium text-due-800" : undefined}>
+                    {due.bucket === "today" ? "due today" : due.text}
+                  </span>
+                  {(f.dueCount ?? 1) > 1 && <>, {f.dueCount} reminders missed</>}
                 </div>
               </div>
               {f.quote && (

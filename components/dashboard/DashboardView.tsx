@@ -6,7 +6,8 @@ import { QuoteLink } from "@/components/quotes/QuotePanel";
 import { TypedGreeting } from "./TypedGreeting";
 import { cn, dateInZone, formatCurrency, relativeDay } from "@/lib/utils";
 import { formatMoney, type DashboardMetrics } from "@/lib/metrics";
-import type { RecentItem, WeekProgress, Wins } from "@/lib/dashboard-extras";
+import type { RecentItem, WeekCount, Wins } from "@/lib/dashboard-extras";
+import { WeeklyChart } from "./WeeklyChart";
 import type { FollowUpWithContext } from "@/lib/types";
 
 /** How many people the dashboard lists before "See all". */
@@ -41,7 +42,7 @@ export function DashboardView({
   hasData,
   hasSampleData = false,
   replied = [],
-  week = null,
+  weeks = null,
   followedUpOnce = true,
   wins = null,
   recent = [],
@@ -62,7 +63,8 @@ export function DashboardView({
   hasSampleData?: boolean;
   /** Open quotes whose customer replied; their reminders are paused. */
   replied?: RepliedQuote[];
-  week?: WeekProgress | null;
+  /** Follow-ups done each week, the last eight, this week last. */
+  weeks?: WeekCount[] | null;
   /** At least one follow-up was ever done. */
   followedUpOnce?: boolean;
   /** Won this month and last, in the currency shown; null until the dates are recorded. */
@@ -101,11 +103,22 @@ export function DashboardView({
   const all = replied.length + attention.length;
   const shownReplies = replied.slice(0, SHOWN);
   const shownDue = attention.slice(0, SHOWN - shownReplies.length);
-  const next = upcoming[0];
   const when = (iso: string) => {
     const s = relativeDay(dateInZone(iso, timeZone), today);
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
+  // What makes up the headline, in the words the rest of the app uses (the
+  // Follow-ups badge counts the same follow-ups).
+  const parts = [
+    replied.length ? `${replied.length} ${replied.length === 1 ? "customer" : "customers"} replied` : "",
+    attention.length ? `${attention.length} ${attention.length === 1 ? "follow-up" : "follow-ups"} due` : "",
+  ].filter(Boolean);
+  // Recent leaves out replies already listed above.
+  const listedReplies = new Set(shownReplies.map((r) => r.id));
+  const recentShown = recent.filter((r) => !(r.reply && r.quoteId && listedReplies.has(r.quoteId))).slice(0, 5);
+  const thisWeek = weeks?.[weeks.length - 1]?.count ?? 0;
+  const lastWeek = weeks?.[weeks.length - 2]?.count ?? 0;
+  const noWins = wins && wins.thisMonth === 0 && wins.lastMonth === 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -128,97 +141,125 @@ export function DashboardView({
 
           {/* Who needs you today: the headline is the count, the list is the people. */}
           <section aria-labelledby="follow-up-now" className="flex flex-col gap-3">
-            <h1 id="follow-up-now" className="text-[22px] font-medium leading-tight text-stone-900">
-              {all > 0 ? (
-                <>
-                  <span className="num">{all}</span> {all === 1 ? "quote needs" : "quotes need"} you today
-                </>
-              ) : (
-                "You’re all caught up"
-              )}
-            </h1>
-            <div className="card">
-              {shownReplies.length > 0 && (
-                <ul className="flex flex-col divide-y divide-[#ECEEF1]" aria-label="Customers who replied">
-                  {shownReplies.map((r) => (
-                    <li key={r.id} className="flex items-center gap-3 bg-info-50/60 px-5 py-3.5">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</div>
-                        <div className="text-[13px] text-stone-500 [overflow-wrap:anywhere]">
-                          Replied {relativeDay(r.repliedAt, today)} about {r.title}
-                        </div>
-                        {r.snippet && (
-                          <div className="mt-0.5 line-clamp-1 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
-                        )}
-                      </div>
-                      <QuoteLink quoteId={r.id} className="btn-secondary shrink-0 px-3" aria-label={`Answer ${r.customerName}'s reply`}>
-                        Answer
-                      </QuoteLink>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {shownDue.length > 0 && (
-                <div className={shownReplies.length > 0 ? "border-t border-[#ECEEF1]" : undefined}>
-                  <AttentionList items={shownDue} today={today} />
-                </div>
-              )}
-              {all === 0 && (
-                <p className="px-5 py-4 text-[15px] text-stone-600">
-                  {next ? (
-                    <>
-                      Next: <span className="font-medium text-stone-900">{next.lead?.customer_name ?? "a customer"}</span>,{" "}
-                      {relativeDay(next.due_date, today)}
-                    </>
-                  ) : (
-                    "Nothing is waiting on you."
-                  )}
-                </p>
-              )}
-              {all > SHOWN && (
-                <Link
-                  href="/follow-ups"
-                  className="tap flex items-center border-t border-[#ECEEF1] px-5 text-[14px] font-medium text-stone-700 hover:text-stone-900 hover:underline"
-                >
-                  See all {all}
-                </Link>
-              )}
+            <div>
+              <h1 id="follow-up-now" className="text-[24px] font-semibold leading-tight text-stone-900">
+                {all > 0 ? (
+                  <>
+                    <span className="num">{all}</span> {all === 1 ? "quote needs" : "quotes need"} you today
+                  </>
+                ) : (
+                  "You’re all caught up"
+                )}
+              </h1>
+              <p className="mt-1 text-[15px] text-stone-600">
+                {all > 0 ? parts.join(" and ") : "Every open quote has been followed up. Here’s what’s coming next."}
+              </p>
             </div>
+
+            {all > 0 ? (
+              <div className="card border-stone-300 shadow-[0_1px_2px_rgba(31,35,40,0.06)]">
+                {shownReplies.length > 0 && (
+                  <ul className="flex flex-col divide-y divide-[#ECEEF1]" aria-label="Customers who replied">
+                    {shownReplies.map((r) => (
+                      <li key={r.id} className="flex items-center gap-3 bg-info-50/60 px-5 py-3.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</div>
+                          <div className="text-[13px] text-stone-600 [overflow-wrap:anywhere]">
+                            {r.title}, replied {relativeDay(r.repliedAt, today)}
+                          </div>
+                          {r.snippet && (
+                            <div className="mt-0.5 line-clamp-1 text-[14px] text-stone-700 [overflow-wrap:anywhere]">&ldquo;{r.snippet}&rdquo;</div>
+                          )}
+                        </div>
+                        <QuoteLink quoteId={r.id} className="btn-secondary shrink-0 px-3" aria-label={`Answer ${r.customerName}'s reply`}>
+                          Answer
+                        </QuoteLink>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {shownDue.length > 0 && (
+                  <div className={shownReplies.length > 0 ? "border-t border-[#ECEEF1]" : undefined}>
+                    <AttentionList items={shownDue} today={today} />
+                  </div>
+                )}
+                {all > SHOWN && (
+                  <Link
+                    href="/follow-ups"
+                    className="tap flex items-center border-t border-[#ECEEF1] px-5 text-[14px] font-medium text-stone-700 hover:text-stone-900 hover:underline"
+                  >
+                    See all {all}
+                  </Link>
+                )}
+              </div>
+            ) : (
+              // Caught up: say so plainly, then what's coming, so the screen still says what's next.
+              <div className="card border-stone-300">
+                <div className="flex items-center gap-3 border-b border-[#ECEEF1] px-5 py-4">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-600 text-white" aria-hidden="true">
+                    <Check className="h-5 w-5" strokeWidth={3} />
+                  </span>
+                  <p className="text-[15px] text-stone-700">
+                    {thisWeek > 0 ? (
+                      <>
+                        You did <span className="num font-medium text-stone-900">{thisWeek}</span> {thisWeek === 1 ? "follow-up" : "follow-ups"} this week.
+                      </>
+                    ) : (
+                      "Nothing is waiting on you."
+                    )}
+                  </p>
+                </div>
+                {upcoming.length > 0 ? (
+                  <>
+                    <h2 className="px-5 pt-3 text-[14px] font-medium text-stone-500">Coming up</h2>
+                    <ul className="divide-y divide-[#ECEEF1]">
+                      {upcoming.slice(0, 3).map((f) => (
+                        <li key={f.id}>
+                          {f.quote ? (
+                            <QuoteLink quoteId={f.quote.id} className="flex items-center gap-3 px-5 py-3 hover:bg-stone-50 focus-visible:bg-stone-50">
+                              <UpcomingRow f={f} today={today} />
+                            </QuoteLink>
+                          ) : (
+                            <div className="flex items-center gap-3 px-5 py-3">
+                              <UpcomingRow f={f} today={today} />
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="px-5 py-4 text-[15px] text-stone-600">
+                    No follow-ups are scheduled. Add a quote you&apos;ve sent and QuoteLoop plans its follow-ups.
+                  </p>
+                )}
+              </div>
+            )}
           </section>
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
-          {/* Progress you can see filling up: this week's follow-ups, Monday to Sunday. */}
-          {week && (
-            <section className="card px-5 py-4" aria-labelledby="this-week">
+          {/* Progress you can see: follow-ups done week by week. */}
+          {weeks && (
+            <section className="card px-5 py-4" aria-labelledby="weekly">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h2 id="this-week" className="text-[16px] font-medium text-stone-900">
-                  This week
+                <h2 id="weekly" className="text-[16px] font-medium text-stone-900">
+                  Follow-ups done
                 </h2>
                 <p className="num text-[14px] text-stone-600">
-                  {week.total === 0
-                    ? "No follow-ups due this week"
-                    : week.done === week.total
-                      ? `All ${week.total} follow-ups done`
-                      : `${week.done} of ${week.total} follow-ups done`}
+                  <span className="font-medium text-stone-900">{thisWeek}</span> this week
+                  {lastWeek > 0 && <span className="text-stone-500">, {lastWeek} last week</span>}
                 </p>
               </div>
-              {week.total > 0 && (
-                <div
-                  className="mt-3 h-2.5 overflow-hidden rounded-full bg-stone-100"
-                  role="img"
-                  aria-label={`${week.done} of ${week.total} follow-ups due this week are done`}
-                >
-                  <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-300" style={{ width: `${Math.round((week.done / week.total) * 100)}%` }} />
-                </div>
-              )}
+              <WeeklyChart weeks={weeks} />
             </section>
           )}
 
           {/* The money, in context. Amounts are in one currency at a time, never added across currencies. */}
-          <section aria-label="Your numbers" className="flex flex-col gap-2">
+          <section aria-label="Your numbers" className="card">
             {currencies.length > 1 && (
-              <nav aria-label="Currency" className="flex flex-wrap items-center justify-end gap-1.5">
+              <nav aria-label="Currency shown" className="flex flex-wrap items-center gap-1.5 border-b border-[#ECEEF1] px-5 py-2.5">
+                <span className="mr-1 text-[13px] text-stone-500">Amounts in</span>
                 {currencies.map((c) => (
                   // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
                   <a
@@ -226,34 +267,41 @@ export function DashboardView({
                     href={`/dashboard?currency=${c.currency}`}
                     aria-current={c.currency === currency ? "true" : undefined}
                     className={cn(
-                      "tap inline-flex items-center gap-1.5 rounded-full px-3 text-[13px] font-medium",
-                      c.currency === currency ? "border border-stone-300 bg-stone-200/80 text-stone-900" : "border border-line bg-white text-stone-700 hover:border-stone-400"
+                      "tap inline-flex items-center rounded-full px-3 text-[13px] font-medium",
+                      c.currency === currency ? "bg-stone-900 text-white" : "border border-line bg-white text-stone-700 hover:border-stone-400"
                     )}
                   >
                     {c.currency}
-                    <span className="num text-stone-500">{c.count}</span>
                   </a>
                 ))}
               </nav>
             )}
-            <dl className="card grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <dl className="grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               <Figure label="Open quotes" value={formatMoney(m.openValue, currency)} note={`${m.openCount} ${m.openCount === 1 ? "quote" : "quotes"} waiting on a reply`} />
-              <Figure
-                label="Won this month"
-                value={wins ? formatCurrency(wins.thisMonth, currency) : "–"}
-                note={wins ? `Last month ${formatCurrency(wins.lastMonth, currency)}` : "Counting from today"}
-              />
+              {noWins ? (
+                <div className="min-w-0 px-5 py-3.5">
+                  <dt className="text-[14px] text-stone-500">Won this month</dt>
+                  <dd className="mt-1 text-[17px] font-medium leading-tight text-stone-500">No wins yet</dd>
+                  <dd className="mt-0.5 text-[13px] text-stone-500">Mark a quote won and it adds up here</dd>
+                </div>
+              ) : (
+                <Figure
+                  label="Won this month"
+                  value={wins ? formatCurrency(wins.thisMonth, currency) : "–"}
+                  note={wins ? `Last month ${formatCurrency(wins.lastMonth, currency)}` : "Counting from today"}
+                />
+              )}
             </dl>
           </section>
 
           {/* What happened lately, so nothing done in the background goes unseen. */}
-          {recent.length > 0 && (
+          {recentShown.length > 0 && (
             <section className="card" aria-labelledby="recent">
               <h2 id="recent" className="border-b border-[#ECEEF1] px-5 py-3 text-[16px] font-medium text-stone-900">
                 Recent
               </h2>
               <ul className="divide-y divide-[#ECEEF1]">
-                {recent.map((r, i) => {
+                {recentShown.map((r, i) => {
                   const row = "flex items-baseline gap-3 px-5 py-3 text-[15px]";
                   const inner = (
                     <>
@@ -292,6 +340,24 @@ export function DashboardView({
         </div>
       </div>
     </div>
+  );
+}
+
+/** One coming follow-up: who, which quote, and when. */
+function UpcomingRow({ f, today }: { f: FollowUpWithContext; today: string }) {
+  return (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium text-stone-900 [overflow-wrap:anywhere]">{f.lead?.customer_name ?? "Customer"}</span>
+        {f.quote?.title && <span className="block text-[13px] text-stone-600 [overflow-wrap:anywhere]">{f.quote.title}</span>}
+      </span>
+      <span className="shrink-0 rounded-full bg-info-50 px-2.5 py-0.5 text-[13px] font-medium text-info-700">
+        {(() => {
+          const s = relativeDay(f.due_date, today);
+          return s.charAt(0).toUpperCase() + s.slice(1);
+        })()}
+      </span>
+    </>
   );
 }
 
