@@ -179,3 +179,41 @@ export function computeDashboardMetrics(input: {
     overdue: followUps.filter((f) => classifyFollowUp(f, today) === "overdue").length,
   };
 }
+
+/** How long open quotes have waited since they were sent, in the order the dashboard shows. */
+export const AGE_BUCKETS = [
+  { key: "week", label: "0–7 days", upTo: 7 },
+  { key: "fortnight", label: "8–14 days", upTo: 14 },
+  { key: "month", label: "15–30 days", upTo: 30 },
+  { key: "cold", label: "Over 30 days", upTo: Infinity },
+] as const;
+
+export interface AgeBucket {
+  key: (typeof AGE_BUCKETS)[number]["key"];
+  label: string;
+  amount: number;
+  count: number;
+}
+
+/**
+ * The open quotes (the same ones "Open quotes" adds up) by how many days ago
+ * they were sent: the money waiting, and how much of it is going cold. Give it
+ * one currency's quotes; amounts in different currencies are never added.
+ */
+export function openByAge(
+  quotes: { status: string; amount: number | string | null; quote_date?: string | null; created_at?: string | null }[],
+  today: string
+): AgeBucket[] {
+  const out: AgeBucket[] = AGE_BUCKETS.map((b) => ({ key: b.key, label: b.label, amount: 0, count: 0 }));
+  const day = Date.parse(`${today}T00:00:00Z`);
+  for (const q of quotes) {
+    if (!(OPEN_QUOTE_STATUSES as readonly string[]).includes(q.status)) continue;
+    const sent = (q.quote_date || q.created_at || today).slice(0, 10);
+    const age = Math.max(0, Math.round((day - Date.parse(`${sent}T00:00:00Z`)) / 86_400_000));
+    const i = AGE_BUCKETS.findIndex((b) => age <= b.upTo);
+    out[i].amount += Number(q.amount) || 0;
+    out[i].count += 1;
+  }
+  for (const b of out) b.amount = Math.round(b.amount * 100) / 100;
+  return out;
+}

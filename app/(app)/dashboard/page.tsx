@@ -2,7 +2,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { recordVisit } from "@/lib/visits-server";
 import { DashboardView, type RepliedQuote } from "@/components/dashboard/DashboardView";
 import { currentHour, todayISO } from "@/lib/utils";
-import { computeDashboardMetrics, currencyCounts, inCurrency } from "@/lib/metrics";
+import { computeDashboardMetrics, currencyCounts, inCurrency, openByAge } from "@/lib/metrics";
 import { latestReplies } from "@/lib/replies-server";
 import { loadDashboardExtras } from "@/lib/dashboard-extras";
 import { classifyFollowUp, onePerQuote } from "@/lib/follow-up-state";
@@ -36,8 +36,8 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
     fetchAllRows<{ status: string; email: string | null }>((from, to) =>
       supabase.from("leads").select("status, email").eq("user_id", user.id).order("id").range(from, to)
     ),
-    fetchAllRows<{ status: string; amount: number; currency: string }>((from, to) =>
-      supabase.from("quotes").select("status, amount, currency").eq("user_id", user.id).order("id").range(from, to)
+    fetchAllRows<{ status: string; amount: number; currency: string; quote_date: string | null; created_at: string }>((from, to) =>
+      supabase.from("quotes").select("status, amount, currency, quote_date, created_at").eq("user_id", user.id).order("id").range(from, to)
     ),
     fetchAllRows<FollowUpWithContext>((from, to) =>
       supabase
@@ -91,9 +91,10 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
   // the overview shows one currency, the business's own unless another is chosen.
   const currencies = currencyCounts(quotes, currency);
   const shown = currencies.find((c) => c.currency === asked)?.currency ?? currencies[0]?.currency ?? currency;
+  const shownQuotes = currencies.length > 1 ? inCurrency(quotes, shown, currency) : quotes;
   const m = computeDashboardMetrics({
     leads,
-    quotes: currencies.length > 1 ? inCurrency(quotes, shown, currency) : quotes,
+    quotes: shownQuotes,
     followUps: due,
     today,
     currency: shown,
@@ -114,6 +115,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ cu
       hasSampleData={leads.some((l) => isSampleAddress(l.email))}
       replied={replied}
       weeks={extras.weeks}
+      ages={openByAge(shownQuotes, today)}
       followedUpOnce={extras.followedUpOnce}
       wins={extras.wins ? (extras.wins[shown] ?? { thisMonth: 0, lastMonth: 0 }) : null}
       recent={extras.recent}

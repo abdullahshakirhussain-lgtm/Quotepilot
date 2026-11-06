@@ -5,9 +5,9 @@ import { AttentionList } from "./AttentionList";
 import { QuoteLink } from "@/components/quotes/QuotePanel";
 import { TypedGreeting } from "./TypedGreeting";
 import { cn, dateInZone, formatCurrency, relativeDay } from "@/lib/utils";
-import { formatMoney, type DashboardMetrics } from "@/lib/metrics";
+import { formatMoney, type AgeBucket, type DashboardMetrics } from "@/lib/metrics";
 import type { RecentItem, WeekCount, Wins } from "@/lib/dashboard-extras";
-import { WeeklyChart } from "./WeeklyChart";
+import { OpenByAge } from "./OpenByAge";
 import type { FollowUpWithContext } from "@/lib/types";
 
 /** How many people the dashboard lists before "See all". */
@@ -43,6 +43,7 @@ export function DashboardView({
   hasSampleData = false,
   replied = [],
   weeks = null,
+  ages = [],
   followedUpOnce = true,
   wins = null,
   recent = [],
@@ -65,6 +66,8 @@ export function DashboardView({
   replied?: RepliedQuote[];
   /** Follow-ups done each week, the last eight, this week last. */
   weeks?: WeekCount[] | null;
+  /** Open quotes by how long they've waited, in the currency shown. */
+  ages?: AgeBucket[];
   /** At least one follow-up was ever done. */
   followedUpOnce?: boolean;
   /** Won this month and last, in the currency shown; null until the dates are recorded. */
@@ -117,7 +120,6 @@ export function DashboardView({
   const listedReplies = new Set(shownReplies.map((r) => r.id));
   const recentShown = recent.filter((r) => !(r.reply && r.quoteId && listedReplies.has(r.quoteId))).slice(0, 5);
   const thisWeek = weeks?.[weeks.length - 1]?.count ?? 0;
-  const lastWeek = weeks?.[weeks.length - 2]?.count ?? 0;
   const noWins = wins && wins.thisMonth === 0 && wins.lastMonth === 0;
 
   return (
@@ -239,59 +241,62 @@ export function DashboardView({
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
-          {/* Progress you can see: follow-ups done week by week. */}
-          {weeks && (
-            <section className="card px-5 py-4" aria-labelledby="weekly">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h2 id="weekly" className="text-[16px] font-medium text-stone-900">
-                  Follow-ups done
-                </h2>
-                <p className="num text-[14px] text-stone-600">
-                  <span className="font-medium text-stone-900">{thisWeek}</span> this week
-                  {lastWeek > 0 && <span className="text-stone-500">, {lastWeek} last week</span>}
-                </p>
-              </div>
-              <WeeklyChart weeks={weeks} />
-            </section>
+          {/* Which currency the amounts are in: one at a time, never added across currencies. */}
+          {currencies.length > 1 && (
+            <nav aria-label="Currency shown" className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[13px] text-stone-500">Amounts in</span>
+              {currencies.map((c) => (
+                // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
+                <a
+                  key={c.currency}
+                  href={`/dashboard?currency=${c.currency}`}
+                  aria-current={c.currency === currency ? "true" : undefined}
+                  className={cn(
+                    "tap inline-flex items-center rounded-full px-3 text-[13px] font-medium",
+                    c.currency === currency ? "bg-stone-900 text-white" : "border border-line bg-white text-stone-700 hover:border-stone-400"
+                  )}
+                >
+                  {c.currency}
+                </a>
+              ))}
+            </nav>
           )}
 
-          {/* The money, in context. Amounts are in one currency at a time, never added across currencies. */}
-          <section aria-label="Your numbers" className="card">
-            {currencies.length > 1 && (
-              <nav aria-label="Currency shown" className="flex flex-wrap items-center gap-1.5 border-b border-[#ECEEF1] px-5 py-2.5">
-                <span className="mr-1 text-[13px] text-stone-500">Amounts in</span>
-                {currencies.map((c) => (
-                  // A plain link (a fresh page): same-page navigation can stall on the dashboard (Next 15.5).
-                  <a
-                    key={c.currency}
-                    href={`/dashboard?currency=${c.currency}`}
-                    aria-current={c.currency === currency ? "true" : undefined}
-                    className={cn(
-                      "tap inline-flex items-center rounded-full px-3 text-[13px] font-medium",
-                      c.currency === currency ? "bg-stone-900 text-white" : "border border-line bg-white text-stone-700 hover:border-stone-400"
-                    )}
-                  >
-                    {c.currency}
-                  </a>
-                ))}
-              </nav>
-            )}
-            <dl className="grid grid-cols-1 divide-y divide-[#ECEEF1] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-              <Figure label="Open quotes" value={formatMoney(m.openValue, currency)} note={`${m.openCount} ${m.openCount === 1 ? "quote" : "quotes"} waiting on a reply`} />
-              {noWins ? (
-                <div className="min-w-0 px-5 py-3.5">
-                  <dt className="text-[14px] text-stone-500">Won this month</dt>
-                  <dd className="mt-1 text-[17px] font-medium leading-tight text-stone-500">No wins yet</dd>
-                  <dd className="mt-0.5 text-[13px] text-stone-500">Mark a quote won and it adds up here</dd>
-                </div>
+          {/* The money waiting, by how long it has waited: what's going cold is what to chase. */}
+          <section className="card px-5 py-4" aria-labelledby="open-quotes">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 id="open-quotes" className="text-[16px] font-medium text-stone-900">
+                Open quotes
+              </h2>
+              <p className="num text-[22px] font-semibold leading-tight text-stone-900">{formatMoney(m.openValue, currency)}</p>
+            </div>
+            <p className="text-[13px] text-stone-500">
+              {m.openCount === 0
+                ? "No quotes waiting on a reply."
+                : `${m.openCount} ${m.openCount === 1 ? "quote" : "quotes"} waiting, by days since sent`}
+            </p>
+            {m.openCount > 0 && ages.length > 0 && <OpenByAge ages={ages} currency={currency} />}
+          </section>
+
+          {/* Wins, in the same currency. */}
+          <section className="card px-5 py-3.5" aria-labelledby="won">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 id="won" className="text-[16px] font-medium text-stone-900">
+                Won this month
+              </h2>
+              {noWins || !wins ? (
+                <p className="text-[15px] font-medium text-stone-500">No wins yet</p>
               ) : (
-                <Figure
-                  label="Won this month"
-                  value={wins ? formatCurrency(wins.thisMonth, currency) : "–"}
-                  note={wins ? `Last month ${formatCurrency(wins.lastMonth, currency)}` : "Counting from today"}
-                />
+                <p className="num text-[22px] font-semibold leading-tight text-emerald-700">{formatCurrency(wins.thisMonth, currency)}</p>
               )}
-            </dl>
+            </div>
+            <p className="text-[13px] text-stone-500">
+              {!wins
+                ? "Counting from today"
+                : noWins
+                  ? "Mark a quote won and it adds up here"
+                  : `Last month ${formatCurrency(wins.lastMonth, currency)}`}
+            </p>
           </section>
 
           {/* What happened lately, so nothing done in the background goes unseen. */}
@@ -405,24 +410,6 @@ function Checklist({ steps }: { steps: { label: string; done: boolean }[] }) {
           </li>
         ))}
       </ol>
-    </div>
-  );
-}
-
-function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="min-w-0 px-5 py-3.5">
-      <dt className="text-[14px] text-stone-500">{label}</dt>
-      {/* Long amounts get a smaller size, so a big total stays on one line instead of breaking mid-number. */}
-      <dd
-        className={cn(
-          "num mt-1 font-medium leading-tight text-stone-900 [overflow-wrap:anywhere]",
-          value.length > 16 ? "text-[17px]" : value.length > 12 ? "text-[20px]" : "text-[24px]"
-        )}
-      >
-        {value}
-      </dd>
-      {note && <dd className="mt-0.5 text-[13px] text-stone-500">{note}</dd>}
     </div>
   );
 }
