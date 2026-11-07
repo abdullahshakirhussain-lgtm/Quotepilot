@@ -268,7 +268,8 @@ export function AIMessageModal({
     setContent(text);
     setDraft(text);
     const filled = fillSubject(t.subject, values);
-    if (filled) setSubject(filled);
+    // A reply keeps its "Re:" subject, so it stays in the customer's thread.
+    if (filled && !reply) setSubject(filled);
     setTemplateId(t.id);
     if (t.messageType) setMessageType(t.messageType);
     setNotice(null);
@@ -482,6 +483,7 @@ export function AIMessageModal({
               <span className="mb-1 block text-[12px] font-medium text-stone-500">{reply.from} wrote:</span>
               {reply.text || reply.subject || "(No text)"}
             </blockquote>
+            {templates.length === 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button className="btn-secondary" onClick={generate} disabled={busy || loading || !canWrite}>
                 <PenLine className="h-4 w-4" /> Write with AI
@@ -497,10 +499,11 @@ export function AIMessageModal({
                 <SlidersHorizontal className="h-4 w-4" />
               </button>
             </div>
-            {adjusting && aiOptions()}
+            )}
+            {templates.length === 0 && adjusting && aiOptions()}
           </div>
         )}
-        {!reply && templates.length > 0 && (
+        {templates.length > 0 && (
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -511,7 +514,7 @@ export function AIMessageModal({
                 disabled={locked || loading}
                 onChange={(e) => pickTemplate(e.target.value)}
               >
-                {!templateId && <option value="">{content ? "AI draft" : "Choose a message"}</option>}
+                {!templateId && <option value="">{reply ? "Choose a template" : content ? "AI draft" : "Choose a message"}</option>}
                 <optgroup label="QuoteLoop templates">
                   {readyMade.map((t) => (
                     <option key={t.id} value={t.id}>
