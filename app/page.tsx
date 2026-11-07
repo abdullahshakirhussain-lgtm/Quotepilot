@@ -31,7 +31,7 @@ const days = LIMITS.defaultFollowUpDays.join(", ").replace(/, (\d+)$/, " and $1"
 
 const SCREENS: StageScreen[] = [
   { key: "home", src: "/screens/phone-dashboard.webp", width: 780, height: 1688, alt: "QuoteLoop on a phone: the quotes to follow up now, with the money waiting on them" },
-  { key: "add", src: "/screens/dashboard.webp", width: 2560, height: 1600, alt: "The QuoteLoop dashboard with the latest quotes listed" },
+  { key: "add", src: "/screens/dashboard.webp", width: 2560, height: 1600, alt: "The QuoteLoop dashboard: the quotes to follow up today, and open quotes by how long they've waited" },
   { key: "remind", src: "/screens/follow-ups.webp", width: 2560, height: 1600, alt: "The Follow-ups page: overdue, due today and coming up" },
   { key: "write", src: "/screens/follow-up-writer.webp", width: 2560, height: 1600, alt: "The follow-up writer with a drafted message, ready to send or copy" },
   { key: "result", src: "/screens/pipeline.webp", width: 2560, height: 1200, alt: "The Pipeline: every customer by stage, from new to won" },
